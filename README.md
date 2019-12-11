@@ -1,6 +1,6 @@
 # What is verb-AAD
 
-Azure AD-related generic functions v:0.0.0.1
+Azure AD-related generic functions v:1.0.0
 
 Authored by Todd Kadrie
 
