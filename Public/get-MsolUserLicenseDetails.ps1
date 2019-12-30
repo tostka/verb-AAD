@@ -7,7 +7,7 @@ if(!$abortPassLimit){$abortPassLimit = 4;}    # maximum failed users to abort en
 
 #*------v Function get-MsolUserLicenseDetails v------
 Function get-MsolUserLicenseDetails {
-    <# 
+    <#
     .SYNOPSIS
     get-MsolUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD/MSOL)
     .NOTES
@@ -20,7 +20,7 @@ Function get-MsolUserLicenseDetails {
     * 12:00 PM 1/9/2019 replaced broken aggreg with simpler cobj -prop $hash set, now returns proper mult lics
     * 11:42 AM 1/9/2019 added "MS_TEAMS_IW"      (portal displayname used below)
     * 11:33 AM 1/9/2019 add SPE_F1 lic spec, and export the aggreg, NewObject02 was never more than a single lic (eg. support mult lics)
-    * 3:47 PM 12/7/2018 works in prod for single-licenses users, haven't tested on multis yet. 
+    * 3:47 PM 12/7/2018 works in prod for single-licenses users, haven't tested on multis yet.
     * 3:17 PM 12/7/2018 added showdebug, updated pshelp
     * 2:58 PM 12/7/2018 initial version
     .DESCRIPTION
@@ -37,7 +37,7 @@ Function get-MsolUserLicenseDetails {
     .OUTPUTS
     Returns an object with LastDirSyncTime, expressed as TimeGMT & TimeLocal
     .EXAMPLE
-    get-MsolUserLicenseDetails -UPNs todd.kadrie@toro.com ; 
+    get-MsolUserLicenseDetails -UPNs todd.kadrie@toro.com ;
     Retrieve MSOL License details on specified UPN
     .EXAMPLE
     $EXOLicDetails = get-MsolUserLicenseDetails -UPNs $exombx.userprincipalname -showdebug:$($showdebug)
@@ -50,21 +50,21 @@ Function get-MsolUserLicenseDetails {
       [string]$UPNs,
       [Parameter()]$Credential = $global:credo365TORSID,
       [Parameter(HelpMessage="Debugging Flag [-showDebug]")][switch] $showDebug
-    ) ; 
+    ) ;
 
     $Retries = 4 ;
     $RetrySleep = 5 ;
-    #Connect-AAD ; 
+    #Connect-AAD ;
     # 2:45 PM 11/15/2019
-    Connect-Msol ; 
+    Connect-Msol ;
 
     # 11:13 AM 1/9/2019: SPE_F1 isn't in thlist, 'SPE'=="Secure Productive Enterprise (SPE) Licensing Bundle"
     # 11:42 AM 1/9/2019 added "MS_TEAMS_IW"      (portal displayname used below)
     # [Product names and service plan identifiers for licensing in Azure Active Directory | Microsoft Docs](https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference)
 
-    <# whatis an F1 lic: Office 365 F1 is designed to enable Firstline Workers to do their best work. 
-    Office 365 F1 provides easy-to-use tools and services to help these workers 
-    easily create, update, and manage schedules and tasks, communicate and work 
+    <# whatis an F1 lic: Office 365 F1 is designed to enable Firstline Workers to do their best work.
+    Office 365 F1 provides easy-to-use tools and services to help these workers
+    easily create, update, and manage schedules and tasks, communicate and work
     together, train and onboard, and quickly receive company news and announcements.
     #>
 
@@ -189,13 +189,13 @@ Function get-MsolUserLicenseDetails {
     }
 
     Foreach ($User in $UPNs) {
-        if($showdebug){write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Getting all licenses for $($User)..."  ; } ; 
+        if($showdebug){write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Getting all licenses for $($User)..."  ; } ;
 
         $Exit = 0 ;
         Do {
             Try {
                 #$Licenses = ((Get-MsolUser -UserPrincipalName $User.UserPrincipalName).Licenses).AccountSkuID
-                $MsolU=Get-MsolUser -UserPrincipalName $User ; 
+                $MsolU=Get-MsolUser -UserPrincipalName $User ;
                 $Licenses = $MsolU.Licenses.AccountSkuID
                 #$Licenses = ((Get-MsolUser -UserPrincipalName $User).Licenses).AccountSkuID
                 $Exit = $Retries ;
@@ -206,25 +206,25 @@ Function get-MsolUserLicenseDetails {
                 Write-Verbose "Try #: $Exit" ;
                 If ($Exit -eq $Retries) {Write-Warning "Unable to exec cmd!"} ;
             }  ;
-        } Until ($Exit -eq $Retries) ; 
+        } Until ($Exit -eq $Retries) ;
 
-        
+
         # 11:31 AM 1/9/2019 if yo u want to aggreg licesnse, you need the aggreg outside of the loop!
         $AggregLics = $null
-        $AggregLics=@() ; 
+        $AggregLics=@() ;
         If (($Licenses).Count -gt 1){
             Foreach ($License in $Licenses){
                 if($showdebug){Write-Host "Finding $License in the Hash Table..." -ForegroundColor White}
                 $LicenseItem = $License -split ":" | Select-Object -Last 1
                 $TextLic = $Sku.Item("$LicenseItem")
                 If (!($TextLic)) {
-                    $smsg= "Error: The Hash Table has no match for $LicenseItem for $($MsolU.DisplayName)!" 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } ; #Error|Warn 
+                    $smsg= "Error: The Hash Table has no match for $LicenseItem for $($MsolU.DisplayName)!"
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } ; #Error|Warn
 
                     $LicenseFallBackName = $License.AccountSkuId
 
                     $LicSummary = New-Object PSObject -Property @{
-                        DisplayName =$MsolU.DisplayName ; 
+                        DisplayName =$MsolU.DisplayName ;
                         UserPrincipalName = $MsolU.Userprincipalname
                         LicAccountSkuID = $License
                         LicenseFriendlyName = $LicenseFallBackName
@@ -242,12 +242,12 @@ Function get-MsolUserLicenseDetails {
                 } # if-E
             } # loop-E
         }Else{
-            if($showdebug){Write-Host "Finding $Licenses in the Hash Table..." -ForegroundColor White} ; 
+            if($showdebug){Write-Host "Finding $Licenses in the Hash Table..." -ForegroundColor White} ;
             $Exit = 0 ;
             Do {
                 Try {
                     #$LicenseItem = ((Get-MsolUser -UserPrincipalName $MsolU.Userprincipalname).Licenses).AccountSkuID -split ":" | Select-Object -Last 1
-                    $LicenseID=((Get-MsolUser -UserPrincipalName $MsolU.Userprincipalname).Licenses).AccountSkuID 
+                    $LicenseID=((Get-MsolUser -UserPrincipalName $MsolU.Userprincipalname).Licenses).AccountSkuID
                     $LicenseItem = $LicenseID -split ":" | Select-Object -Last 1
                     $Exit = $Retries ;
                 } Catch {
@@ -257,11 +257,11 @@ Function get-MsolUserLicenseDetails {
                     Write-Verbose "Try #: $Exit" ;
                     If ($Exit -eq $Retries) {Write-Warning "Unable to exec cmd!"} ;
                 }  ;
-            } Until ($Exit -eq $Retries) ; 
+            } Until ($Exit -eq $Retries) ;
             $TextLic = $Sku.Item("$LicenseItem")
             If (!($TextLic)) {
                 $smsg= "Error: The Hash Table has no match for $LicenseItem for $($MsolU.DisplayName)!"
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } ; #Error|Warn 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } ; #Error|Warn
                 $LicenseFallBackName = $License.AccountSkuId
                 $LicSummary = New-Object PSObject -Property @{
                     DisplayName = $MsolU.DisplayName
@@ -286,37 +286,12 @@ Function get-MsolUserLicenseDetails {
     <#
     #$DirSyncTimeBefore = (Get-MsolCompanyInformation).LastDirSyncTime ;
     $DirSyncTimeBefore = (Get-MsolUser -UserPrincipalName $UserPrincipalName).LastDirSyncTime ;
-    
+
     $oReturn= New-Object PSObject -Property @{
-      TimeGMT = $DirSyncTimeBefore  ; 
-      TimeLocal = $DirSyncTimeBefore.ToLocalTime() ; 
-    }; 
+      TimeGMT = $DirSyncTimeBefore  ;
+      TimeLocal = $DirSyncTimeBefore.ToLocalTime() ;
+    };
     #>
-    #$NewObject02 | write-output ; 
+    #$NewObject02 | write-output ;
     $AggregLics | write-output ; # 11:33 AM 1/9/2019 export the aggreg, NewObject02 was never more than a single lic
 } ; #*------^ END Function get-MsolUserLicenseDetails ^------
-# SIG # Begin signature block
-# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
-# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvlRSeno5Dsh/COqjIaeTOhDt
-# 7aSgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
-# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
-# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
-# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
-# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
-# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
-# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
-# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
-# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
-# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
-# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
-# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
-# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
-# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
-# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTrqqhw
-# 5+8dXAzadlIIqGozrlAp3zANBgkqhkiG9w0BAQEFAASBgBk5/G45ugOJyPRC8AkJ
-# BgznmCiIu3hvlRzSfWWuvCk1rDul9MBdbAIA3Rg7wcSpSHPj8Np+RAK3bX8Vacsk
-# uZKUtkYBjQB1E9aVRFyMAK3eKPovUUBfyl83BZzDlT/MMMnKoPTdxU6WzHJ4Hsix
-# 7cFMITXPilTbrOjC2p89ODyv
-# SIG # End signature block

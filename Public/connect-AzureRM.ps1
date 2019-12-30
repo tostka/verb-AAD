@@ -10,7 +10,6 @@ if(!(test-path $RootPath)){ mkdir $RootPath}  ;
 $KeyPath = $Rootpath + "creds\"
 if(!(test-path $KeyPath)){ mkdir $KeyPath}  ; 
 
-
 #*------v Function connect-AzureRM v------
 function connect-AzureRM {
     <#
@@ -22,7 +21,7 @@ function connect-AzureRM {
     Website     :	http://www.toddomation.com
     Twitter     :	@tostka / http://twitter.com/tostka
     CreatedDate : 2019-02-06
-    FileName    : 
+    FileName    :
     License     : MIT License
     Copyright   : (c) 2019 Todd Kadrie
     Github      : https://github.com/tostka
@@ -47,24 +46,24 @@ function connect-AzureRM {
     .LINK
     #>
     Param(
-        [Parameter()][boolean]$ProxyEnabled = $False,  
+        [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()]$Credential = $global:credo365TORSID
-    ) ; 
-    
-    $MFA=$false ; 
+    ) ;
+
+    $MFA=$false ;
     # 8:32 AM 11/19/2019 torolab is mfa now, need to check
     $credDom = ($Credential.username.split("@"))[1] ;
-    if(get-variable o365_*_OPDomain |?{$_.Value -eq $creddom} | select -expand Name |?{$_ -match 'o365_(.*)_OPDomain'}){
-        $credVariTag = $matches[1] ; 
-        $MFA = (get-variable "o365_$($credVariTag)_MFA").value ; 
-    } else { 
-        throw "Failed to resolve a `$credVariTag` from populated global 'o365_*_OPDomain' variables, for credential domain:$(CredDom)" ; 
-    } ; 
+    if(get-variable o365_*_OPDomain |Where-Object{$_.Value -eq $creddom} | Select-Object -expand Name |Where-Object{$_ -match 'o365_(.*)_OPDomain'}){
+        $credVariTag = $matches[1] ;
+        $MFA = (get-variable "o365_$($credVariTag)_MFA").value ;
+    } else {
+        throw "Failed to resolve a `$credVariTag` from populated global 'o365_*_OPDomain' variables, for credential domain:$(CredDom)" ;
+    } ;
 
-    Try {Get-AzureRmTenant -erroraction stop } 
-    Catch {Install-Module -Name AzureRM -Scope CurrentUser} ; 
+    Try {Get-AzureRmTenant -erroraction stop }
+    Catch {Install-Module -Name AzureRM -Scope CurrentUser} ;
     Try {Get-AzureRmTenant -erroraction stop}
-    Catch {Import-Module -Name AzureRM -MinimumVersion '4.2.1'} ; 
+    Catch {Import-Module -Name AzureRM -MinimumVersion '4.2.1'} ;
     if (! $MFA) {
         $json = Get-ChildItem -Recurse -Include '*@*.json' -Path $KeyPath
         if ($json) {
@@ -74,7 +73,7 @@ function connect-AzureRM {
             write-verbose -verbose:$true " Otherwise, if this is the first time using this Azure username click `"Cancel`""
             Write-Host   "************************************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
             Write-Host   "************************************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-            $json = $json | select name | Out-GridView -PassThru -Title "Select Azure username or click Cancel to use another"
+            $json = $json | Select-Object name | Out-GridView -PassThru -Title "Select Azure username or click Cancel to use another"
         }
         if (!($json)) {
             Try {
@@ -99,7 +98,7 @@ function connect-AzureRM {
         write-verbose -verbose:$true " Select Subscription and Click `"OK`" in lower right-hand corner"
         Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
         Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-        $subscription = Get-AzureRmSubscription | Out-GridView -PassThru -Title "Choose Azure Subscription"| Select id
+        $subscription = Get-AzureRmSubscription | Out-GridView -PassThru -Title "Choose Azure Subscription"| Select-Object id
         Try {
             Select-AzureRmSubscription -SubscriptionId $subscription.id -ErrorAction Stop
             write-verbose -verbose:$true "****************************************"
@@ -132,7 +131,7 @@ function connect-AzureRM {
         write-verbose -verbose:$true " Select Subscription and Click `"OK`" in lower right-hand corner"
         Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
         Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-        $subscription = Get-AzureRmSubscription | Out-GridView -PassThru -Title "Choose Azure Subscription" | Select id
+        $subscription = Get-AzureRmSubscription | Out-GridView -PassThru -Title "Choose Azure Subscription" | Select-Object id
         Try {
             Select-AzureRmSubscription -SubscriptionId $subscription.id -ErrorAction Stop
             write-verbose -verbose:$true "****************************************"
@@ -145,28 +144,3 @@ function connect-AzureRM {
     }
 }
 #*------^ END Function Connect-AzureRM ^------
-# SIG # Begin signature block
-# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
-# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU65FZ0ztgXBiVjgJkl4oMTVJ+
-# fL6gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
-# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
-# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
-# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
-# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
-# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
-# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
-# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
-# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
-# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
-# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
-# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
-# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
-# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
-# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTAAC4T
-# zW/WS7f5q0CLww+uxbn8+TANBgkqhkiG9w0BAQEFAASBgBPRA26O9pQ0L1T3Uc7z
-# gtlLdhEWxEyMNFjfaOw0JrC4VlOj5NpvGSPx1/Y+I0vgWzcS3GIJbX14Fbqi59An
-# jdMvvh66Z+3TztFjsLE9y3tDs72FW7DCb9xhtXRsmzCuLc6toMikIy01BJYOVoGi
-# NKiz/cPnWpeu5LDaifJ/Uql2
-# SIG # End signature block

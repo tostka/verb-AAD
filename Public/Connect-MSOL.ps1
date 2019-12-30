@@ -1,4 +1,4 @@
-# values from central cfg 
+# values from central cfg
 if(!$DoRetries){$DoRetries = 4 ; } ;          # attempt retries
 if(!$RetrySleep){$RetrySleep = 5 ; }          # mid-retry sleep in secs
 if(!$retryLimit){[int]$retryLimit=1; }        # just one retry to patch lineuri duped users and retry 1x
@@ -6,14 +6,14 @@ if(!$retryDelay){[int]$retryDelay=20; }       # secs wait time after failure
 if(!$abortPassLimit){$abortPassLimit = 4;}    # maximum failed users to abort entire pass
 
 $RootPath = $env:USERPROFILE + "\ps\"
-if(!(test-path $RootPath)){ mkdir $RootPath}  ; 
+if(!(test-path $RootPath)){ mkdir $RootPath}  ;
 $KeyPath = $Rootpath + "creds\"
-if(!(test-path $KeyPath)){ mkdir $KeyPath}  ; 
+if(!(test-path $KeyPath)){ mkdir $KeyPath}  ;
 
 #*------v Function Connect-MSOL v------
 if(!(test-path function:connect-msol)){
     Function Connect-MSOL {
-        <# 
+        <#
         .SYNOPSIS
         Connect-MSOL - Establish authenticated session to AzureAD MSOL Module, also works as reConnect-MSOL, there is no disConnect-MSOL (have to close Powershell to clear it).
         .NOTES
@@ -33,7 +33,7 @@ if(!(test-path function:connect-msol)){
         * 12:19 PM 11/3/2017 this wasn't really written, sketched it in to see how it works
         .DESCRIPTION
         Connect-MSOL - Establish authenticated session to AzureAD/MSOL, also works as reconnect-AAD, there is no disConnect-MSOL (have to close Powershell to clear it).
-        No need for separate reConnect-MSOL - this self tests for connection, and reconnects if it's missing. 
+        No need for separate reConnect-MSOL - this self tests for connection, and reconnects if it's missing.
         No support for disConnect-MSOL, because MSOL has no command to do it, but closing powershell.
         .PARAMETER  ProxyEnabled
         Proxyied connection support
@@ -51,113 +51,88 @@ if(!(test-path function:connect-msol)){
         #>
 
         Param(
-            [Parameter()][boolean]$ProxyEnabled = $False,  
+            [Parameter()][boolean]$ProxyEnabled = $False,
             [Parameter()][string]$CommandPrefix,
             [Parameter()]$Credential = $global:credo365TORSID
-        ) ; 
-        
-        $MFA = get-TenantMFARequirement -Credential $Credential ; 
+        ) ;
+
+        $MFA = get-TenantMFARequirement -Credential $Credential ;
 
         # 12:10 PM 3/15/2017 disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
-        #if(!$CommandPrefix){ $CommandPrefix='aad' ; } ; 
-    
-        $sTitleBarTag="MSOL" ; 
+        #if(!$CommandPrefix){ $CommandPrefix='aad' ; } ;
+
+        $sTitleBarTag="MSOL" ;
         if($Credential){
             switch -regex ($Credential.username.split('@')[1]){
                 "toro\.com" {
                     # leave untagged
-                 } 
+                 }
                  "torolab\.com" {
                     $sTitleBarTag = $sTitleBarTag + "tlab"
-                } 
+                }
                 "(charlesmachineworks\.onmicrosoft\.com|charlesmachine\.works)" {
                     $sTitleBarTag = $sTitleBarTag + "cmw"
-                } 
-            } ; 
-        } ; 
+                }
+            } ;
+        } ;
 
         <# expl of my profile xml credential storage points by account
         $LUAuid="TORO\kadrits" ;
         $SIDDomLogon="TORO\kadriTSS" ;
-        if("$($env:USERDOMAIN)\$($env:USERNAME)" -eq $LUAuid ){ 
+        if("$($env:USERDOMAIN)\$($env:USERNAME)" -eq $LUAuid ){
             # lua uid profile
-            Import-Clixml "c:\usr\home\db\O365lua.xml" ; 
+            Import-Clixml "c:\usr\home\db\O365lua.xml" ;
         } elseif("$($env:USERDOMAIN)\$($env:USERNAME)" -eq $SIDDomLogon ){
-          # sid profile 
-          Import-Clixml "c:\usr\home\db\O365SID.XML" ; 
+          # sid profile
+          Import-Clixml "c:\usr\home\db\O365SID.XML" ;
         #>
-    
-        try{Get-MsolAccountSku -ErrorAction Stop |out-null} 
+
+        try{Get-MsolAccountSku -ErrorAction Stop |out-null}
         catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
             Write-Verbose "Not connected to MSOnline. Now connecting." ;
             if(!$Credential){
-              if(test-path function:\get-admincred) { 
-                  Get-AdminCred ; 
+              if(test-path function:\get-admincred) {
+                  Get-AdminCred ;
               } else {
                   switch($env:USERDOMAIN){
-                     "TORO" { 
-                        write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365AdmUid ))" ; 
+                     "TORO" {
+                        write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365AdmUid ))" ;
                         if(!$bUseo365COAdminUID){
-                            if($o365AdmUid ){$Credential = Get-Credential -Credential $o365AdmUid } else { $Credential = Get-Credential } ; 
+                            if($o365AdmUid ){$Credential = Get-Credential -Credential $o365AdmUid } else { $Credential = Get-Credential } ;
                         } else {
-                            if($o365COAdmUid){global:o365cred = Get-Credential -Credential $o365COAdmUid} else { $Credential = Get-Credential } ; 
-                        } ; 
+                            if($o365COAdmUid){global:o365cred = Get-Credential -Credential $o365COAdmUid} else { $Credential = Get-Credential } ;
+                        } ;
                       }
-                      "TORO-LAB" { 
-                          write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365LabAdmUid ))" ; 
+                      "TORO-LAB" {
+                          write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365LabAdmUid ))" ;
                           if(!$bUseo365COAdminUID){
-                              if($o365LabAdmUid){$Credential = Get-Credential -Credential $o365LabAdmUid} else { $Credential = Get-Credential } ; 
+                              if($o365LabAdmUid){$Credential = Get-Credential -Credential $o365LabAdmUid} else { $Credential = Get-Credential } ;
                           } else {
-                              if($o365LabCOAdmUid){$Credential = Get-Credential -Credential $o365LabCOAdmUid} else { $Credential = Get-Credential } ; 
-                          } ; 
+                              if($o365LabCOAdmUid){$Credential = Get-Credential -Credential $o365LabCOAdmUid} else { $Credential = Get-Credential } ;
+                          } ;
                       }
                       default {
-                          write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ; 
-                          $Credential = Get-Credential 
-                      } ; 
-                  } ; 
-              }  ; 
+                          write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
+                          $Credential = Get-Credential
+                      } ;
+                  } ;
+              }  ;
             } ;
-            Write-Host "Connecting to AzureAD/MSOL"  ; 
+            Write-Host "Connecting to AzureAD/MSOL"  ;
             $error.clear() ;
             if(!$MFA){
                 Connect-MsolService -Credential $Credential -ErrorAction Stop ;
-            } else { 
+            } else {
                 Connect-MsolService -ErrorAction Stop ;
-            } ; 
+            } ;
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
-            if ($?) { write-verbose -verbose:$true  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; } ; 
-        } ; 
+            if ($?) { write-verbose -verbose:$true  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; } ;
+        } ;
     } ; #*------^ END Function Connect-MSOL ^------
-} else { write-host -foregroundcolor green "(Deferring to pre-loaded connect-msol)" ;} ; 
+} else { write-host -foregroundcolor green "(Deferring to pre-loaded connect-msol)" ;} ;
 if(!(get-alias cmsol -ea 0) ) {Set-Alias 'cmsol' -Value 'Connect-MSOL' ; } ;
 if(!(get-alias rmsol -ea 0) ) {Set-Alias 'rmsol' -Value 'Connect-MSOL' ; } ;
 if(!(get-alias reConnect-MSOL -ea 0) ) {Set-Alias 'reConnect-MSOL' -Value 'Connect-MSOL' ; } ;
 function cmsoltol {Connect-MSOL -cred $credO365TOLSID};
 function cmsolcmw {Connect-MSOL -cred $credO365CMWCSID};
 function cmsoltor {Connect-MSOL -cred $credO365TORSID};
-# SIG # Begin signature block
-# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
-# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQURLCxtHbH+zSEvQ4uNBRcOZpm
-# cL2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
-# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
-# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
-# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
-# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
-# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
-# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
-# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
-# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
-# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
-# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
-# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
-# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
-# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
-# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTPDWc1
-# UQdLugMuwrvcKWtPpUgA7DANBgkqhkiG9w0BAQEFAASBgF7admJsJ7530ajt9HPF
-# U+83UsCDyEW5uFmJp50/yot6sfOk1H8r5N7wakchrIp9DpcYZNkvkqgAkO8cOkqb
-# nO/EQdrQ+wIMOvlkRN4NCjlKkACZ3Vbdk4pqIvpW2QUxisfmSIrLOIQrLWiqe7qi
-# uJN4Rc3C7tIvrk+Q+dyGNnnY
-# SIG # End signature block
