@@ -1,4 +1,4 @@
-if(!(test-path function:\Disconnect-PssBroken)) {
+if (!(test-path function:\Disconnect-PssBroken)) {
     #*------v Function Disconnect-PssBroken v------
     Function Disconnect-PssBroken {
         <#
@@ -9,6 +9,7 @@ if(!(test-path function:\Disconnect-PssBroken)) {
         Website:	http://tinstoys.blogspot.com
         Twitter:	http://twitter.com/tostka
         REVISIONS   :
+        * 8:46 PM 1/12/2020 typo fix misisng trailing bracket, also expanded aliases
         * 12:56 PM 11/7/2f018 fix typo $s.state.value, switched tests to the strings, over values (not sure worked at all)
         * 1:50 PM 12/8/2016 initial version
         .DESCRIPTION
@@ -21,5 +22,6 @@ if(!(test-path function:\Disconnect-PssBroken)) {
         Disconnect-PssBroken ;
         .LINK
         #>
-        Get-PsSession |Where-Object{$_.State -ne 'Opened' -or $_.Availability -ne 'Available'} | Remove-PSSession -Verbose ;
+        Get-PsSession | Where-Object { $_.State -ne 'Opened' -or $_.Availability -ne 'Available' } | Remove-PSSession -Verbose ;
     } ; #*------^ END Function Disconnect-PssBroken ^------
+} ;
