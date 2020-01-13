@@ -1,4 +1,4 @@
-# values from central cfg 
+# values from central cfg
 if(!$DoRetries){$DoRetries = 4 ; } ;          # attempt retries
 if(!$RetrySleep){$RetrySleep = 5 ; }          # mid-retry sleep in secs
 if(!$retryLimit){[int]$retryLimit=1; }        # just one retry to patch lineuri duped users and retry 1x
@@ -14,6 +14,7 @@ Function Wait-AADSync {
     Website:	http://tinstoys.blogspot.com
     Twitter:	http://twitter.com/tostka
     REVISIONS   :
+    * 8:50 PM 1/12/2020 expanded aliases
     * 11:38 AM 5/6/2019 moved from tsksid-incl-ServerApp.ps1
     * 9:53 AM 3/1/2019 init vers, repl'd native cmsolsvc with Connect-AAD
     .DESCRIPTION
@@ -29,14 +30,14 @@ Function Wait-AADSync {
     .LINK
     #>
     Param([Parameter()]$Credential = $global:credo365TORSID) ;
-    try{Get-MsolAccountSku -ErrorAction Stop |out-null}
+    try { Get-MsolAccountSku -ErrorAction Stop | out-null }
     catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
         "Not connected to MSOnline. Now connecting." ;
         Connect-AAD ;
     } ;
     $DirSyncLast = (Get-MsolCompanyInformation).LastDirSyncTime ;
     write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):Waiting for next AAD Dirsync:`n(prior:$($DirSyncLast.ToLocalTime()))`n[" ;
-    Do {Connect-AAD  ; write-host "." -NoNewLine ; Start-Sleep -m (1000 * 5) ; Connect-MSOL} Until ((Get-MsolCompanyInformation).LastDirSyncTime -ne $DirSyncLast) ;
+    Do { Connect-AAD  ; write-host "." -NoNewLine ; Start-Sleep -m (1000 * 5) ; Connect-MSOL } Until ((Get-MsolCompanyInformation).LastDirSyncTime -ne $DirSyncLast) ;
     write-host -foregroundcolor yellow "]`n$((get-date).ToString('HH:mm:ss')):AD->AAD REPLICATED!" ;
     write-host "`a" ; write-host "`a" ; write-host "`a" ;
 } ; #*------^ END Function Wait-AADSync ^------

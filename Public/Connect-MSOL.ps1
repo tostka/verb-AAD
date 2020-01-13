@@ -21,6 +21,7 @@ if(!(test-path function:connect-msol)){
         Website:	http://tinstoys.blogspot.com
         Twitter:	http://twitter.com/tostka
         REVISIONS   :
+        * 8:50 PM 1/12/2020 expanded aliases
         * 10:55 AM 12/6/2019 Connect-MSOL:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
         * 1:07 PM 11/25/2019 added *tol/*tor/*cmw alias variants for connect & reconnect
         * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
@@ -61,13 +62,13 @@ if(!(test-path function:connect-msol)){
         # 12:10 PM 3/15/2017 disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
         #if(!$CommandPrefix){ $CommandPrefix='aad' ; } ;
 
-        $sTitleBarTag="MSOL" ;
-        if($Credential){
-            switch -regex ($Credential.username.split('@')[1]){
+        $sTitleBarTag = "MSOL" ;
+        if ($Credential) {
+            switch -regex ($Credential.username.split('@')[1]) {
                 "toro\.com" {
                     # leave untagged
-                 }
-                 "torolab\.com" {
+                }
+                "torolab\.com" {
                     $sTitleBarTag = $sTitleBarTag + "tlab"
                 }
                 "(charlesmachineworks\.onmicrosoft\.com|charlesmachine\.works)" {
@@ -87,42 +88,46 @@ if(!(test-path function:connect-msol)){
           Import-Clixml "c:\usr\home\db\O365SID.XML" ;
         #>
 
-        try{Get-MsolAccountSku -ErrorAction Stop |out-null}
+        try { Get-MsolAccountSku -ErrorAction Stop | out-null }
         catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
             Write-Verbose "Not connected to MSOnline. Now connecting." ;
-            if(!$Credential){
-              if(test-path function:\get-admincred) {
-                  Get-AdminCred ;
-              } else {
-                  switch($env:USERDOMAIN){
-                     "TORO" {
-                        write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365AdmUid ))" ;
-                        if(!$bUseo365COAdminUID){
-                            if($o365AdmUid ){$Credential = Get-Credential -Credential $o365AdmUid } else { $Credential = Get-Credential } ;
-                        } else {
-                            if($o365COAdmUid){global:o365cred = Get-Credential -Credential $o365COAdmUid} else { $Credential = Get-Credential } ;
+            if (!$Credential) {
+                if (test-path function:\get-admincred) {
+                    Get-AdminCred ;
+                }
+                else {
+                    switch ($env:USERDOMAIN) {
+                        "TORO" {
+                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365AdmUid ))" ;
+                            if (!$bUseo365COAdminUID) {
+                                if ($o365AdmUid ) { $Credential = Get-Credential -Credential $o365AdmUid } else { $Credential = Get-Credential } ;
+                            }
+                            else {
+                                if ($o365COAdmUid) { global:o365cred = Get-Credential -Credential $o365COAdmUid } else { $Credential = Get-Credential } ;
+                            } ;
+                        }
+                        "TORO-LAB" {
+                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365LabAdmUid ))" ;
+                            if (!$bUseo365COAdminUID) {
+                                if ($o365LabAdmUid) { $Credential = Get-Credential -Credential $o365LabAdmUid } else { $Credential = Get-Credential } ;
+                            }
+                            else {
+                                if ($o365LabCOAdmUid) { $Credential = Get-Credential -Credential $o365LabCOAdmUid } else { $Credential = Get-Credential } ;
+                            } ;
+                        }
+                        default {
+                            write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
+                            $Credential = Get-Credential
                         } ;
-                      }
-                      "TORO-LAB" {
-                          write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365LabAdmUid ))" ;
-                          if(!$bUseo365COAdminUID){
-                              if($o365LabAdmUid){$Credential = Get-Credential -Credential $o365LabAdmUid} else { $Credential = Get-Credential } ;
-                          } else {
-                              if($o365LabCOAdmUid){$Credential = Get-Credential -Credential $o365LabCOAdmUid} else { $Credential = Get-Credential } ;
-                          } ;
-                      }
-                      default {
-                          write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
-                          $Credential = Get-Credential
-                      } ;
-                  } ;
-              }  ;
+                    } ;
+                }  ;
             } ;
             Write-Host "Connecting to AzureAD/MSOL"  ;
             $error.clear() ;
-            if(!$MFA){
+            if (!$MFA) {
                 Connect-MsolService -Credential $Credential -ErrorAction Stop ;
-            } else {
+            }
+            else {
                 Connect-MsolService -ErrorAction Stop ;
             } ;
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
