@@ -1,10 +1,3 @@
-# values from central cfg
-if(!$DoRetries){$DoRetries = 4 ; } ;          # attempt retries
-if(!$RetrySleep){$RetrySleep = 5 ; }          # mid-retry sleep in secs
-if(!$retryLimit){[int]$retryLimit=1; }        # just one retry to patch lineuri duped users and retry 1x
-if(!$retryDelay){[int]$retryDelay=20; }       # secs wait time after failure
-if(!$abortPassLimit){$abortPassLimit = 4;}    # maximum failed users to abort entire pass
-
 #*------v Function get-MsolUserLicenseDetails v------
 Function get-MsolUserLicenseDetails {
     <#
@@ -26,7 +19,7 @@ Function get-MsolUserLicenseDetails {
     * 2:58 PM 12/7/2018 initial version
     .DESCRIPTION
     get-MsolUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD/MSOL)
-    Based on the core lic hash & lookup code in his "Get Friendly License Name for all Users in Office 365 Using PowerShell" script
+    Based on the core lic hash & lookup code in Brad's "Get Friendly License Name for all Users in Office 365 Using PowerShell" script
     .PARAMETER UPNs
     Array of Userprincipalnames to be looked up
     .PARAMETER ShowDebug
@@ -195,10 +188,8 @@ Function get-MsolUserLicenseDetails {
         $Exit = 0 ;
         Do {
             Try {
-                #$Licenses = ((Get-MsolUser -UserPrincipalName $User.UserPrincipalName).Licenses).AccountSkuID
                 $MsolU = Get-MsolUser -UserPrincipalName $User ;
                 $Licenses = $MsolU.Licenses.AccountSkuID
-                #$Licenses = ((Get-MsolUser -UserPrincipalName $User).Licenses).AccountSkuID
                 $Exit = $Retries ;
             }
             Catch {
@@ -210,8 +201,6 @@ Function get-MsolUserLicenseDetails {
             }  ;
         } Until ($Exit -eq $Retries) ;
 
-
-        # 11:31 AM 1/9/2019 if yo u want to aggreg licesnse, you need the aggreg outside of the loop!
         $AggregLics = $null
         $AggregLics = @() ;
         If (($Licenses).Count -gt 1) {
@@ -221,8 +210,8 @@ Function get-MsolUserLicenseDetails {
                 $TextLic = $Sku.Item("$LicenseItem")
                 If (!($TextLic)) {
                     $smsg = "Error: The Hash Table has no match for $LicenseItem for $($MsolU.DisplayName)!"
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } ; #Error|Warn
-
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                     $LicenseFallBackName = $License.AccountSkuId
 
                     $LicSummary = New-Object PSObject -Property @{
@@ -266,7 +255,8 @@ Function get-MsolUserLicenseDetails {
             $TextLic = $Sku.Item("$LicenseItem")
             If (!($TextLic)) {
                 $smsg = "Error: The Hash Table has no match for $LicenseItem for $($MsolU.DisplayName)!"
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } ; #Error|Warn
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                 $LicenseFallBackName = $License.AccountSkuId
                 $LicSummary = New-Object PSObject -Property @{
                     DisplayName         = $MsolU.DisplayName
@@ -288,16 +278,5 @@ Function get-MsolUserLicenseDetails {
         } # if-E
     } # loop-E
 
-    #$NewObject02
-    <#
-    #$DirSyncTimeBefore = (Get-MsolCompanyInformation).LastDirSyncTime ;
-    $DirSyncTimeBefore = (Get-MsolUser -UserPrincipalName $UserPrincipalName).LastDirSyncTime ;
-
-    $oReturn= New-Object PSObject -Property @{
-      TimeGMT = $DirSyncTimeBefore  ;
-      TimeLocal = $DirSyncTimeBefore.ToLocalTime() ;
-    };
-    #>
-    #$NewObject02 | write-output ;
     $AggregLics | write-output ; # 11:33 AM 1/9/2019 export the aggreg, NewObject02 was never more than a single lic
-} ; #*------^ END Function get-MsolUserLicenseDetails ^------
+} ; #*------^ END Function get-MsolUserLicenseDetails.ps1 ^------

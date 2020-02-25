@@ -1,15 +1,3 @@
-# values from central cfg 
-if(!$DoRetries){$DoRetries = 4 ; } ;          # attempt retries
-if(!$RetrySleep){$RetrySleep = 5 ; }          # mid-retry sleep in secs
-if(!$retryLimit){[int]$retryLimit=1; }        # just one retry to patch lineuri duped users and retry 1x
-if(!$retryDelay){[int]$retryDelay=20; }       # secs wait time after failure
-if(!$abortPassLimit){$abortPassLimit = 4;}    # maximum failed users to abort entire pass
-
-$RootPath = $env:USERPROFILE + "\ps\"
-if(!(test-path $RootPath)){ mkdir $RootPath}  ; 
-$KeyPath = $Rootpath + "creds\"
-if(!(test-path $KeyPath)){ mkdir $KeyPath}  ; 
-
 #*------v Function Connect-AAD v------
 if(!(test-path function:Connect-AAD)){
     Function Connect-AAD {
@@ -52,19 +40,24 @@ if(!(test-path function:Connect-AAD)){
         $MFA = get-TenantMFARequirement -Credential $Credential ;
 
         $sTitleBarTag="AAD" ;
-        if($Credential){
-            switch -regex ($Credential.username.split('@')[1]){
-                "toro\.com" {
-                    # leave untagged
-                 }
-                 "torolab\.com" {
-                    $sTitleBarTag = $sTitleBarTag + "tlab"
-                }
-                "(charlesmachineworks\.onmicrosoft\.com|charlesmachine\.works)" {
-                    $sTitleBarTag = $sTitleBarTag + "cmw"
-                }
-            } ;
-        } ;
+        $credDom = ($Credential.username.split("@"))[1] ;
+        if($Credential.username.contains('.onmicrosoft.com')){
+            # cloud-first acct
+            switch ($credDom){
+                "$($TORMeta['o365_TenantDomain'])" { }
+                "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += "TOL"}
+                "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag +="CMW"}
+                default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
+            } ; 
+        } else { 
+            # OP federated domain
+            switch ($credDom){
+                "$($TORMeta['o365_OPDomain'])" { }
+                "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += "TOL"}
+                "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += "CMW"}
+                default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
+            } ; 
+        } ; 
 
         Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
         Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
@@ -99,18 +92,17 @@ if(!(test-path function:Connect-AAD)){
                             } ;
                         } ;
                     }  ;
-              } ;
-              if(!$MFA){
-                  Connect-AzureAD -Credential $Credential -ErrorAction Stop ;
-              } else {
-                  Connect-AzureAD -AccountID $Credential.userName ;
-              } ;
+                } ;
+                if(!$MFA){Connect-AzureAD -Credential $Credential -ErrorAction Stop ;} 
+                else {Connect-AzureAD -AccountID $Credential.userName ;} ;
 
-              Write-Verbose "(connected to AzureAD ver2)" ; Add-PSTitleBar $sTitleBarTag ; ;
+                # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
+                if ($?) { write-verbose -verbose:$true  "(connected to AzureAD ver2)" ; Add-PSTitleBar $sTitleBarTag ; } ;
+                Write-Verbose -verbose:$true "(connected to AzureAD ver2)" ; 
             } Catch {
-                Write-Verbose"There was an error Connecting to Azure Ad - Ensure the module is installed" ;
-                Write-Verbose"Download PowerShell 5 or PowerShellGet" ;
-                Write-Verbose"https://msdn.microsoft.com/en-us/powershell/wmf/5.1/install-configure" ;
+                Write-Verbose "There was an error Connecting to Azure Ad - Ensure the module is installed" ;
+                Write-Verbose "Download PowerShell 5 or PowerShellGet" ;
+                Write-Verbose "https://msdn.microsoft.com/en-us/powershell/wmf/5.1/install-configure" ;
             } ;
         } ;
     } ; #*------^ END Function Connect-AAD ^------
@@ -120,4 +112,4 @@ if(!(get-alias raad -ea 0) ) {Set-Alias 'raad' -Value 'Connect-AAD' ; } ;
 if(!(get-alias reConnect-AAD -ea 0) ) {Set-Alias 'reConnect-AAD' -Value 'Connect-AAD' ; } ;
 function caadtol {Connect-AAD -cred $credO365TOLSID};
 function caadcmw {Connect-AAD -cred $credO365CMWCSID};
-function caadtor {Connect-AAD -cred $credO365TORSID};
+function caadtor {Connect-AAD -cred $credO365TORSID}

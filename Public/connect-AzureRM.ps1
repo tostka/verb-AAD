@@ -1,15 +1,3 @@
-# values from central cfg 
-if(!$DoRetries){$DoRetries = 4 ; } ;          # attempt retries
-if(!$RetrySleep){$RetrySleep = 5 ; }          # mid-retry sleep in secs
-if(!$retryLimit){[int]$retryLimit=1; }        # just one retry to patch lineuri duped users and retry 1x
-if(!$retryDelay){[int]$retryDelay=20; }       # secs wait time after failure
-if(!$abortPassLimit){$abortPassLimit = 4;}    # maximum failed users to abort entire pass
-
-$RootPath = $env:USERPROFILE + "\ps\"
-if(!(test-path $RootPath)){ mkdir $RootPath}  ; 
-$KeyPath = $Rootpath + "creds\"
-if(!(test-path $KeyPath)){ mkdir $KeyPath}  ; 
-
 #*------v Function connect-AzureRM v------
 function connect-AzureRM {
     <#
@@ -17,19 +5,20 @@ function connect-AzureRM {
     connect-AzureRM.ps1 - Connect to AzureRM module
     .NOTES
     Version     : 1.6.2
-    Author      : Todd Kadrie
-    Website     :	http://www.toddomation.com
+    Author      : Kevin Blumenfeld
+    Website     :	https://github.com/kevinblumenfeld/Posh365
     Twitter     :	@tostka / http://twitter.com/tostka
     CreatedDate : 2019-02-06
     FileName    :
     License     : MIT License
-    Copyright   : (c) 2019 Todd Kadrie
-    Github      : https://github.com/tostka
+    Copyright   : (c) 2020 Kevin Blumenfeld. All rights reserved. 
+    Github      : https://github.com/kevinblumenfeld/Posh365
     AddedCredit : REFERENCE
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
-    #* 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
+    # 9:19 AM 2/25/2020 updated to reflect my credential prefs
+    # 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
     .DESCRIPTION
     .PARAMETER  ProxyEnabled
     Switch for Access Proxy in chain
@@ -49,31 +38,44 @@ function connect-AzureRM {
         [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()]$Credential = $global:credo365TORSID
     ) ;
-
-    $MFA=$false ;
-    # 8:32 AM 11/19/2019 torolab is mfa now, need to check
-    $credDom = ($Credential.username.split("@"))[1] ;
-    if(get-variable o365_*_OPDomain |Where-Object{$_.Value -eq $creddom} | Select-Object -expand Name |Where-Object{$_ -match 'o365_(.*)_OPDomain'}){
-        $credVariTag = $matches[1] ;
-        $MFA = (get-variable "o365_$($credVariTag)_MFA").value ;
-    } else {
-        throw "Failed to resolve a `$credVariTag` from populated global 'o365_*_OPDomain' variables, for credential domain:$(CredDom)" ;
+    [string]$CredFolder = join-path -path (split-path $profile) -childpath "keys"
+    if (!(test-path -path $CredFolder)) {
+        write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):(creating missing `$CredFolder:$($CredFolder)..." ;
+        mkdir -path $CredFolder -whatif:$($whatif) ;
     } ;
+
+    $MFA = get-TenantMFARequirement -Credential $Credential ;
+
+    $sTitleBarTag="AzRM" ;
+    $credDom = ($Credential.username.split("@"))[1] ;
+    if($Credential.username.contains('.onmicrosoft.com')){
+        # cloud-first acct
+        switch ($credDom){
+            "$($TORMeta['o365_TenantDomain'])" { } 
+            "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
+            "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+            default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
+        } ; 
+    } else { 
+        # OP federated domain
+        switch ($credDom){
+            "$($TORMeta['o365_OPDomain'])" { }
+            "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
+            "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+            default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
+        } ; 
+    } ; 
 
     Try {Get-AzureRmTenant -erroraction stop }
     Catch {Install-Module -Name AzureRM -Scope CurrentUser} ;
     Try {Get-AzureRmTenant -erroraction stop}
     Catch {Import-Module -Name AzureRM -MinimumVersion '4.2.1'} ;
     if (! $MFA) {
-        $json = Get-ChildItem -Recurse -Include '*@*.json' -Path $KeyPath
+        $json = Get-ChildItem -Recurse -Include '*@*.json' -Path $CredFolder
         if ($json) {
-            Write-Host   "************************************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-            Write-Host   "************************************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-            write-verbose -verbose:$true " Select the Azure username and Click `"OK`" in lower right-hand corner"
-            write-verbose -verbose:$true " Otherwise, if this is the first time using this Azure username click `"Cancel`""
-            Write-Host   "************************************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-            Write-Host   "************************************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-            $json = $json | Select-Object name | Out-GridView -PassThru -Title "Select Azure username or click Cancel to use another"
+            Write-Host " Select the Azure username and Click `"OK`" in lower right-hand corner" -foregroundcolor "magenta" -backgroundcolor "white"
+            Write-Host " Otherwise, if this is the first time using this Azure username click `"Cancel`"" -foregroundcolor "magenta" -backgroundcolor "white"
+            $json = $json | select name | Out-GridView -PassThru -Title "Select Azure username or click Cancel to use another"
         }
         if (!($json)) {
             Try {
@@ -87,31 +89,20 @@ function connect-AzureRM {
                 write-verbose -verbose:$true "or download the MSI installer and install from here: https://github.com/Azure/azure-powershell/releases"
                 Break
             }
-            Save-AzureRmContext -Path ($KeyPath + ($azLogin.Context.Account.Id) + ".json")
-            Import-AzureRmContext -Path ($KeyPath + ($azLogin.Context.Account.Id) + ".json")
+            Save-AzureRmContext -Path ($CredFolder + "\" + ($azLogin.Context.Account.Id) + ".json")
+            Import-AzureRmContext -Path ($CredFolder + "\" +  + ($azLogin.Context.Account.Id) + ".json")
         }
-        else {
-            Import-AzureRmContext -Path ($KeyPath + $json.name)
-        }
-        Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-        Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-        write-verbose -verbose:$true " Select Subscription and Click `"OK`" in lower right-hand corner"
-        Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-        Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
+        else {Import-AzureRmContext -Path ($CredFolder + "\" +  + $json.name)}
+        Write-Host "Select Subscription and Click `"OK`" in lower right-hand corner" -foregroundcolor "magenta" -backgroundcolor "white"
         $subscription = Get-AzureRmSubscription | Out-GridView -PassThru -Title "Choose Azure Subscription"| Select-Object id
         Try {
             Select-AzureRmSubscription -SubscriptionId $subscription.id -ErrorAction Stop
-            write-verbose -verbose:$true "****************************************"
-            write-verbose -verbose:$true "You have successfully connected to Azure"
-            write-verbose -verbose:$true "****************************************"
+            # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
+            if ($?) { write-verbose -verbose:$true  "(Connected to AzureRm)" ; Add-PSTitleBar $sTitleBarTag ; } ;
         }
         Catch {
-            Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-            Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-            write-verbose -verbose:$true " Azure credentials have expired. Authenticate again please."
-            Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-            Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-            Remove-Item ($KeyPath + $json.name)
+            Write-Warning "Azure credentials are invalid or expired. Authenticate again please."
+            if ($json.name) {Remove-Item ($CredFolder + "\" +  + $json.name) } ; 
             connect-AzureRM
         }
     } else {
@@ -126,21 +117,16 @@ function connect-AzureRM {
             write-verbose -verbose:$true "or download the MSI installer and install from here: https://github.com/Azure/azure-powershell/releases"
             Break
         }
-        Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-        Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-        write-verbose -verbose:$true " Select Subscription and Click `"OK`" in lower right-hand corner"
-        Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
-        Write-Host   "*********************************************************************" -foregroundcolor "magenta" -backgroundcolor "white"
+        Write-Host "Select Subscription and Click `"OK`" in lower right-hand corner" -foregroundcolor "magenta" -backgroundcolor "white"
         $subscription = Get-AzureRmSubscription | Out-GridView -PassThru -Title "Choose Azure Subscription" | Select-Object id
         Try {
             Select-AzureRmSubscription -SubscriptionId $subscription.id -ErrorAction Stop
-            write-verbose -verbose:$true "****************************************"
-            write-verbose -verbose:$true "You have successfully connected to Azure"
-            write-verbose -verbose:$true "****************************************"
+            # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
+            if ($?) { write-verbose -verbose:$true  "(Connected to AzureRm)" ; Add-PSTitleBar $sTitleBarTag ; } ;
         }
         Catch {
             write-verbose -verbose:$true "There was an error selecting your subscription ID"
         }
     }
 }
-#*------^ END Function Connect-AzureRM ^------
+#*------^ connect-AzureRM.ps1 ^------

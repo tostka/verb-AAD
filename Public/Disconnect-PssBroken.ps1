@@ -1,5 +1,5 @@
+#*------v Function Disconnect-PssBroken v------
 if (!(test-path function:\Disconnect-PssBroken)) {
-    #*------v Function Disconnect-PssBroken v------
     Function Disconnect-PssBroken {
         <#
         .SYNOPSIS
@@ -23,5 +23,5 @@ if (!(test-path function:\Disconnect-PssBroken)) {
         .LINK
         #>
         Get-PsSession | Where-Object { $_.State -ne 'Opened' -or $_.Availability -ne 'Available' } | Remove-PSSession -Verbose ;
-    } ; #*------^ END Function Disconnect-PssBroken ^------
-} ;
+    } ; 
+} ; #*------^ END Function Disconnect-PssBroken ^------

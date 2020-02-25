@@ -1,15 +1,3 @@
-# values from central cfg
-if(!$DoRetries){$DoRetries = 4 ; } ;          # attempt retries
-if(!$RetrySleep){$RetrySleep = 5 ; }          # mid-retry sleep in secs
-if(!$retryLimit){[int]$retryLimit=1; }        # just one retry to patch lineuri duped users and retry 1x
-if(!$retryDelay){[int]$retryDelay=20; }       # secs wait time after failure
-if(!$abortPassLimit){$abortPassLimit = 4;}    # maximum failed users to abort entire pass
-
-$RootPath = $env:USERPROFILE + "\ps\"
-if(!(test-path $RootPath)){ mkdir $RootPath}  ;
-$KeyPath = $Rootpath + "creds\"
-if(!(test-path $KeyPath)){ mkdir $KeyPath}  ;
-
 #*------v Function Connect-MSOL v------
 if(!(test-path function:connect-msol)){
     Function Connect-MSOL {
@@ -56,37 +44,31 @@ if(!(test-path function:connect-msol)){
             [Parameter()][string]$CommandPrefix,
             [Parameter()]$Credential = $global:credo365TORSID
         ) ;
-
+        
         $MFA = get-TenantMFARequirement -Credential $Credential ;
 
         # 12:10 PM 3/15/2017 disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
         #if(!$CommandPrefix){ $CommandPrefix='aad' ; } ;
 
         $sTitleBarTag = "MSOL" ;
-        if ($Credential) {
-            switch -regex ($Credential.username.split('@')[1]) {
-                "toro\.com" {
-                    # leave untagged
-                }
-                "torolab\.com" {
-                    $sTitleBarTag = $sTitleBarTag + "tlab"
-                }
-                "(charlesmachineworks\.onmicrosoft\.com|charlesmachine\.works)" {
-                    $sTitleBarTag = $sTitleBarTag + "cmw"
-                }
-            } ;
-        } ;
-
-        <# expl of my profile xml credential storage points by account
-        $LUAuid="TORO\kadrits" ;
-        $SIDDomLogon="TORO\kadriTSS" ;
-        if("$($env:USERDOMAIN)\$($env:USERNAME)" -eq $LUAuid ){
-            # lua uid profile
-            Import-Clixml "c:\usr\home\db\O365lua.xml" ;
-        } elseif("$($env:USERDOMAIN)\$($env:USERNAME)" -eq $SIDDomLogon ){
-          # sid profile
-          Import-Clixml "c:\usr\home\db\O365SID.XML" ;
-        #>
+        $credDom = ($Credential.username.split("@"))[1] ;
+        if($Credential.username.contains('.onmicrosoft.com')){
+            # cloud-first acct
+            switch ($credDom){
+                "$($TORMeta['o365_TenantDomain'])" { } 
+                "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
+                "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+                default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
+            } ; 
+        } else { 
+            # OP federated domain
+            switch ($credDom){
+                "$($TORMeta['o365_OPDomain'])" { }
+                "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
+                "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+                default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
+            } ; 
+        } ; 
 
         try { Get-MsolAccountSku -ErrorAction Stop | out-null }
         catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
@@ -97,22 +79,46 @@ if(!(test-path function:connect-msol)){
                 }
                 else {
                     switch ($env:USERDOMAIN) {
-                        "TORO" {
-                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365AdmUid ))" ;
+                        "$($TORMeta['legacyDomain'])" {
+                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($TORMeta['o365_SIDUpn']))" ;
                             if (!$bUseo365COAdminUID) {
-                                if ($o365AdmUid ) { $Credential = Get-Credential -Credential $o365AdmUid } else { $Credential = Get-Credential } ;
+                                if ($TORMeta['o365_SIDUpn'] ) { 
+                                    $Credential = Get-Credential -Credential $TORMeta['o365_SIDUpn'] 
+                                } else { $Credential = Get-Credential } ;
                             }
                             else {
-                                if ($o365COAdmUid) { global:o365cred = Get-Credential -Credential $o365COAdmUid } else { $Credential = Get-Credential } ;
+                                if ($TORMeta['o365_CSIDUpn']) { 
+                                    $Credential = Get-Credential -Credential $TORMeta['o365_CSIDUpn'] 
+                                    global:o365cred = $Credential ; 
+                                } else { $Credential = Get-Credential } ;
                             } ;
                         }
-                        "TORO-LAB" {
-                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365LabAdmUid ))" ;
+                        "$($TOLMeta['legacyDomain'])" {
+                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($TOLMeta['o365_SIDUpn']))" ;
                             if (!$bUseo365COAdminUID) {
-                                if ($o365LabAdmUid) { $Credential = Get-Credential -Credential $o365LabAdmUid } else { $Credential = Get-Credential } ;
+                                if ($TOLMeta['o365_SIDUpn'] ) { 
+                                    $Credential = Get-Credential -Credential $TOLMeta['o365_SIDUpn'] 
+                                } else { $Credential = Get-Credential } ;
                             }
                             else {
-                                if ($o365LabCOAdmUid) { $Credential = Get-Credential -Credential $o365LabCOAdmUid } else { $Credential = Get-Credential } ;
+                                if ($TOLMeta['o365_CSIDUpn']) { 
+                                    $Credential = Get-Credential -Credential $TOLMeta['o365_CSIDUpn'] 
+                                    global:o365cred = $Credential ; 
+                                } else { $Credential = Get-Credential } ;
+                            } ;
+                        }
+                        "$($CMWMeta['legacyDomain'])" {
+                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($CMWMeta['o365_SIDUpn']))" ;
+                            if (!$bUseo365COAdminUID) {
+                                if ($CMWMeta['o365_SIDUpn'] ) { 
+                                    $Credential = Get-Credential -Credential $CMWMeta['o365_SIDUpn'] 
+                                } else { $Credential = Get-Credential } ;
+                            }
+                            else {
+                                if ($CMWMeta['o365_CSIDUpn']) { 
+                                    $Credential = Get-Credential -Credential $CMWMeta['o365_CSIDUpn'] 
+                                    global:o365cred = $Credential ; 
+                                } else { $Credential = Get-Credential } ;
                             } ;
                         }
                         default {
@@ -140,4 +146,4 @@ if(!(get-alias rmsol -ea 0) ) {Set-Alias 'rmsol' -Value 'Connect-MSOL' ; } ;
 if(!(get-alias reConnect-MSOL -ea 0) ) {Set-Alias 'reConnect-MSOL' -Value 'Connect-MSOL' ; } ;
 function cmsoltol {Connect-MSOL -cred $credO365TOLSID};
 function cmsolcmw {Connect-MSOL -cred $credO365CMWCSID};
-function cmsoltor {Connect-MSOL -cred $credO365TORSID};
+function cmsoltor {Connect-MSOL -cred $credO365TORSID}
