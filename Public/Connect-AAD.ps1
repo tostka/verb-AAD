@@ -1,42 +1,43 @@
 #*------v Function Connect-AAD v------
-if(!(test-path function:Connect-AAD)){
-    Function Connect-AAD {
-        <#
-        .SYNOPSIS
-        Connect-AAD - Establish authenticated session to AzureAD Graph Module (AzureAD), also works as reConnect-AAD, there is no disConnect-AAD (have to close Powershell to clear it).
-        .NOTES
-        Updated By: : Todd Kadrie
-        Website:	http://tinstoys.blogspot.com
-        Twitter:	http://twitter.com/tostka
-        REVISIONS   :
-        * 10:55 AM 12/6/2019 Connect-AAD:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
-        * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
-        * 1:39 PM 5/8/2019 Connect-AAD:tightened up the installed/imported/authenticated checks
-        * 2:53 PM 5/2/2019 ren'd Connect-AAD2 -> Connect-AAD
-        * 1:54 PM 10/8/2018 Connect-AAD:port from Connect-AAD
-        .DESCRIPTION
-        Connect-AAD - Establish authenticated session to AzureAD/MSOL, also works as reConnect-AAD, there is no disConnect-AAD (have to close Powershell to clear it).
-        No need for separate reConnect-AAD - this self tests for connection, and reconnects if it's missing.
-        No support for disConnect-AAD, because MSOL has no command to do it, but closing powershell.
-        .PARAMETER  ProxyEnabled
-        Proxyied connection support
-        .PARAMETER Credential
-        Credential to be used for connection
-        .INPUTS
-        None. Does not accepted piped input.
-        .OUTPUTS
-        None. Returns no objects or output.
-        .EXAMPLE
-        Connect-AAD
-        .EXAMPLE
-        Connect-AAD -Credential $cred
-        .LINK
-        #>
-        Param(
-            [Parameter()][boolean]$ProxyEnabled = $False,
-            [Parameter()]$Credential = $global:credo365TORSID
-        ) ;
-
+Function Connect-AAD {
+    <#
+    .SYNOPSIS
+    Connect-AAD - Establish authenticated session to AzureAD Graph Module (AzureAD), also works as reConnect-AAD, there is no disConnect-AAD (have to close Powershell to clear it).
+    .NOTES
+    Updated By: : Todd Kadrie
+    Website:	http://tinstoys.blogspot.com
+    Twitter:	http://twitter.com/tostka
+    REVISIONS   :
+    * 10:55 AM 12/6/2019 Connect-AAD:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
+    * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
+    * 1:39 PM 5/8/2019 Connect-AAD:tightened up the installed/imported/authenticated checks
+    * 2:53 PM 5/2/2019 ren'd Connect-AAD2 -> Connect-AAD
+    * 1:54 PM 10/8/2018 Connect-AAD:port from Connect-AAD
+    .DESCRIPTION
+    Connect-AAD - Establish authenticated session to AzureAD/MSOL, also works as reConnect-AAD, there is no disConnect-AAD (have to close Powershell to clear it).
+    No need for separate reConnect-AAD - this self tests for connection, and reconnects if it's missing.
+    No support for disConnect-AAD, because MSOL has no command to do it, but closing powershell.
+    .PARAMETER  ProxyEnabled
+    Proxyied connection support
+    .PARAMETER Credential
+    Credential to be used for connection
+    .INPUTS
+    None. Does not accepted piped input.
+    .OUTPUTS
+    None. Returns no objects or output.
+    .EXAMPLE
+    Connect-AAD
+    .EXAMPLE
+    Connect-AAD -Credential $cred
+    .LINK
+    #>
+    [CmdletBinding()] 
+    Param(
+        [Parameter()][boolean]$ProxyEnabled = $False,
+        [Parameter()]$Credential = $global:credo365TORSID
+    ) ;
+    BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
+    PROCESS {
         $MFA = get-TenantMFARequirement -Credential $Credential ;
 
         $sTitleBarTag="AAD" ;
@@ -105,11 +106,10 @@ if(!(test-path function:Connect-AAD)){
                 Write-Verbose "https://msdn.microsoft.com/en-us/powershell/wmf/5.1/install-configure" ;
             } ;
         } ;
-    } ; #*------^ END Function Connect-AAD ^------
-} else { write-host -foregroundcolor green "(Deferring to pre-loaded Connect-AAD)" ;} ;
+    } ; 
+    END {} ;
+} ; #*------^ END Function Connect-AAD ^------
 if(!(get-alias caad -ea 0) ) {Set-Alias 'caad' -Value 'Connect-AAD' ; } ;
 if(!(get-alias raad -ea 0) ) {Set-Alias 'raad' -Value 'Connect-AAD' ; } ;
 if(!(get-alias reConnect-AAD -ea 0) ) {Set-Alias 'reConnect-AAD' -Value 'Connect-AAD' ; } ;
-function caadtol {Connect-AAD -cred $credO365TOLSID};
-function caadcmw {Connect-AAD -cred $credO365CMWCSID};
-function caadtor {Connect-AAD -cred $credO365TORSID}
+

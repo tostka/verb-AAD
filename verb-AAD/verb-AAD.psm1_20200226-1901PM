@@ -318,11 +318,12 @@ Function Connect-AAD {
             } ;
         } ;
     } ; 
-    END {} ;
-} ; #*------^ END Function Connect-AAD ^------
-if(!(get-alias caad -ea 0) ) {Set-Alias 'caad' -Value 'Connect-AAD' ; } ;
-if(!(get-alias raad -ea 0) ) {Set-Alias 'raad' -Value 'Connect-AAD' ; } ;
-if(!(get-alias reConnect-AAD -ea 0) ) {Set-Alias 'reConnect-AAD' -Value 'Connect-AAD' ; }
+    END {
+      if(!(get-alias caad -ea 0) ) {Set-Alias 'caad' -Value 'Connect-AAD' ; } ;
+      if(!(get-alias raad -ea 0) ) {Set-Alias 'raad' -Value 'Connect-AAD' ; } ;
+      if(!(get-alias reConnect-AAD -ea 0) ) {Set-Alias 'reConnect-AAD' -Value 'Connect-AAD' ; } ;
+    } ;
+}
 
 #*------^ Connect-AAD.ps1 ^------
 
@@ -470,8 +471,7 @@ Function Connect-MSOL {
         Website:	http://tinstoys.blogspot.com
         Twitter:	http://twitter.com/tostka
         REVISIONS   :
-        * 6:11 PM 2/26/2020 moved aliases below
-        * 2:08 PM 2/26/2020 converted to adv func
+        * 2:08 PM 2/26/2020 converted to adv func, moved aliases into END
         * 8:50 PM 1/12/2020 expanded aliases
         * 10:55 AM 12/6/2019 Connect-MSOL:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
         * 1:07 PM 11/25/2019 added *tol/*tor/*cmw alias variants for connect & reconnect
@@ -605,11 +605,12 @@ Function Connect-MSOL {
         } ;
         
     } ;
-    END {} ;
-} ; #*------^ END Function Connect-MSOL ^------
-if(!(get-alias cmsol -ea 0) ) {Set-Alias 'cmsol' -Value 'Connect-MSOL' ; } ;
-if(!(get-alias rmsol -ea 0) ) {Set-Alias 'rmsol' -Value 'Connect-MSOL' ; } ;
-if(!(get-alias reConnect-MSOL -ea 0) ) {Set-Alias 'reConnect-MSOL' -Value 'Connect-MSOL' ; }
+    END {
+        if(!(get-alias cmsol -ea 0) ) {Set-Alias 'cmsol' -Value 'Connect-MSOL' ; } ;
+        if(!(get-alias rmsol -ea 0) ) {Set-Alias 'rmsol' -Value 'Connect-MSOL' ; } ;
+        if(!(get-alias reConnect-MSOL -ea 0) ) {Set-Alias 'reConnect-MSOL' -Value 'Connect-MSOL' ; } ;
+    } ;
+}
 
 #*------^ Connect-MSOL.ps1 ^------
 
@@ -1368,8 +1369,8 @@ if(!(get-alias Wait-MSolSync -ea 0 )) {Set-Alias -Name 'wait-MSolSync' -Value 'W
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUTb1ZREXp6aS4im3FeSlMHuqU
-# Dk+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU6LyinKCtMyssrJ80NielYxUC
+# 3B2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1384,9 +1385,9 @@ if(!(get-alias Wait-MSolSync -ea 0 )) {Set-Alias -Name 'wait-MSolSync' -Value 'W
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSdWm+L
-# LKxytBwdDEz65IztWra+JjANBgkqhkiG9w0BAQEFAASBgLIDtECtOz+WjbPcoH2u
-# OD6Hyc0G0qOJg8kDTX4SBJubr1ltPKuJdaxi6XixsNMpOfP63PsDqvw+rmFa9+A4
-# M8r8NKRatDCL/Jl1lgVNJ6q6Aac0L71vw5mSo9lWjwYskATAlguzJ/Yi+k4MUlNP
-# N8RxJKKoJXjyYeeuCw5B1dRy
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRHJOfG
+# 2aWOH2RKlKnUW+zxSusPJTANBgkqhkiG9w0BAQEFAASBgK1NwqkRwUuxhVNpnONY
+# igoa1rNSN1O02OYo+xj8XO4yBWRsItT+65rveTtzaqilkfWYRCNOHucfwkMniuyZ
+# AfuuZ4jKkVd7A8vgh5vfpDmi8av6Bll6NzPk+ND+PxhvQ6Iu+Rgtl2o2XxvDx4R6
+# JgPytyqR/TD3e0epk/kMhV9L
 # SIG # End signature block

@@ -1,5 +1,4 @@
 #*------v Function Connect-MSOL v------
-if(!(test-path function:connect-msol)){
     Function Connect-MSOL {
         <#
         .SYNOPSIS
@@ -9,6 +8,8 @@ if(!(test-path function:connect-msol)){
         Website:	http://tinstoys.blogspot.com
         Twitter:	http://twitter.com/tostka
         REVISIONS   :
+        * 6:11 PM 2/26/2020 moved aliases below
+        * 2:08 PM 2/26/2020 converted to adv func
         * 8:50 PM 1/12/2020 expanded aliases
         * 10:55 AM 12/6/2019 Connect-MSOL:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
         * 1:07 PM 11/25/2019 added *tol/*tor/*cmw alias variants for connect & reconnect
@@ -38,13 +39,14 @@ if(!(test-path function:connect-msol)){
         Connect-MSOL
         .LINK
         #>
-
+        [CmdletBinding()]
         Param(
             [Parameter()][boolean]$ProxyEnabled = $False,
             [Parameter()][string]$CommandPrefix,
             [Parameter()]$Credential = $global:credo365TORSID
         ) ;
-        
+    BEGIN { $verbose = ($VerbosePreference -eq "Continue") } ;
+    PROCESS {
         $MFA = get-TenantMFARequirement -Credential $Credential ;
 
         # 12:10 PM 3/15/2017 disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
@@ -139,11 +141,10 @@ if(!(test-path function:connect-msol)){
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
             if ($?) { write-verbose -verbose:$true  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; } ;
         } ;
-    } ; #*------^ END Function Connect-MSOL ^------
-} else { write-host -foregroundcolor green "(Deferring to pre-loaded connect-msol)" ;} ;
+        
+    } ;
+    END {} ;
+} ; #*------^ END Function Connect-MSOL ^------
 if(!(get-alias cmsol -ea 0) ) {Set-Alias 'cmsol' -Value 'Connect-MSOL' ; } ;
 if(!(get-alias rmsol -ea 0) ) {Set-Alias 'rmsol' -Value 'Connect-MSOL' ; } ;
 if(!(get-alias reConnect-MSOL -ea 0) ) {Set-Alias 'reConnect-MSOL' -Value 'Connect-MSOL' ; } ;
-function cmsoltol {Connect-MSOL -cred $credO365TOLSID};
-function cmsolcmw {Connect-MSOL -cred $credO365CMWCSID};
-function cmsoltor {Connect-MSOL -cred $credO365TORSID}

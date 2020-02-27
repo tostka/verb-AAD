@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.7
+Version     : 1.0.4
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -32,8 +32,13 @@ verb-AAD - Azure AD-related generic functions
 https://github.com/tostka/verb-AAD
 #>
 
+if(!$DoRetries){$DoRetries = 4 ; } ;          # attempt retries
+if(!$RetrySleep){$RetrySleep = 5 ; }          # mid-retry sleep in secs
+if(!$retryLimit){[int]$retryLimit=1; }        # just one retry to patch lineuri duped users and retry 1x
+if(!$retryDelay){[int]$retryDelay=20; }       # secs wait time after failure
+if(!$abortPassLimit){$abortPassLimit = 4;}    # maximum failed users to abort entire pass
 
-#*------v Build-AADSignErrorsHash.ps1 v------
+#*------v Function Build-AADSignErrorsHash v------
 function Build-AADSignErrorsHash {
     <#
     .SYNOPSIS
@@ -190,65 +195,47 @@ function Build-AADSignErrorsHash {
     $AADSignOnError.add("500133", "The assertion is not within its valid time range. Ensure that the access token is not expired before using it for user assertion, or request a new token.") ;
     $AADSignOnError.add("530021", "Application does not meet the conditional access approved app requirements.") ;
     $AADSignOnError | write-output ;
-}
+} ; #*------^ END Function Build-AADSignErrorsHash ^------
 
-#*------^ Build-AADSignErrorsHash.ps1 ^------
+#*------v Function Connect-AAD v------
+if(!(test-path function:Connect-AAD)){
+    Function Connect-AAD {
+        <#
+        .SYNOPSIS
+        Connect-AAD - Establish authenticated session to AzureAD Graph Module (AzureAD), also works as reConnect-AAD, there is no disConnect-AAD (have to close Powershell to clear it).
+        .NOTES
+        Updated By: : Todd Kadrie
+        Website:	http://tinstoys.blogspot.com
+        Twitter:	http://twitter.com/tostka
+        REVISIONS   :
+        * 10:55 AM 12/6/2019 Connect-AAD:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
+        * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
+        * 1:39 PM 5/8/2019 Connect-AAD:tightened up the installed/imported/authenticated checks
+        * 2:53 PM 5/2/2019 ren'd Connect-AAD2 -> Connect-AAD
+        * 1:54 PM 10/8/2018 Connect-AAD:port from Connect-AAD
+        .DESCRIPTION
+        Connect-AAD - Establish authenticated session to AzureAD/MSOL, also works as reConnect-AAD, there is no disConnect-AAD (have to close Powershell to clear it).
+        No need for separate reConnect-AAD - this self tests for connection, and reconnects if it's missing.
+        No support for disConnect-AAD, because MSOL has no command to do it, but closing powershell.
+        .PARAMETER  ProxyEnabled
+        Proxyied connection support
+        .PARAMETER Credential
+        Credential to be used for connection
+        .INPUTS
+        None. Does not accepted piped input.
+        .OUTPUTS
+        None. Returns no objects or output.
+        .EXAMPLE
+        Connect-AAD
+        .EXAMPLE
+        Connect-AAD -Credential $cred
+        .LINK
+        #>
+        Param(
+            [Parameter()][boolean]$ProxyEnabled = $False,
+            [Parameter()]$Credential = $global:credo365TORSID
+        ) ;
 
-#*------v caadCMW.ps1 v------
-function caadCMW {Connect-AAD -cred $credO365CMWCSID}
-
-#*------^ caadCMW.ps1 ^------
-
-#*------v caadTOL.ps1 v------
-function caadtol {Connect-AAD -cred $credO365TOLSID}
-
-#*------^ caadTOL.ps1 ^------
-
-#*------v caadTOR.ps1 v------
-function caadTOR {Connect-AAD -cred $credO365TORSID}
-
-#*------^ caadTOR.ps1 ^------
-
-#*------v Connect-AAD.ps1 v------
-Function Connect-AAD {
-    <#
-    .SYNOPSIS
-    Connect-AAD - Establish authenticated session to AzureAD Graph Module (AzureAD), also works as reConnect-AAD, there is no disConnect-AAD (have to close Powershell to clear it).
-    .NOTES
-    Updated By: : Todd Kadrie
-    Website:	http://tinstoys.blogspot.com
-    Twitter:	http://twitter.com/tostka
-    REVISIONS   :
-    * 10:55 AM 12/6/2019 Connect-AAD:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
-    * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
-    * 1:39 PM 5/8/2019 Connect-AAD:tightened up the installed/imported/authenticated checks
-    * 2:53 PM 5/2/2019 ren'd Connect-AAD2 -> Connect-AAD
-    * 1:54 PM 10/8/2018 Connect-AAD:port from Connect-AAD
-    .DESCRIPTION
-    Connect-AAD - Establish authenticated session to AzureAD/MSOL, also works as reConnect-AAD, there is no disConnect-AAD (have to close Powershell to clear it).
-    No need for separate reConnect-AAD - this self tests for connection, and reconnects if it's missing.
-    No support for disConnect-AAD, because MSOL has no command to do it, but closing powershell.
-    .PARAMETER  ProxyEnabled
-    Proxyied connection support
-    .PARAMETER Credential
-    Credential to be used for connection
-    .INPUTS
-    None. Does not accepted piped input.
-    .OUTPUTS
-    None. Returns no objects or output.
-    .EXAMPLE
-    Connect-AAD
-    .EXAMPLE
-    Connect-AAD -Credential $cred
-    .LINK
-    #>
-    [CmdletBinding()] 
-    Param(
-        [Parameter()][boolean]$ProxyEnabled = $False,
-        [Parameter()]$Credential = $global:credo365TORSID
-    ) ;
-    BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
-    PROCESS {
         $MFA = get-TenantMFARequirement -Credential $Credential ;
 
         $sTitleBarTag="AAD" ;
@@ -317,16 +304,16 @@ Function Connect-AAD {
                 Write-Verbose "https://msdn.microsoft.com/en-us/powershell/wmf/5.1/install-configure" ;
             } ;
         } ;
-    } ; 
-    END {} ;
-} ; #*------^ END Function Connect-AAD ^------
+    } ; #*------^ END Function Connect-AAD ^------
+} else { write-host -foregroundcolor green "(Deferring to pre-loaded Connect-AAD)" ;} ;
 if(!(get-alias caad -ea 0) ) {Set-Alias 'caad' -Value 'Connect-AAD' ; } ;
 if(!(get-alias raad -ea 0) ) {Set-Alias 'raad' -Value 'Connect-AAD' ; } ;
-if(!(get-alias reConnect-AAD -ea 0) ) {Set-Alias 'reConnect-AAD' -Value 'Connect-AAD' ; }
+if(!(get-alias reConnect-AAD -ea 0) ) {Set-Alias 'reConnect-AAD' -Value 'Connect-AAD' ; } ;
+function caadtol {Connect-AAD -cred $credO365TOLSID};
+function caadcmw {Connect-AAD -cred $credO365CMWCSID};
+function caadtor {Connect-AAD -cred $credO365TORSID}
 
-#*------^ Connect-AAD.ps1 ^------
-
-#*------v connect-AzureRM.ps1 v------
+#*------v Function connect-AzureRM v------
 function connect-AzureRM {
     <#
     .SYNOPSIS
@@ -457,11 +444,11 @@ function connect-AzureRM {
         }
     }
 }
-
 #*------^ connect-AzureRM.ps1 ^------
 
-#*------v Connect-MSOL.ps1 v------
-Function Connect-MSOL {
+#*------v Function Connect-MSOL v------
+if(!(test-path function:connect-msol)){
+    Function Connect-MSOL {
         <#
         .SYNOPSIS
         Connect-MSOL - Establish authenticated session to AzureAD MSOL Module, also works as reConnect-MSOL, there is no disConnect-MSOL (have to close Powershell to clear it).
@@ -470,8 +457,6 @@ Function Connect-MSOL {
         Website:	http://tinstoys.blogspot.com
         Twitter:	http://twitter.com/tostka
         REVISIONS   :
-        * 6:11 PM 2/26/2020 moved aliases below
-        * 2:08 PM 2/26/2020 converted to adv func
         * 8:50 PM 1/12/2020 expanded aliases
         * 10:55 AM 12/6/2019 Connect-MSOL:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
         * 1:07 PM 11/25/2019 added *tol/*tor/*cmw alias variants for connect & reconnect
@@ -501,14 +486,13 @@ Function Connect-MSOL {
         Connect-MSOL
         .LINK
         #>
-        [CmdletBinding()]
+
         Param(
             [Parameter()][boolean]$ProxyEnabled = $False,
             [Parameter()][string]$CommandPrefix,
             [Parameter()]$Credential = $global:credo365TORSID
         ) ;
-    BEGIN { $verbose = ($VerbosePreference -eq "Continue") } ;
-    PROCESS {
+        
         $MFA = get-TenantMFARequirement -Credential $Credential ;
 
         # 12:10 PM 3/15/2017 disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
@@ -603,17 +587,16 @@ Function Connect-MSOL {
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
             if ($?) { write-verbose -verbose:$true  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; } ;
         } ;
-        
-    } ;
-    END {} ;
-} ; #*------^ END Function Connect-MSOL ^------
+    } ; #*------^ END Function Connect-MSOL ^------
+} else { write-host -foregroundcolor green "(Deferring to pre-loaded connect-msol)" ;} ;
 if(!(get-alias cmsol -ea 0) ) {Set-Alias 'cmsol' -Value 'Connect-MSOL' ; } ;
 if(!(get-alias rmsol -ea 0) ) {Set-Alias 'rmsol' -Value 'Connect-MSOL' ; } ;
-if(!(get-alias reConnect-MSOL -ea 0) ) {Set-Alias 'reConnect-MSOL' -Value 'Connect-MSOL' ; }
+if(!(get-alias reConnect-MSOL -ea 0) ) {Set-Alias 'reConnect-MSOL' -Value 'Connect-MSOL' ; } ;
+function cmsoltol {Connect-MSOL -cred $credO365TOLSID};
+function cmsolcmw {Connect-MSOL -cred $credO365CMWCSID};
+function cmsoltor {Connect-MSOL -cred $credO365TORSID}
 
-#*------^ Connect-MSOL.ps1 ^------
-
-#*------v Disconnect-PssBroken.ps1 v------
+#*------v Function Disconnect-PssBroken v------
 if (!(test-path function:\Disconnect-PssBroken)) {
     Function Disconnect-PssBroken {
         <#
@@ -639,258 +622,9 @@ if (!(test-path function:\Disconnect-PssBroken)) {
         #>
         Get-PsSession | Where-Object { $_.State -ne 'Opened' -or $_.Availability -ne 'Available' } | Remove-PSSession -Verbose ;
     } ; 
-}
+} ; #*------^ END Function Disconnect-PssBroken ^------
 
-#*------^ Disconnect-PssBroken.ps1 ^------
-
-#*------v get-AADCertToken.ps1 v------
-function get-AADCertToken {
-    <#
-    .SYNOPSIS
-     get-AADCertToken - Obtain a certificate-authenticated Azure access token
-    .NOTES
-    Version     : 1.0.0
-    Author      : Alex Asplund
-    Website     : https://automativity.com
-    Twitter     : @AlexAsplund
-    CreatedDate : 2019-08-12
-    FileName    : 
-    License     :
-    Copyright   : 
-    Github      : 
-    Tags        : Powershell,AzureAD,Authentication,GraphAPI,Microsoft
-    AddedCredit : 
-    AddedWebsite:	
-    AddedTwitter:	
-    REVISIONS
-    * 8:51 AM 1/30/2020
-    * 2019-08-12 posted version 
-    .DESCRIPTION
-     get-AADCertToken - Obtain a certificate-authenticated AADApp Azure access token
-     Uses code Alex Asplund demo'd at link below, wrapped into a func
-     Configure parameter defaults as follows
-        |param|info source|
-        |---|---|
-        |`$tenantName`| (can be obtained from `caad ;  (Get-AzureADTenantDetail).VerifiedDomain`)|
-        |`$tenantId`| (can be obtained from `caad ;  (Get-AzureADTenantDetail).ObjectId`)|
-        |`$AppID`| (the 'Application (client ID)' guid value recorded above)|
-        |`$Certificate`|(the Thumbnail value from the self-signed certificate created above)|
-
-        This script uses RestAPI calls to authenticate and query GraphAPI. 
-
-        ##Prereqs:
-        1) **Verify AAD Premium P1 tenant license:**
-          - [https://admin.microsoft.com/Adminportal/](https://admin.microsoft.com/Adminportal/) : *Billing >* appears at top: *Azure Active Directory Premium P1*
-          - or [https://portal.azure.com](https://portal.azure.com) ; *AAD *> main overview page, it appear right below* 'The Toro Company'* on the graph: *Azure AD Premium P1*
-
-        2) **Create an Application Identity**
-        [https://portal.azure.com](https://portal.azure.com) > *Azure Active Directory* > *Manage pane:* *App Registrations* > **[+]New Registration**
-        **Register an application screen**: 
-        - **Displayname**: `AuditGraphAccessMessaging`
-        - **Supported account types**:
-        (x) **Accounts in this organizational directory only (COMPANY - Single tenant)**</br>
-        ( ) *Accounts in any organizational directory (Any Azure AD directory - Multitenant)*</br>
-        ( ) *Accounts in any organizational directory (Any Azure AD directory - Multitenant) and personal Microsoft accounts (e.g. Skype, Xbox)*</br>
-        - Click **Register**
-        - Above refreshes to the details of the new App: upper right: click **Add a Redirect URI**
-            - **Type**: ***Web***, **Redirect URI**: `https://localhost` </br>
-            *(can set anything here, doesn't need to be functional)*
-            - click **Save** *(top left, note the redirect url created)*
-        - Record the **Application (client ID)** *(guid)* for future reference.
-
-        3) **Grant necessary App Permissions**
-            - If necessary, return to: *AADPortal > App Registrations* > [find and click your new App]
-            - Left pane: Click **Api permisions**
-                - ***For Audit Log Sign-in Activity, it needs:***
-            
-                |Permission type |Permissions (from least to most privileged)|
-                |---|---|
-                |Delegated (work or school account) |AuditLog.Read.All, Directory.Read.All|
-                |Delegated (personal Microsoft account) |Not supported|
-                |Application |AuditLog.Read.All, Directory.Read.All|
-            
-            - click **Add a permission** btn
-                - **Request API Permissions** blade: **Microsoft Graph**
-                - click **Application permissions** *(don't require a logged on user to be present to run)*
-                - *Type to search*: [*type out one of the permisison names above*]
-                - when the matching entry appears **[x]** (e.g. AuditLog.Read.All)
-                - click **Add permission** to commit the change. (refreshes back to the *Configured permissions* screen)
-                - Repeat the process above for each additional permission to be added
-            - When all permisisons are added & displayed, click the **Grant admin consent for TENANT** button, **Yes**
-
-        4) **Create a self-signed certificate to handle authentication:**
-          - Configure values to suite Tenant and App Name. 
-        ```powershell
-        # gens a self-signed cert for AAD auth of the AAD AuditGraphAccessMessaging API Access secprinc
-        # below is displayed by: (Get-AzureADTenantDetail).VerifiedDomain
-        $TenantName = $o365_Torolab_TenantDomain ;
-        $CerOutputPath = "C:\usr\work\o365\certs\AuditGraphAccessMessagingTOL.cer" ;
-        $StoreLocation = "Cert:\CurrentUser\My" ;
-        $ExpirationDate = (Get-Date).AddYears(2) ;
-        $CreateCertificateSplat = @{
-          FriendlyName = "AuditGraphAccessMessagingTOL" ;
-            DnsName = $TenantName ;
-            CertStoreLocation = $StoreLocation ;
-            NotAfter = $ExpirationDate ;
-            KeyExportPolicy = "Exportable" ;
-            KeySpec = "Signature" ;
-            Provider = "Microsoft Enhanced RSA and AES Cryptographic Provider" ;
-            HashAlgorithm = "SHA256" ;
-        } ;
-        $Certificate = New-SelfSignedCertificate @CreateCertificateSplat ;
-        $CertificatePath = Join-Path -Path $StoreLocation -ChildPath $Certificate.Thumbprint ;
-        Export-Certificate -Cert $CertificatePath -FilePath $CerOutputPath | Out-Null ;
-        gci $CertificatePath ; gci $CerOutputPath | fl fullname,length; 
-        ```
-
-        5) **Configure App with Certificate Authentication:**
-        - From the registered apps's summary page, click left menu: **Certificates & secrets**  > **Upload certificate**, click folder icon, (*browse .cer*) , **Add**
-        - **while we're here lets add a Secret (password) as well:**  
-          - **Certificates & secrets**  > **New client secret** 
-          - *Description*: 'For SigninActivity review scripts'
-          - *Expires*: **(x) in 2 years**
-          - click **Add**
-          - The newly generated secret (password) string will *only* be displayed *once* on this page. Record it & the expiration date for permanent reference:
-    .PARAMETER  tenantName
-    AAD TenantID [-TenantID (guid)]]
-    .PARAMETER  AppID
-    AAD AppID [-AppID (guid)]]
-    .PARAMETER  Certificate
-    Certificate Thumbprint [-Certificate (thumbprint)]]
-    .PARAMETER ShowDebug
-    Parameter to display Debugging messages [-ShowDebug switch]
-    .INPUTS
-    None. Does not accepted piped input.
-    .OUTPUTS
-    Returns a token object
-    .EXAMPLE
-    $token=get-AADCertToken ;
-    Obtain a token, using default params
-    .EXAMPLE
-    $token=get-AADCertToken -tenantName "[tenant].onmicrosoft.com" -AppID "[appid guid]" -Certificate "7C7D6...[thumbprint]";
-    Specing a Token with non-defaults explicits
-    .EXAMPLE
-    $pltAADCertToken=[ordered]@{
-        tenantName= $tenantName ; AppID= $AppID ; Certificate= $Certificate ; verbose = ($VerbosePreference -eq 'Continue') ;
-    } 
-    write-verbose -Verbose:$verbose "$((get-date).ToString('HH:mm:ss')):get-AADCertToken w`n$(($pltAADCertToken|out-string).trim())" ; 
-    $token =get-AADCertToken @pltAADCertToken ; 
-    $AADTokenHeaders = get-AADTokenHeaders -token $token -Verbose:($VerbosePreference -eq 'Continue') ; 
-    $Uri = "https://graph.microsoft.com/v1.0/auditLogs/signIns" ; 
-    $myReportRequest = (Invoke-RestMethod -Uri $url -Headers $AADTokenHeaders -Method Get -ContentType "application/json") ; 
-    $myReport = @()
-    $myReport += $myReportRequest.value
-    Do {
-        $myReportRequest = Invoke-RestMethod -Uri $AuditLogRequest.'@odata.nextLink' -Headers $Header -Method Get -ContentType "application/json"
-        $myReport += $myReportRequest.value
-    } while($myReportRequest.'@odata.nextLink' -ne $null) ; 
-    .LINK
-    https://adamtheautomator.com/microsoft-graph-api-powershell/
-    #>
-    [CmdletBinding()]
-    Param(
-        [Parameter(HelpMessage = "AAD TenantID [-TenantID (guid)]]")]
-        [string]$tenantName = $global:o365_Toroco_TenantDomain,
-        [Parameter(HelpMessage = "AAD AppID [-AppID (guid)]]")]
-        [string]$AppID = $global:TOR_AAD_App_Audit_ID,
-        [Parameter(HelpMessage = "Certificate Thumbprint [-Certificate (thumbprint)]]")]
-        $Certificate = $global:TOR_AAD_App_Audit_CertThumb,
-        [Parameter(HelpMessage = "Debugging Flag [-showDebug]")]
-        [switch] $showDebug
-    ) # PARAM BLOCK END ;
-
-    if($Certificate = Get-Item Cert:\CurrentUser\My\$Certificate){ 
-        ( $certificate| fl Subject,DnsNameList,FriendlyName,Not*,Thumbprint | out-string).trim() | write-verbose -Verbose:$verbose ;
-        $Scope = "https://graph.microsoft.com/.default" ;
-        $CertificateBase64Hash = [System.Convert]::ToBase64String($Certificate.GetCertHash()) ;
-        # Create JWT timestamp for expiration
-        $StartDate = (Get-Date "1970-01-01T00:00:00Z" ).ToUniversalTime() ;
-        $JWTExpirationTimeSpan = (New-TimeSpan -Start $StartDate -End (Get-Date).ToUniversalTime().AddMinutes(2)).TotalSeconds
-        $JWTExpiration = [math]::Round($JWTExpirationTimeSpan,0) ;
-        # Create JWT validity start timestamp
-        $NotBeforeExpirationTimeSpan = (New-TimeSpan -Start $StartDate -End ((Get-Date).ToUniversalTime())).TotalSeconds
-        $NotBefore = [math]::Round($NotBeforeExpirationTimeSpan,0) ;
-        # Create JWT header
-        $JWTHeader = @{
-            alg = "RS256" ;
-            typ = "JWT" ;
-            # Use the CertificateBase64Hash and replace/strip to match web encoding of base64
-            x5t = $CertificateBase64Hash -replace '\+','-' -replace '/','_' -replace '=' ;
-        } ;
-        # Create JWT payload
-        $JWTPayLoad = @{
-            # What endpoint is allowed to use this JWT
-            aud = "https://login.microsoftonline.com/$TenantName/oauth2/token" ;
-            # Expiration timestamp
-            exp = $JWTExpiration ;
-            # Issuer = your application
-            iss = $AppId ;
-            # JWT ID: random guid
-            jti = [guid]::NewGuid() ;
-            # Not to be used before
-            nbf = $NotBefore ;
-            # JWT Subject
-            sub = $AppId ;
-        } ;
-        # Convert header and payload to base64
-        $JWTHeaderToByte = [System.Text.Encoding]::UTF8.GetBytes(($JWTHeader | ConvertTo-Json)) ;
-        $EncodedHeader = [System.Convert]::ToBase64String($JWTHeaderToByte) ;
-        $JWTPayLoadToByte =  [System.Text.Encoding]::UTF8.GetBytes(($JWTPayload | ConvertTo-Json)) ;
-        $EncodedPayload = [System.Convert]::ToBase64String($JWTPayLoadToByte) ;
-        # Join header and Payload with "." to create a valid (unsigned) JWT
-        $JWT = $EncodedHeader + "." + $EncodedPayload ;
-        # Get the private key object of your certificate
-        $PrivateKey = $Certificate.PrivateKey
-        # Define RSA signature and hashing algorithm
-        $RSAPadding = [Security.Cryptography.RSASignaturePadding]::Pkcs1 ;
-        $HashAlgorithm = [Security.Cryptography.HashAlgorithmName]::SHA256 ; 
-        # Create a signature of the JWT
-        $Signature = [Convert]::ToBase64String(
-            $PrivateKey.SignData([System.Text.Encoding]::UTF8.GetBytes($JWT),$HashAlgorithm,$RSAPadding) 
-        ) -replace '\+','-' -replace '/','_' -replace '=' ;
-        # Join the signature to the JWT with "."
-        $JWT = $JWT + "." + $Signature ;
-        # Create a hash with body parameters
-        $Body = @{
-            client_id = $AppId ;
-            client_assertion = $JWT ;
-            client_assertion_type = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" ;
-            scope = $Scope ;
-            grant_type = "client_credentials" ;
-        } ;
-        $Url = "https://login.microsoftonline.com/$TenantName/oauth2/v2.0/token" ;
-        # Use the self-generated JWT as Authorization
-        $Header = @{
-            Authorization = "Bearer $JWT" ;
-        } ;
-        # Splat the parameters for Invoke-Restmethod for cleaner code
-        $PostSplat = @{
-            ContentType = 'application/x-www-form-urlencoded' ;
-            Method = 'POST' ;
-            Body = $Body ;
-            Uri = $Url ;
-            Headers = $Header ;
-        } ;
-        write-verbose -Verbose:$verbose "$((get-date).ToString('HH:mm:ss')):Invoke-RestMethod w`n$(($PostSplat|out-string).trim())" ; 
-        $token = Invoke-RestMethod @PostSplat ; 
-
-    } else { 
-        write-warning "Unable to:Get-Item Cert:\CurrentUser\My\$($Certificate)"
-        Stop
-    } ; 
-
-    write-verbose "`$token:`n$(($token|out-string).trim())" ;
-    if ($token -eq $null) {
-        Write-Output "ERROR: Failed to get an Access Token" ;
-        exit
-    }
-    else { $token | write-output }
-    
-}
-
-#*------^ get-AADCertToken.ps1 ^------
-
-#*------v get-AADLastSync.ps1 v------
+#*------v Function get-AADLastSync v------
 Function get-AADLastSync {
   <#
     .SYNOPSIS
@@ -931,63 +665,8 @@ Function get-AADLastSync {
 # 11:19 AM 10/18/2018 add msol alias
 if(!(get-alias get-MsolLastSync -ea 0) ) {Set-Alias 'get-MsolLastSync' -Value 'get-AADLastSync' ; }
 
-#*------^ get-AADLastSync.ps1 ^------
 
-#*------v get-AADTokenHeaders.ps1 v------
-Function get-AADTokenHeaders {
-    <#
-    .SYNOPSIS
-    get-AADTokenHeaders - Construct headers for an Azure access token
-    .NOTES
-    Version     : 1.0.0
-    Author      : Alex Asplund
-    Website     :	https://automativity.com
-    Twitter     :	@AlexAsplund
-    CreatedDate : 2019-08-12
-    FileName    : 
-    License     :
-    Copyright   : 
-    Github      : 
-    Tags        : Powershell,AzureAD,Authentication,GraphAPI,Microsoft
-    AddedCredit : 
-    AddedWebsite:	
-    AddedTwitter:	
-    REVISIONS
-    * 2019-08-12 posted version 
-    .DESCRIPTION
-    get-AADTokenHeaders - Construct Azure access token headers
-    Uses code Alex Asplund demo'd at link below, wrapped into a func
-    .PARAMETER  token
-    Token[-Token (token obj)]
-    .PARAMETER ShowDebug
-    Parameter to display Debugging messages [-ShowDebug switch]
-    .INPUTS
-    None. Does not accepted piped input.
-    .OUTPUTS
-    Returns a header hashtable
-    .EXAMPLE
-    $AADTokenHeaders = get-AADTokenHeaders -token $token -Verbose:($VerbosePreference -eq 'Continue')
-    .LINK
-    https://adamtheautomator.com/microsoft-graph-api-powershell/
-    #>
-    [CmdletBinding()]
-    PARAM(
-        [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Token[-Token (token obj)]")]
-        [ValidateNotNullOrEmpty()]$token,
-        [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
-        [switch] $showDebug
-    ) ;
-    write-verbose "$((get-date).ToString('HH:mm:ss')):Provided token:`n$(($token|out-string).trim())" ; 
-    $Header = @{
-        Authorization = "$($token.token_type) $($token.access_token)"
-    }
-    write-verbose "$((get-date).ToString('HH:mm:ss')):Generated `$Header:`n$(($Header|out-string).trim())" ; 
-    $Header | write-output ; 
-}
-
-#*------^ get-AADTokenHeaders.ps1 ^------
-
-#*------v get-MsolUserLastSync.ps1 v------
+#*------v Function get-MsolUserLastSync v------
 Function get-MsolUserLastSync {
     <#
     .SYNOPSIS
@@ -1026,11 +705,9 @@ Function get-MsolUserLastSync {
         TimeGMT   = $LastDirSyncTime  ;
         TimeLocal = $LastDirSyncTime.ToLocalTime() ;
     } | write-output ;
-}
+} ; #*------^ get-MsolUserLastSync.ps1 ^------
 
-#*------^ get-MsolUserLastSync.ps1 ^------
-
-#*------v get-MsolUserLicenseDetails.ps1 v------
+#*------v Function get-MsolUserLicenseDetails v------
 Function get-MsolUserLicenseDetails {
     <#
     .SYNOPSIS
@@ -1311,17 +988,15 @@ Function get-MsolUserLicenseDetails {
     } # loop-E
 
     $AggregLics | write-output ; # 11:33 AM 1/9/2019 export the aggreg, NewObject02 was never more than a single lic
-}
+} ; #*------^ END Function get-MsolUserLicenseDetails.ps1 ^------
 
-#*------^ get-MsolUserLicenseDetails.ps1 ^------
-
-#*------v Wait-AADSync.ps1 v------
+#*------v Function Wait-AADSync.ps1 v------
 Function Wait-AADSync {
     <#
     .SYNOPSIS
     Wait-AADSync - Dawdle loop for notifying on next AzureAD sync (AzureAD/MSOL)
     .NOTES
-    Version     : 1.0.0
+    Version     : 1.0.3
     Author      : Todd Kadrie
     Website     :	http://www.toddomation.com
     Twitter     :	@tostka / http://twitter.com/tostka
@@ -1363,13 +1038,11 @@ Function Wait-AADSync {
 } ; #*------^ END Function Wait-AADSync ^------
 if(!(get-alias Wait-MSolSync -ea 0 )) {Set-Alias -Name 'wait-MSolSync' -Value 'Wait-AADSync' ; }
 
-#*------^ Wait-AADSync.ps1 ^------
-
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUTb1ZREXp6aS4im3FeSlMHuqU
-# Dk+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjhFh1nrLpTGtjESucN+VNscV
+# ixygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1384,9 +1057,9 @@ if(!(get-alias Wait-MSolSync -ea 0 )) {Set-Alias -Name 'wait-MSolSync' -Value 'W
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSdWm+L
-# LKxytBwdDEz65IztWra+JjANBgkqhkiG9w0BAQEFAASBgLIDtECtOz+WjbPcoH2u
-# OD6Hyc0G0qOJg8kDTX4SBJubr1ltPKuJdaxi6XixsNMpOfP63PsDqvw+rmFa9+A4
-# M8r8NKRatDCL/Jl1lgVNJ6q6Aac0L71vw5mSo9lWjwYskATAlguzJ/Yi+k4MUlNP
-# N8RxJKKoJXjyYeeuCw5B1dRy
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRzA+nD
+# vRoZ5I+8u4gAf4Co0U4kDjANBgkqhkiG9w0BAQEFAASBgGqDrw0tP2mGCpsev8wz
+# GZTh/Rcikcee88R7jDD1ZG5mNfHteupbEzXUfKzsqn/0FFvQV2katdZHp2ZQkLVI
+# Jjd4qUJGygXxcjOC4dNcHQAMhcAEE/Mth1TN6OUF72BRi8OeqHSpL0nKmjlTeVfd
+# Ur2kAVhbD3HcEB6FkkcPlmEd
 # SIG # End signature block
