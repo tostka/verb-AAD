@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.9
+Version     : 1.0.8
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -36,7 +36,9 @@ https://github.com/tostka/verb-AAD
 $script:ModuleRoot = $PSScriptRoot ;
 $script:ModuleVersion = (Import-PowerShellDataFile -Path (get-childitem $script:moduleroot\*.psd1).fullname).moduleversion ;
 
-#*======v FUNCTIONS v======
+
+# Auto-export all Aliases
+Export-ModuleMember -Alias * ;
 
 
 
@@ -215,21 +217,6 @@ function caadtol {Connect-AAD -cred $credO365TOLSID}
 function caadTOR {Connect-AAD -cred $credO365TORSID}
 
 #*------^ caadTOR.ps1 ^------
-
-#*------v cmsolCMW.ps1 v------
-function cmsolcmw {Connect-MSOL -cred $credO365CMWCSID}
-
-#*------^ cmsolCMW.ps1 ^------
-
-#*------v cmsolTOL.ps1 v------
-function cmsolTOL {Connect-MSOL -cred $credO365TOLSID}
-
-#*------^ cmsolTOL.ps1 ^------
-
-#*------v cmsolTOR.ps1 v------
-function cmsolTOR {Connect-MSOL -cred $credO365CMWCSID}
-
-#*------^ cmsolTOR.ps1 ^------
 
 #*------v Connect-AAD.ps1 v------
 Function Connect-AAD {
@@ -1387,16 +1374,11 @@ if(!(get-alias Wait-MSolSync -ea 0 )) {Set-Alias -Name 'wait-MSolSync' -Value 'W
 
 #*------^ Wait-AADSync.ps1 ^------
 
-#*======^ END FUNCTIONS ^======
-
-Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,cmsolcmw,cmsolTOL,cmsolTOR,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-PssBroken,get-AADCertToken,get-AADLastSync,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Wait-AADSync -Alias *
-
-
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUo8Kb9n4EvIcfqUvLSxErWheQ
-# 95KgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUgC7EF1DEGpJSZvj2MBcPs4RR
+# G0ygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1411,9 +1393,9 @@ Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,cm
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRzBbBK
-# jMwIaFFMj0bI+C66/gp+bDANBgkqhkiG9w0BAQEFAASBgKiQw6Ke5uCy22f91kkQ
-# BkpOWSod0o+SIehNSc6FMr6RcWPg3wN/CwFqf8gII2Fov6Wj16UeNVMy+CYBBJVx
-# Z+q2s765xK3vOb0x0LaSCuA+ZDZ41vc2ykO1pSOOzqvrmGagZg2EbSClLpQdvN2k
-# JiL9Yjjo6tHvwxIHhKHIjcx0
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSAVuAs
+# X130OfznbFap01y6vT2ADTANBgkqhkiG9w0BAQEFAASBgHsIsFnmtwfM68rWRXGk
+# VRUKjDcBkRU3maF03kp/CN1kv9SCtaVS7iGm88AqODsWrNsZZAcdtDy1p9NCHmWb
+# Kb0rWPfaaxGW6x+qfr3VynaNdonBLUnMor8bXfWsRIpFPxQ+PdgKKY4xPi5xGY7/
+# nEgAXrRqW5CA1Tq575RAJwpG
 # SIG # End signature block
