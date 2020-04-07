@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.10
+Version     : 1.0.11
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -634,36 +634,6 @@ if(!(get-alias rmsol -ea 0) ) {Set-Alias 'rmsol' -Value 'Connect-MSOL' ; } ;
 if(!(get-alias reConnect-MSOL -ea 0) ) {Set-Alias 'reConnect-MSOL' -Value 'Connect-MSOL' ; }
 
 #*------^ Connect-MSOL.ps1 ^------
-
-#*------v Disconnect-PssBroken.ps1 v------
-if (!(test-path function:\Disconnect-PssBroken)) {
-    Function Disconnect-PssBroken {
-        <#
-        .SYNOPSIS
-        Disconnect-PssBroken - Remove all local broken PSSessions
-        .NOTES
-        Author: Todd Kadrie
-        Website:	http://tinstoys.blogspot.com
-        Twitter:	http://twitter.com/tostka
-        REVISIONS   :
-        * 8:46 PM 1/12/2020 typo fix misisng trailing bracket, also expanded aliases
-        * 12:56 PM 11/7/2f018 fix typo $s.state.value, switched tests to the strings, over values (not sure worked at all)
-        * 1:50 PM 12/8/2016 initial version
-        .DESCRIPTION
-        Disconnect-PssBroken - Remove all local broken PSSessions
-        .INPUTS
-        None. Does not accepted piped input.
-        .OUTPUTS
-        None. Returns no objects or output.
-        .EXAMPLE
-        Disconnect-PssBroken ;
-        .LINK
-        #>
-        Get-PsSession | Where-Object { $_.State -ne 'Opened' -or $_.Availability -ne 'Available' } | Remove-PSSession -Verbose ;
-    } ; 
-}
-
-#*------^ Disconnect-PssBroken.ps1 ^------
 
 #*------v get-AADCertToken.ps1 v------
 function get-AADCertToken {
@@ -1389,14 +1359,14 @@ if(!(get-alias Wait-MSolSync -ea 0 )) {Set-Alias -Name 'wait-MSolSync' -Value 'W
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,cmsolcmw,cmsolTOL,cmsolTOR,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-PssBroken,get-AADCertToken,get-AADLastSync,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Wait-AADSync -Alias *
+Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,cmsolcmw,cmsolTOL,cmsolTOR,Connect-AAD,connect-AzureRM,Connect-MSOL,get-AADCertToken,get-AADLastSync,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Wait-AADSync -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUdd3id8+fNmz6MEs4n/mXzRrc
-# IJigggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUR6UX4VN/PTOEC7tIZWgAIasa
+# MsegggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1411,9 +1381,9 @@ Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,cm
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSXE4y4
-# g/+wOT2V7Na2jvRvk0pfmTANBgkqhkiG9w0BAQEFAASBgFs8oXLZxO61DOfpfhto
-# Y1svqZkKKhyEr5REzvwEuEoh3IisGWSq2tk88t+JexPRsHck1iaWk3NdhfdWeF2U
-# IzFJSlxRbEpOZwkTbjzSyoj08OWm9oOPYGHxCOw4wGROeGynWlQq7wQ77n0onuPn
-# AO679MODNvlIyfG9rY71cjN5
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSQfkU+
+# ydIZV7FLY1T5WPi5wcNnvDANBgkqhkiG9w0BAQEFAASBgG0xVO+zrLrf4/AuknPs
+# rpmPPO6NZFzi3vLrkcmV+bPZsDMB9eXPjzRD1qbPll/+OlAjYEEQfRd5K56KguXM
+# r2yJt+cidZd5Kf7HavRwWYEMthNrrDkv0Rq6SerOFKMN2LPo10A38KjzDp8qX1bw
+# NXDA9GFjMcbGqM1X5lBm7fdZ
 # SIG # End signature block
