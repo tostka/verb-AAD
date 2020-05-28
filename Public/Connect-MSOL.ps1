@@ -1,50 +1,61 @@
 #*------v Function Connect-MSOL v------
-    Function Connect-MSOL {
-        <#
-        .SYNOPSIS
-        Connect-MSOL - Establish authenticated session to AzureAD MSOL Module, also works as reConnect-MSOL, there is no disConnect-MSOL (have to close Powershell to clear it).
-        .NOTES
-        Updated By: : Todd Kadrie
-        Website:	http://tinstoys.blogspot.com
-        Twitter:	http://twitter.com/tostka
-        REVISIONS   :
-        * 6:11 PM 2/26/2020 moved aliases below
-        * 2:08 PM 2/26/2020 converted to adv func
-        * 8:50 PM 1/12/2020 expanded aliases
-        * 10:55 AM 12/6/2019 Connect-MSOL:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
-        * 1:07 PM 11/25/2019 added *tol/*tor/*cmw alias variants for connect & reconnect
-        * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
-        * 1:32 PM 5/8/2019 switched text into pipe with explicit Write-Verbose's
-        * 2:51 PM 5/2/2019 ren'd Connect-AAD -> Connect-MSOL ; repurp'ing connect-aad for aad2 module
-        * 12:06 PM 12/7/2018 added Alias 'connect-msol' -> 'Connect-AAD'
-        * 7:38 AM 10/5/2018 out-null the pretesting Get-MsolAccountSku into a vari (was dumping into console)
-        * 9:38 AM 9/10/2018 Connect-AAD: now it's working (?.?)7 weird. Also aliased reconnect-aad -> connect-AAD()- it's the same, but easier to just cover the gap.
-        * 12:27 PM 11/3/2017 nope, not working, can't authenticate yet.
-        * 12:19 PM 11/3/2017 this wasn't really written, sketched it in to see how it works
-        .DESCRIPTION
-        Connect-MSOL - Establish authenticated session to AzureAD/MSOL, also works as reconnect-AAD, there is no disConnect-MSOL (have to close Powershell to clear it).
-        No need for separate reConnect-MSOL - this self tests for connection, and reconnects if it's missing.
-        No support for disConnect-MSOL, because MSOL has no command to do it, but closing powershell.
-        .PARAMETER  ProxyEnabled
-        Proxyied connection support
-        .PARAMETER CommandPrefix
-        Prefix to be appended to commands (not implemented with MSOL/AAD)
-        .PARAMETER Credential
-        Credential to be used for connection
-        .INPUTS
-        None. Does not accepted piped input.
-        .OUTPUTS
-        None. Returns no objects or output.
-        .EXAMPLE
-        Connect-MSOL
-        .LINK
-        #>
-        [CmdletBinding()]
-        Param(
-            [Parameter()][boolean]$ProxyEnabled = $False,
-            [Parameter()][string]$CommandPrefix,
-            [Parameter()]$Credential = $global:credo365TORSID
-        ) ;
+Function Connect-MSOL {
+    <#    
+    .SYNOPSIS
+    Connect-MSOL - Establish authenticated session to AzureAD MSOL Module, also works as reConnect-MSOL, there is no disConnect-MSOL (have to close Powershell to clear it).
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-
+    FileName    : 
+    License     : MIT License
+    Copyright   : (c) 2020 Todd Kadrie
+    Github      : https://github.com/tostka
+    Tags        : Powershell
+    AddedCredit : REFERENCE
+    AddedWebsite:	URL
+    AddedTwitter:	URL
+    REVISIONS
+    * 6:11 PM 2/26/2020 moved aliases below
+    * 2:08 PM 2/26/2020 converted to adv func
+    * 8:50 PM 1/12/2020 expanded aliases
+    * 10:55 AM 12/6/2019 Connect-MSOL:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
+    * 1:07 PM 11/25/2019 added *tol/*tor/*cmw alias variants for connect & reconnect
+    * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
+    * 1:32 PM 5/8/2019 switched text into pipe with explicit Write-Verbose's
+    * 2:51 PM 5/2/2019 ren'd Connect-AAD -> Connect-MSOL ; repurp'ing connect-aad for aad2 module
+    * 12:06 PM 12/7/2018 added Alias 'connect-msol' -> 'Connect-AAD'
+    * 7:38 AM 10/5/2018 out-null the pretesting Get-MsolAccountSku into a vari (was dumping into console)
+    * 9:38 AM 9/10/2018 Connect-AAD: now it's working (?.?)7 weird. Also aliased reconnect-aad -> connect-AAD()- it's the same, but easier to just cover the gap.
+    * 12:27 PM 11/3/2017 nope, not working, can't authenticate yet.
+    * 12:19 PM 11/3/2017 this wasn't really written, sketched it in to see how it works
+    .DESCRIPTION
+    Connect-MSOL - Establish authenticated session to AzureAD/MSOL, also works as reconnect-AAD, there is no disConnect-MSOL (have to close Powershell to clear it).
+    No need for separate reConnect-MSOL - this self tests for connection, and reconnects if it's missing.
+    No support for disConnect-MSOL, because MSOL has no command to do it, but closing powershell.
+    .PARAMETER  ProxyEnabled
+    Proxyied connection support
+    .PARAMETER CommandPrefix
+    Prefix to be appended to commands (not implemented with MSOL/AAD)
+    .PARAMETER Credential
+    Credential to be used for connection
+    .INPUTS
+    None. Does not accepted piped input.
+    .OUTPUTS
+    None. Returns no objects or output.
+    .EXAMPLE
+    Connect-MSOL
+    .LINK
+    #>
+    [CmdletBinding()]
+    [Alias('cmsol','rmsol','Reconnect-MSOL')]
+    Param(
+        [Parameter()][boolean]$ProxyEnabled = $False,
+        [Parameter()][string]$CommandPrefix,
+        [Parameter()]$Credential = $global:credo365TORSID
+    ) ;
     BEGIN { $verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
         $MFA = get-TenantMFARequirement -Credential $Credential ;
@@ -145,6 +156,4 @@
     } ;
     END {} ;
 } ; #*------^ END Function Connect-MSOL ^------
-if(!(get-alias cmsol -ea 0) ) {Set-Alias 'cmsol' -Value 'Connect-MSOL' ; } ;
-if(!(get-alias rmsol -ea 0) ) {Set-Alias 'rmsol' -Value 'Connect-MSOL' ; } ;
-if(!(get-alias reConnect-MSOL -ea 0) ) {Set-Alias 'reConnect-MSOL' -Value 'Connect-MSOL' ; } ;
+

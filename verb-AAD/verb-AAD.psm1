@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.11
+Version     : 1.0.12
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -237,10 +237,21 @@ Function Connect-AAD {
     .SYNOPSIS
     Connect-AAD - Establish authenticated session to AzureAD Graph Module (AzureAD), also works as reConnect-AAD, there is no disConnect-AAD (have to close Powershell to clear it).
     .NOTES
-    Updated By: : Todd Kadrie
-    Website:	http://tinstoys.blogspot.com
-    Twitter:	http://twitter.com/tostka
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-05-27
+    FileName    : Connect-AAD.ps1
+    License     : MIT License
+    Copyright   : (c) 2020 Todd Kadrie
+    Github      : https://github.com/tostka
+    Tags        : Powershell
+    AddedCredit : REFERENCE
+    AddedWebsite:	URL
+    AddedTwitter:	URL
     REVISIONS   :
+    * 12:11 PM 5/27/2020 updated CBH, moved aliases:'caad','raad','reconnect-AAD' win the func
     * 10:55 AM 12/6/2019 Connect-AAD:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
     * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
     * 1:39 PM 5/8/2019 Connect-AAD:tightened up the installed/imported/authenticated checks
@@ -265,6 +276,7 @@ Function Connect-AAD {
     .LINK
     #>
     [CmdletBinding()] 
+    [Alias('caad','raad','reconnect-AAD')]
     Param(
         [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()]$Credential = $global:credo365TORSID
@@ -341,10 +353,7 @@ Function Connect-AAD {
         } ;
     } ; 
     END {} ;
-} ; #*------^ END Function Connect-AAD ^------
-if(!(get-alias caad -ea 0) ) {Set-Alias 'caad' -Value 'Connect-AAD' ; } ;
-if(!(get-alias raad -ea 0) ) {Set-Alias 'raad' -Value 'Connect-AAD' ; } ;
-if(!(get-alias reConnect-AAD -ea 0) ) {Set-Alias 'reConnect-AAD' -Value 'Connect-AAD' ; }
+}
 
 #*------^ Connect-AAD.ps1 ^------
 
@@ -484,51 +493,62 @@ function connect-AzureRM {
 
 #*------v Connect-MSOL.ps1 v------
 Function Connect-MSOL {
-        <#
-        .SYNOPSIS
-        Connect-MSOL - Establish authenticated session to AzureAD MSOL Module, also works as reConnect-MSOL, there is no disConnect-MSOL (have to close Powershell to clear it).
-        .NOTES
-        Updated By: : Todd Kadrie
-        Website:	http://tinstoys.blogspot.com
-        Twitter:	http://twitter.com/tostka
-        REVISIONS   :
-        * 6:11 PM 2/26/2020 moved aliases below
-        * 2:08 PM 2/26/2020 converted to adv func
-        * 8:50 PM 1/12/2020 expanded aliases
-        * 10:55 AM 12/6/2019 Connect-MSOL:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
-        * 1:07 PM 11/25/2019 added *tol/*tor/*cmw alias variants for connect & reconnect
-        * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
-        * 1:32 PM 5/8/2019 switched text into pipe with explicit Write-Verbose's
-        * 2:51 PM 5/2/2019 ren'd Connect-AAD -> Connect-MSOL ; repurp'ing connect-aad for aad2 module
-        * 12:06 PM 12/7/2018 added Alias 'connect-msol' -> 'Connect-AAD'
-        * 7:38 AM 10/5/2018 out-null the pretesting Get-MsolAccountSku into a vari (was dumping into console)
-        * 9:38 AM 9/10/2018 Connect-AAD: now it's working (?.?)7 weird. Also aliased reconnect-aad -> connect-AAD()- it's the same, but easier to just cover the gap.
-        * 12:27 PM 11/3/2017 nope, not working, can't authenticate yet.
-        * 12:19 PM 11/3/2017 this wasn't really written, sketched it in to see how it works
-        .DESCRIPTION
-        Connect-MSOL - Establish authenticated session to AzureAD/MSOL, also works as reconnect-AAD, there is no disConnect-MSOL (have to close Powershell to clear it).
-        No need for separate reConnect-MSOL - this self tests for connection, and reconnects if it's missing.
-        No support for disConnect-MSOL, because MSOL has no command to do it, but closing powershell.
-        .PARAMETER  ProxyEnabled
-        Proxyied connection support
-        .PARAMETER CommandPrefix
-        Prefix to be appended to commands (not implemented with MSOL/AAD)
-        .PARAMETER Credential
-        Credential to be used for connection
-        .INPUTS
-        None. Does not accepted piped input.
-        .OUTPUTS
-        None. Returns no objects or output.
-        .EXAMPLE
-        Connect-MSOL
-        .LINK
-        #>
-        [CmdletBinding()]
-        Param(
-            [Parameter()][boolean]$ProxyEnabled = $False,
-            [Parameter()][string]$CommandPrefix,
-            [Parameter()]$Credential = $global:credo365TORSID
-        ) ;
+    <#    
+    .SYNOPSIS
+    Connect-MSOL - Establish authenticated session to AzureAD MSOL Module, also works as reConnect-MSOL, there is no disConnect-MSOL (have to close Powershell to clear it).
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-
+    FileName    : 
+    License     : MIT License
+    Copyright   : (c) 2020 Todd Kadrie
+    Github      : https://github.com/tostka
+    Tags        : Powershell
+    AddedCredit : REFERENCE
+    AddedWebsite:	URL
+    AddedTwitter:	URL
+    REVISIONS
+    * 6:11 PM 2/26/2020 moved aliases below
+    * 2:08 PM 2/26/2020 converted to adv func
+    * 8:50 PM 1/12/2020 expanded aliases
+    * 10:55 AM 12/6/2019 Connect-MSOL:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
+    * 1:07 PM 11/25/2019 added *tol/*tor/*cmw alias variants for connect & reconnect
+    * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
+    * 1:32 PM 5/8/2019 switched text into pipe with explicit Write-Verbose's
+    * 2:51 PM 5/2/2019 ren'd Connect-AAD -> Connect-MSOL ; repurp'ing connect-aad for aad2 module
+    * 12:06 PM 12/7/2018 added Alias 'connect-msol' -> 'Connect-AAD'
+    * 7:38 AM 10/5/2018 out-null the pretesting Get-MsolAccountSku into a vari (was dumping into console)
+    * 9:38 AM 9/10/2018 Connect-AAD: now it's working (?.?)7 weird. Also aliased reconnect-aad -> connect-AAD()- it's the same, but easier to just cover the gap.
+    * 12:27 PM 11/3/2017 nope, not working, can't authenticate yet.
+    * 12:19 PM 11/3/2017 this wasn't really written, sketched it in to see how it works
+    .DESCRIPTION
+    Connect-MSOL - Establish authenticated session to AzureAD/MSOL, also works as reconnect-AAD, there is no disConnect-MSOL (have to close Powershell to clear it).
+    No need for separate reConnect-MSOL - this self tests for connection, and reconnects if it's missing.
+    No support for disConnect-MSOL, because MSOL has no command to do it, but closing powershell.
+    .PARAMETER  ProxyEnabled
+    Proxyied connection support
+    .PARAMETER CommandPrefix
+    Prefix to be appended to commands (not implemented with MSOL/AAD)
+    .PARAMETER Credential
+    Credential to be used for connection
+    .INPUTS
+    None. Does not accepted piped input.
+    .OUTPUTS
+    None. Returns no objects or output.
+    .EXAMPLE
+    Connect-MSOL
+    .LINK
+    #>
+    [CmdletBinding()]
+    [Alias('cmsol','rmsol','Reconnect-MSOL')]
+    Param(
+        [Parameter()][boolean]$ProxyEnabled = $False,
+        [Parameter()][string]$CommandPrefix,
+        [Parameter()]$Credential = $global:credo365TORSID
+    ) ;
     BEGIN { $verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
         $MFA = get-TenantMFARequirement -Credential $Credential ;
@@ -628,10 +648,7 @@ Function Connect-MSOL {
         
     } ;
     END {} ;
-} ; #*------^ END Function Connect-MSOL ^------
-if(!(get-alias cmsol -ea 0) ) {Set-Alias 'cmsol' -Value 'Connect-MSOL' ; } ;
-if(!(get-alias rmsol -ea 0) ) {Set-Alias 'rmsol' -Value 'Connect-MSOL' ; } ;
-if(!(get-alias reConnect-MSOL -ea 0) ) {Set-Alias 'reConnect-MSOL' -Value 'Connect-MSOL' ; }
+}
 
 #*------^ Connect-MSOL.ps1 ^------
 
@@ -892,6 +909,7 @@ Function get-AADLastSync {
     Website     :	https://www.toddomation.com
     Twitter     :	@tostka
     REVISIONS   :
+    * 1:03 PM 5/27/2020 moved alias: get-MsolLastSync win func
     * 9:51 AM 2/25/2020 condenced output
     * 8:50 PM 1/12/2020 expanded aliases
     * 9:17 AM 10/9/2018 get-AADLastSync:simplified the collection, and built a Cobj returned in GMT & local timezone
@@ -908,17 +926,19 @@ Function get-AADLastSync {
     get-AADLastSync
     .LINK
     #>
-  Param([Parameter()]$Credential = $global:credo365TORSID) ;
-  try { Get-MsolAccountSku -ErrorAction Stop | out-null }
-  catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
-    "Not connected to MSOnline. Now connecting." ;
-    Connect-MsolService ;
-  } ;
-  $LastDirSyncTime = (Get-MsolCompanyInformation).LastDirSyncTime ;
-  New-Object PSObject -Property @{
-    TimeGMT   = $LastDirSyncTime  ;
-    TimeLocal = $LastDirSyncTime.ToLocalTime() ;
-  } | write-output ;
+    [CmdletBinding()]
+    [Alias('get-MsolLastSync')]
+    Param([Parameter()]$Credential = $global:credo365TORSID) ;
+    try { Get-MsolAccountSku -ErrorAction Stop | out-null }
+    catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
+      "Not connected to MSOnline. Now connecting." ;
+      Connect-MsolService ;
+    } ;
+    $LastDirSyncTime = (Get-MsolCompanyInformation).LastDirSyncTime ;
+    New-Object PSObject -Property @{
+      TimeGMT   = $LastDirSyncTime  ;
+      TimeLocal = $LastDirSyncTime.ToLocalTime() ;
+    } | write-output ;
 } ; #*------^ END Function get-AADLastSync ^------
 # 11:19 AM 10/18/2018 add msol alias
 if(!(get-alias get-MsolLastSync -ea 0) ) {Set-Alias 'get-MsolLastSync' -Value 'get-AADLastSync' ; }
@@ -1325,6 +1345,7 @@ Function Wait-AADSync {
     Tags        : Powershell
     Updated By: : Todd Kadrie
     REVISIONS   :
+    * 12:14 PM 5/27/2020 moved alias:wait-msolsync win the func
     * 10:27 AM 2/25/2020 bumped polling interval to 30s
     * 8:50 PM 1/12/2020 expanded aliases
     * 11:38 AM 5/6/2019 moved from tsksid-incl-ServerApp.ps1
@@ -1341,6 +1362,8 @@ Function Wait-AADSync {
     Wait-AADSync
     .LINK
     #>
+    [CmdletBinding()]
+    [Alias('Wait-MSolSync')]
     Param([Parameter()]$Credential = $global:credo365TORSID) ;
     try { Get-MsolAccountSku -ErrorAction Stop | out-null }
     catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
@@ -1352,8 +1375,7 @@ Function Wait-AADSync {
     Do { Connect-AAD  ; write-host "." -NoNewLine ; Start-Sleep -m (1000 * 30) ; Connect-MSOL } Until ((Get-MsolCompanyInformation).LastDirSyncTime -ne $DirSyncLast) ;
     write-host -foregroundcolor yellow "]`n$((get-date).ToString('HH:mm:ss')):AD->AAD REPLICATED!" ;
     write-host "`a" ; write-host "`a" ; write-host "`a" ;
-} ; #*------^ END Function Wait-AADSync ^------
-if(!(get-alias Wait-MSolSync -ea 0 )) {Set-Alias -Name 'wait-MSolSync' -Value 'Wait-AADSync' ; }
+}
 
 #*------^ Wait-AADSync.ps1 ^------
 
@@ -1365,8 +1387,8 @@ Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,cm
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUR6UX4VN/PTOEC7tIZWgAIasa
-# MsegggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUbLCFcbFP1ftHD03td/Ns0Wa5
+# quagggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1381,9 +1403,9 @@ Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,cm
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSQfkU+
-# ydIZV7FLY1T5WPi5wcNnvDANBgkqhkiG9w0BAQEFAASBgG0xVO+zrLrf4/AuknPs
-# rpmPPO6NZFzi3vLrkcmV+bPZsDMB9eXPjzRD1qbPll/+OlAjYEEQfRd5K56KguXM
-# r2yJt+cidZd5Kf7HavRwWYEMthNrrDkv0Rq6SerOFKMN2LPo10A38KjzDp8qX1bw
-# NXDA9GFjMcbGqM1X5lBm7fdZ
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRx6V7t
+# 1JrvCoJbsTfbQJW5MIIAxjANBgkqhkiG9w0BAQEFAASBgJlucLdm/tI+9c7K4ZsU
+# cvNNcEc6MFrAf+Qo1v82kiYnsnV7i/KsSzrG5rBgzh/2RGnhe1U8Tw0S1kAEBWL6
+# SK0ljA62pS0enwKxE9uTKjFp7z101MPD0d3BEtd+R+vwSOTPxk+81YwLqjvVCT3i
+# 1/Ejfuftgea10VrAEXq+UFKG
 # SIG # End signature block

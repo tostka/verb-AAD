@@ -16,6 +16,7 @@ Function Wait-AADSync {
     Tags        : Powershell
     Updated By: : Todd Kadrie
     REVISIONS   :
+    * 12:14 PM 5/27/2020 moved alias:wait-msolsync win the func
     * 10:27 AM 2/25/2020 bumped polling interval to 30s
     * 8:50 PM 1/12/2020 expanded aliases
     * 11:38 AM 5/6/2019 moved from tsksid-incl-ServerApp.ps1
@@ -32,6 +33,8 @@ Function Wait-AADSync {
     Wait-AADSync
     .LINK
     #>
+    [CmdletBinding()]
+    [Alias('Wait-MSolSync')]
     Param([Parameter()]$Credential = $global:credo365TORSID) ;
     try { Get-MsolAccountSku -ErrorAction Stop | out-null }
     catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
@@ -44,4 +47,4 @@ Function Wait-AADSync {
     write-host -foregroundcolor yellow "]`n$((get-date).ToString('HH:mm:ss')):AD->AAD REPLICATED!" ;
     write-host "`a" ; write-host "`a" ; write-host "`a" ;
 } ; #*------^ END Function Wait-AADSync ^------
-if(!(get-alias Wait-MSolSync -ea 0 )) {Set-Alias -Name 'wait-MSolSync' -Value 'Wait-AADSync' ; } ; 
+

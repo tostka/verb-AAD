@@ -4,10 +4,21 @@ Function Connect-AAD {
     .SYNOPSIS
     Connect-AAD - Establish authenticated session to AzureAD Graph Module (AzureAD), also works as reConnect-AAD, there is no disConnect-AAD (have to close Powershell to clear it).
     .NOTES
-    Updated By: : Todd Kadrie
-    Website:	http://tinstoys.blogspot.com
-    Twitter:	http://twitter.com/tostka
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-05-27
+    FileName    : Connect-AAD.ps1
+    License     : MIT License
+    Copyright   : (c) 2020 Todd Kadrie
+    Github      : https://github.com/tostka
+    Tags        : Powershell
+    AddedCredit : REFERENCE
+    AddedWebsite:	URL
+    AddedTwitter:	URL
     REVISIONS   :
+    * 12:11 PM 5/27/2020 updated CBH, moved aliases:'caad','raad','reconnect-AAD' win the func
     * 10:55 AM 12/6/2019 Connect-AAD:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
     * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
     * 1:39 PM 5/8/2019 Connect-AAD:tightened up the installed/imported/authenticated checks
@@ -32,6 +43,7 @@ Function Connect-AAD {
     .LINK
     #>
     [CmdletBinding()] 
+    [Alias('caad','raad','reconnect-AAD')]
     Param(
         [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()]$Credential = $global:credo365TORSID
@@ -109,7 +121,3 @@ Function Connect-AAD {
     } ; 
     END {} ;
 } ; #*------^ END Function Connect-AAD ^------
-if(!(get-alias caad -ea 0) ) {Set-Alias 'caad' -Value 'Connect-AAD' ; } ;
-if(!(get-alias raad -ea 0) ) {Set-Alias 'raad' -Value 'Connect-AAD' ; } ;
-if(!(get-alias reConnect-AAD -ea 0) ) {Set-Alias 'reConnect-AAD' -Value 'Connect-AAD' ; } ;
-
