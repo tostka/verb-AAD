@@ -17,6 +17,7 @@ function connect-AzureRM {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    # 5:04 PM 7/21/2020 VEN support added
     # 9:19 AM 2/25/2020 updated to reflect my credential prefs
     # 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
     .DESCRIPTION
@@ -54,6 +55,7 @@ function connect-AzureRM {
             "$($TORMeta['o365_TenantDomain'])" { } 
             "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
             "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+            "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
             default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
         } ; 
     } else { 
@@ -62,6 +64,7 @@ function connect-AzureRM {
             "$($TORMeta['o365_OPDomain'])" { }
             "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
             "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+            "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
             default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
         } ; 
     } ; 

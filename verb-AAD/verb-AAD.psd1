@@ -12,7 +12,7 @@
 RootModule = 'verb-AAD.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.0.12'
+ModuleVersion = '1.0.14'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -69,7 +69,7 @@ Description = 'Azure AD-related generic functions'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('Build-AADSignErrorsHash','caadCMW','caadtol','caadTOR','cmsolcmw','cmsolTOL','cmsolTOR','Connect-AAD','connect-AzureRM','Connect-MSOL','get-AADCertToken','get-AADLastSync','get-AADTokenHeaders','get-MsolUserLastSync','get-MsolUserLicenseDetails','Wait-AADSync')
+FunctionsToExport = @('Build-AADSignErrorsHash','caadCMW','caadtol','caadTOR','caadVEN','cmsolcmw','cmsolTOL','cmsolTOR','cmsolVEN','Connect-AAD','connect-AzureRM','Connect-MSOL','get-AADCertToken','get-AADLastSync','get-AADTokenHeaders','get-MsolUserLastSync','get-MsolUserLicenseDetails','Wait-AADSync')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = '*'
@@ -126,8 +126,8 @@ PrivateData = @{
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUWl/Ph+27WjiyIUqcaqqDzpkb
-# jGWgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUt9ellQKkdvgM/NmqatAbEF/r
+# 1D+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -142,9 +142,9 @@ PrivateData = @{
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSkLzxH
-# AxKHI8ihJCwRGviZSfiZ4jANBgkqhkiG9w0BAQEFAASBgE3M+0ehBdT04/XlNU9J
-# wyNutkk7x+XFhOzW/Zq6QEMgMmAQVWJmOFOlZy5NDh5tvFjtnML81VInIw1XkUbG
-# k2j8UiH9uB3EqTy6P2wtpNTFNjdAfikQU9R8uVHwelzeP92bUAC4vLODL7h4XGuH
-# UT7zYwFfPeGd7xVo6fSfT9q6
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTGczOl
+# MIZzFzMzswIb+vVzNr99lDANBgkqhkiG9w0BAQEFAASBgFBCI/w+lic369avoGqz
+# LUln6p/d7hd7437U/+OThy5AOBj/rAD3J42D+4NAw8OZmnXT9yPWU/iulgHSk0av
+# 4KfYM4qL8mHPje8KY0eMcnjJ3q5UH0KDsQaV5HzJweVMc2RXnWe4aIdWBp8FSJlc
+# +UPaok87PCNKtnvoAtUmAWSc
 # SIG # End signature block

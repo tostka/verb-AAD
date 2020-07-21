@@ -1,4 +1,4 @@
-#*------v Function Connect-AAD v------
+#*------v Connect-AAD.ps1 v------
 Function Connect-AAD {
     <#
     .SYNOPSIS
@@ -18,6 +18,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 4:36 PM 7/21/2020 updated various psms for VEN tenant
     * 12:11 PM 5/27/2020 updated CBH, moved aliases:'caad','raad','reconnect-AAD' win the func
     * 10:55 AM 12/6/2019 Connect-AAD:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
     * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
@@ -60,6 +61,7 @@ Function Connect-AAD {
                 "$($TORMeta['o365_TenantDomain'])" { }
                 "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += "TOL"}
                 "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag +="CMW"}
+                "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag +="VEN"}
                 default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
             } ; 
         } else { 
@@ -68,6 +70,7 @@ Function Connect-AAD {
                 "$($TORMeta['o365_OPDomain'])" { }
                 "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += "TOL"}
                 "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += "CMW"}
+                "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += "VEN"}
                 default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
             } ; 
         } ; 
@@ -120,4 +123,5 @@ Function Connect-AAD {
         } ;
     } ; 
     END {} ;
-} ; #*------^ END Function Connect-AAD ^------
+}
+#*------^ Connect-AAD.ps1 ^------

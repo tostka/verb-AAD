@@ -1,11 +1,11 @@
-﻿# verb-AAD.psm1
+﻿# verb-aad.psm1
 
 
 <#
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.12
+Version     : 1.0.14
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -216,6 +216,11 @@ function caadTOR {Connect-AAD -cred $credO365TORSID}
 
 #*------^ caadTOR.ps1 ^------
 
+#*------v caadVEN.ps1 v------
+function caadVEN {Connect-AAD -cred $credO365VENCSID}
+
+#*------^ caadVEN.ps1 ^------
+
 #*------v cmsolCMW.ps1 v------
 function cmsolcmw {Connect-MSOL -cred $credO365CMWCSID}
 
@@ -230,6 +235,11 @@ function cmsolTOL {Connect-MSOL -cred $credO365TOLSID}
 function cmsolTOR {Connect-MSOL -cred $credO365CMWCSID}
 
 #*------^ cmsolTOR.ps1 ^------
+
+#*------v cmsolVEN.ps1 v------
+function cmsolVEN {Connect-MSOL -cred $credO365VENCSID}
+
+#*------^ cmsolVEN.ps1 ^------
 
 #*------v Connect-AAD.ps1 v------
 Function Connect-AAD {
@@ -251,6 +261,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 4:36 PM 7/21/2020 updated various psms for VEN tenant
     * 12:11 PM 5/27/2020 updated CBH, moved aliases:'caad','raad','reconnect-AAD' win the func
     * 10:55 AM 12/6/2019 Connect-AAD:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
     * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
@@ -293,6 +304,7 @@ Function Connect-AAD {
                 "$($TORMeta['o365_TenantDomain'])" { }
                 "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += "TOL"}
                 "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag +="CMW"}
+                "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag +="VEN"}
                 default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
             } ; 
         } else { 
@@ -301,6 +313,7 @@ Function Connect-AAD {
                 "$($TORMeta['o365_OPDomain'])" { }
                 "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += "TOL"}
                 "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += "CMW"}
+                "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += "VEN"}
                 default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
             } ; 
         } ; 
@@ -376,6 +389,7 @@ function connect-AzureRM {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    # 5:04 PM 7/21/2020 VEN support added
     # 9:19 AM 2/25/2020 updated to reflect my credential prefs
     # 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
     .DESCRIPTION
@@ -413,6 +427,7 @@ function connect-AzureRM {
             "$($TORMeta['o365_TenantDomain'])" { } 
             "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
             "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+            "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
             default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
         } ; 
     } else { 
@@ -421,6 +436,7 @@ function connect-AzureRM {
             "$($TORMeta['o365_OPDomain'])" { }
             "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
             "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+            "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
             default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
         } ; 
     } ; 
@@ -511,6 +527,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 5:06 PM 7/21/2020 added VEN supp
     * 6:11 PM 2/26/2020 moved aliases below
     * 2:08 PM 2/26/2020 converted to adv func
     * 8:50 PM 1/12/2020 expanded aliases
@@ -564,6 +581,7 @@ Function Connect-MSOL {
                 "$($TORMeta['o365_TenantDomain'])" { } 
                 "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
                 "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+                "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
                 default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
             } ; 
         } else { 
@@ -572,6 +590,7 @@ Function Connect-MSOL {
                 "$($TORMeta['o365_OPDomain'])" { }
                 "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
                 "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+                "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
                 default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
             } ; 
         } ; 
@@ -623,6 +642,20 @@ Function Connect-MSOL {
                             else {
                                 if ($CMWMeta['o365_CSIDUpn']) { 
                                     $Credential = Get-Credential -Credential $CMWMeta['o365_CSIDUpn'] 
+                                    global:o365cred = $Credential ; 
+                                } else { $Credential = Get-Credential } ;
+                            } ;
+                        }
+                        "$($VENMeta['legacyDomain'])" {
+                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($VENMeta['o365_SIDUpn']))" ;
+                            if (!$bUseo365COAdminUID) {
+                                if ($VENMeta['o365_SIDUpn'] ) { 
+                                    $Credential = Get-Credential -Credential $VENMeta['o365_SIDUpn'] 
+                                } else { $Credential = Get-Credential } ;
+                            }
+                            else {
+                                if ($VENMeta['o365_CSIDUpn']) { 
+                                    $Credential = Get-Credential -Credential $VENMeta['o365_CSIDUpn'] 
                                     global:o365cred = $Credential ; 
                                 } else { $Credential = Get-Credential } ;
                             } ;
@@ -1381,14 +1414,14 @@ Function Wait-AADSync {
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,cmsolcmw,cmsolTOL,cmsolTOR,Connect-AAD,connect-AzureRM,Connect-MSOL,get-AADCertToken,get-AADLastSync,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Wait-AADSync -Alias *
+Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,get-AADCertToken,get-AADLastSync,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Wait-AADSync -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUbLCFcbFP1ftHD03td/Ns0Wa5
-# quagggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQULw1c3m+tbbTPgkSUlyFLNx3M
+# BM2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1403,9 +1436,9 @@ Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,cm
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRx6V7t
-# 1JrvCoJbsTfbQJW5MIIAxjANBgkqhkiG9w0BAQEFAASBgJlucLdm/tI+9c7K4ZsU
-# cvNNcEc6MFrAf+Qo1v82kiYnsnV7i/KsSzrG5rBgzh/2RGnhe1U8Tw0S1kAEBWL6
-# SK0ljA62pS0enwKxE9uTKjFp7z101MPD0d3BEtd+R+vwSOTPxk+81YwLqjvVCT3i
-# 1/Ejfuftgea10VrAEXq+UFKG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSJ+8xc
+# oNXZq98xzNmz8SI14CC7XjANBgkqhkiG9w0BAQEFAASBgLI5ZscAPEkoQJ0dQ1XD
+# FLqZQ8qJBwIs6DzGXm0oJvq0WnIbHdfdZWNAyIUyxWh+O5xsWJCheJ74FlJfIgUO
+# x4c6SeUyOXFW271rI21IaZKy8ArDEiW11yGXqwy3dh5BwxPKa7QnkzFMFyaSSVKh
+# PzJ+j6ECQgJobtCBb2Xyphpt
 # SIG # End signature block

@@ -18,6 +18,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 5:06 PM 7/21/2020 added VEN supp
     * 6:11 PM 2/26/2020 moved aliases below
     * 2:08 PM 2/26/2020 converted to adv func
     * 8:50 PM 1/12/2020 expanded aliases
@@ -71,6 +72,7 @@ Function Connect-MSOL {
                 "$($TORMeta['o365_TenantDomain'])" { } 
                 "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
                 "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+                "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
                 default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
             } ; 
         } else { 
@@ -79,6 +81,7 @@ Function Connect-MSOL {
                 "$($TORMeta['o365_OPDomain'])" { }
                 "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
                 "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+                "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
                 default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
             } ; 
         } ; 
@@ -130,6 +133,20 @@ Function Connect-MSOL {
                             else {
                                 if ($CMWMeta['o365_CSIDUpn']) { 
                                     $Credential = Get-Credential -Credential $CMWMeta['o365_CSIDUpn'] 
+                                    global:o365cred = $Credential ; 
+                                } else { $Credential = Get-Credential } ;
+                            } ;
+                        }
+                        "$($VENMeta['legacyDomain'])" {
+                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($VENMeta['o365_SIDUpn']))" ;
+                            if (!$bUseo365COAdminUID) {
+                                if ($VENMeta['o365_SIDUpn'] ) { 
+                                    $Credential = Get-Credential -Credential $VENMeta['o365_SIDUpn'] 
+                                } else { $Credential = Get-Credential } ;
+                            }
+                            else {
+                                if ($VENMeta['o365_CSIDUpn']) { 
+                                    $Credential = Get-Credential -Credential $VENMeta['o365_CSIDUpn'] 
                                     global:o365cred = $Credential ; 
                                 } else { $Credential = Get-Credential } ;
                             } ;
