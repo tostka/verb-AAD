@@ -1,4 +1,4 @@
-#*------v Function connect-AzureRM v------
+#*------v connect-AzureRM.ps1 v------
 function connect-AzureRM {
     <#
     .SYNOPSIS
@@ -17,6 +17,7 @@ function connect-AzureRM {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 7:13 AM 7/22/2020 replaced codeblock w get-TenantTag()
     # 5:04 PM 7/21/2020 VEN support added
     # 9:19 AM 2/25/2020 updated to reflect my credential prefs
     # 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
@@ -39,34 +40,14 @@ function connect-AzureRM {
         [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()]$Credential = $global:credo365TORSID
     ) ;
-    [string]$CredFolder = join-path -path (split-path $profile) -childpath "keys"
-    if (!(test-path -path $CredFolder)) {
-        write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):(creating missing `$CredFolder:$($CredFolder)..." ;
-        mkdir -path $CredFolder -whatif:$($whatif) ;
-    } ;
-
+    $verbose = ($VerbosePreference -eq "Continue") ; 
     $MFA = get-TenantMFARequirement -Credential $Credential ;
 
     $sTitleBarTag="AzRM" ;
-    $credDom = ($Credential.username.split("@"))[1] ;
-    if($Credential.username.contains('.onmicrosoft.com')){
-        # cloud-first acct
-        switch ($credDom){
-            "$($TORMeta['o365_TenantDomain'])" { } 
-            "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
-            "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
-            "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
-            default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
-        } ; 
-    } else { 
-        # OP federated domain
-        switch ($credDom){
-            "$($TORMeta['o365_OPDomain'])" { }
-            "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
-            "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
-            "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
-            default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
-        } ; 
+    $TentantTag=get-TenantTag -Credential $Credential ; 
+    if($TentantTag -ne 'TOR'){
+        # explicitly leave this tenant (default) untagged
+        $sTitleBarTag += $TentantTag ;
     } ; 
 
     Try {Get-AzureRmTenant -erroraction stop }

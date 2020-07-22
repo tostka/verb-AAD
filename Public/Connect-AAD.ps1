@@ -18,6 +18,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 7:13 AM 7/22/2020 replaced codeblock w get-TenantTag()
     * 4:36 PM 7/21/2020 updated various psms for VEN tenant
     * 12:11 PM 5/27/2020 updated CBH, moved aliases:'caad','raad','reconnect-AAD' win the func
     * 10:55 AM 12/6/2019 Connect-AAD:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
@@ -54,25 +55,10 @@ Function Connect-AAD {
         $MFA = get-TenantMFARequirement -Credential $Credential ;
 
         $sTitleBarTag="AAD" ;
-        $credDom = ($Credential.username.split("@"))[1] ;
-        if($Credential.username.contains('.onmicrosoft.com')){
-            # cloud-first acct
-            switch ($credDom){
-                "$($TORMeta['o365_TenantDomain'])" { }
-                "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += "TOL"}
-                "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag +="CMW"}
-                "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag +="VEN"}
-                default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
-            } ; 
-        } else { 
-            # OP federated domain
-            switch ($credDom){
-                "$($TORMeta['o365_OPDomain'])" { }
-                "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += "TOL"}
-                "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += "CMW"}
-                "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += "VEN"}
-                default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
-            } ; 
+        $TentantTag=get-TenantTag -Credential $Credential ; 
+        if($TentantTag -ne 'TOR'){
+            # explicitly leave this tenant (default) untagged
+            $sTitleBarTag += $TentantTag ;
         } ; 
 
         Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
@@ -82,7 +68,7 @@ Function Connect-AAD {
             Write-Host "You're not Authenticated to AAD: Connecting..."  ;
             Try {
                 if(!$Credential){
-                    if(test-path function:\get-admincred) {
+                    if(get-command -Name get-admincred) {
                         Get-AdminCred ;
                     } else {
                         switch($env:USERDOMAIN){
