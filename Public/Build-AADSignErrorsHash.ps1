@@ -1,4 +1,4 @@
-#*------v Function Build-AADSignErrorsHash v------
+#*------v Build-AADSignErrorsHash.ps1 v------
 function Build-AADSignErrorsHash {
     <#
     .SYNOPSIS
@@ -155,4 +155,5 @@ function Build-AADSignErrorsHash {
     $AADSignOnError.add("500133", "The assertion is not within its valid time range. Ensure that the access token is not expired before using it for user assertion, or request a new token.") ;
     $AADSignOnError.add("530021", "Application does not meet the conditional access approved app requirements.") ;
     $AADSignOnError | write-output ;
-} ; #*------^ END Function Build-AADSignErrorsHash ^------
+}
+#*------^ Build-AADSignErrorsHash.ps1 ^------

@@ -1,5 +1,4 @@
-
-#*------v Function get-AADTokenHeaders v------
+#*------v get-AADTokenHeaders.ps1 v------
 Function get-AADTokenHeaders {
     <#
     .SYNOPSIS
@@ -43,10 +42,12 @@ Function get-AADTokenHeaders {
         [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
         [switch] $showDebug
     ) ;
+    $verbose = ($VerbosePreference -eq "Continue") ; 
     write-verbose "$((get-date).ToString('HH:mm:ss')):Provided token:`n$(($token|out-string).trim())" ; 
     $Header = @{
         Authorization = "$($token.token_type) $($token.access_token)"
     }
     write-verbose "$((get-date).ToString('HH:mm:ss')):Generated `$Header:`n$(($Header|out-string).trim())" ; 
     $Header | write-output ; 
-}; #*------^ END Function get-AADTokenHeaders ^------
+}
+#*------^ get-AADTokenHeaders.ps1 ^------

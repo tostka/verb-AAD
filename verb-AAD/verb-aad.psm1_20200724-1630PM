@@ -1,4 +1,4 @@
-# verb-aad.psm1
+﻿# verb-aad.psm1
 
 
 <#
@@ -659,7 +659,7 @@ function get-AADCertToken {
         [Parameter(HelpMessage = "Debugging Flag [-showDebug]")]
         [switch] $showDebug
     ) # PARAM BLOCK END ;
-    $verbose = ($VerbosePreference -eq "Continue") ; 
+
     if($Certificate = Get-Item Cert:\CurrentUser\My\$Certificate){ 
         ( $certificate| fl Subject,DnsNameList,FriendlyName,Not*,Thumbprint | out-string).trim() | write-verbose -Verbose:$verbose ;
         $Scope = "https://graph.microsoft.com/.default" ;
@@ -761,7 +761,6 @@ Function get-AADLastSync {
     Website     :	https://www.toddomation.com
     Twitter     :	@tostka
     REVISIONS   :
-    * 4:08 PM 7/24/2020 added full multi-ten cred support
     * 1:03 PM 5/27/2020 moved alias: get-MsolLastSync win func
     * 9:51 AM 2/25/2020 condenced output
     * 8:50 PM 1/12/2020 expanded aliases
@@ -782,20 +781,19 @@ Function get-AADLastSync {
     [CmdletBinding()]
     [Alias('get-MsolLastSync')]
     Param([Parameter()]$Credential = $global:credo365TORSID) ;
-    $verbose = ($VerbosePreference -eq "Continue") ; 
     try { Get-MsolAccountSku -ErrorAction Stop | out-null }
     catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
-      "Not connected to MSOnline. Now connecting to $($credo365.username.split('@')[1])." ;
-      $MFA = get-TenantMFARequirement -Credential $Credential ;
-      if($MFA){ Connect-MsolService }
-      else {Connect-MsolService -Credential $Credential ;}
+      "Not connected to MSOnline. Now connecting." ;
+      Connect-MsolService ;
     } ;
     $LastDirSyncTime = (Get-MsolCompanyInformation).LastDirSyncTime ;
     New-Object PSObject -Property @{
       TimeGMT   = $LastDirSyncTime  ;
       TimeLocal = $LastDirSyncTime.ToLocalTime() ;
     } | write-output ;
-}
+} ; #*------^ END Function get-AADLastSync ^------
+# 11:19 AM 10/18/2018 add msol alias
+if(!(get-alias get-MsolLastSync -ea 0) ) {Set-Alias 'get-MsolLastSync' -Value 'get-AADLastSync' ; }
 
 #*------^ get-AADLastSync.ps1 ^------
 
@@ -843,7 +841,6 @@ Function get-AADTokenHeaders {
         [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
         [switch] $showDebug
     ) ;
-    $verbose = ($VerbosePreference -eq "Continue") ; 
     write-verbose "$((get-date).ToString('HH:mm:ss')):Provided token:`n$(($token|out-string).trim())" ; 
     $Header = @{
         Authorization = "$($token.token_type) $($token.access_token)"
@@ -864,7 +861,6 @@ Function get-MsolUserLastSync {
     Website:	http://tinstoys.blogspot.com
     Twitter:	http://twitter.com/tostka
     REVISIONS   :
-    * 4:21 PM 7/24/2020 added verbose
     * 9:51 AM 2/25/2020 condenced output
     * 8:50 PM 1/12/2020 expanded aliases
     * 11:23 AM 10/18/2018 ported from get-MsolUserLastSync()
@@ -884,7 +880,6 @@ Function get-MsolUserLastSync {
         [Parameter(Position = 0, Mandatory = $True, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true, HelpMessage = "MSolUser UPN")][ValidateNotNullOrEmpty()][string]$UserPrincipalName,
         [Parameter()]$Credential = $global:credo365TORSID
     ) ;
-    $verbose = ($VerbosePreference -eq "Continue") ; 
     try { Get-MsolAccountSku -ErrorAction Stop | out-null }
     catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
         write-verbose -verbose:$true "$((get-date).ToString('HH:mm:ss')):Not connected to MSOnline. Now connecting." ;
@@ -911,7 +906,6 @@ Function get-MsolUserLicenseDetails {
     Based on work by :Brad Wyatt
     Website: https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     REVISIONS   :
-    * 4:22 PM 7/24/2020 added verbose
     * 8:50 PM 1/12/2020 expanded aliases
     * 12:00 PM 1/9/2019 replaced broken aggreg with simpler cobj -prop $hash set, now returns proper mult lics
     * 11:42 AM 1/9/2019 added "MS_TEAMS_IW"      (portal displayname used below)
@@ -947,7 +941,7 @@ Function get-MsolUserLicenseDetails {
         [Parameter()]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage = "Debugging Flag [-showDebug]")][switch] $showDebug
     ) ;
-    $verbose = ($VerbosePreference -eq "Continue") ; 
+
     $Retries = 4 ;
     $RetrySleep = 5 ;
     #Connect-AAD ;
@@ -1203,7 +1197,6 @@ Function Wait-AADSync {
     Tags        : Powershell
     Updated By: : Todd Kadrie
     REVISIONS   :
-    * 4:22 PM 7/24/2020 added verbose
     * 12:14 PM 5/27/2020 moved alias:wait-msolsync win the func
     * 10:27 AM 2/25/2020 bumped polling interval to 30s
     * 8:50 PM 1/12/2020 expanded aliases
@@ -1224,7 +1217,6 @@ Function Wait-AADSync {
     [CmdletBinding()]
     [Alias('Wait-MSolSync')]
     Param([Parameter()]$Credential = $global:credo365TORSID) ;
-    $verbose = ($VerbosePreference -eq "Continue") ; 
     try { Get-MsolAccountSku -ErrorAction Stop | out-null }
     catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
         "Not connected to MSOnline. Now connecting." ;
@@ -1243,3 +1235,29 @@ Function Wait-AADSync {
 
 Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,get-AADCertToken,get-AADLastSync,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Wait-AADSync -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU8sybS84O9XgzwQtLrp7O/RQU
+# I+agggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSphfN+
+# 42mtaZk1ToorUCCpIJmyjDANBgkqhkiG9w0BAQEFAASBgIJe+3/uDa5ITZfvReOS
+# fqn/2Lw8kZr8+1mW/AOV6ScLoZnslRhf3WTeEGqmgKhF449srFbxq4kwWmXbNAIX
+# ft69KUSw7rTUFm9GDyYNqMJvwnETZztPAfjEcmJaqhxuHZvKGWxy+ykZum3qgzVl
+# yirrpPn/msA+djyAILbSpMil
+# SIG # End signature block

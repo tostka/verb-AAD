@@ -1,4 +1,4 @@
-#*------v Function get-MsolUserLastSync v------
+#*------v get-MsolUserLastSync.ps1 v------
 Function get-MsolUserLastSync {
     <#
     .SYNOPSIS
@@ -8,6 +8,7 @@ Function get-MsolUserLastSync {
     Website:	http://tinstoys.blogspot.com
     Twitter:	http://twitter.com/tostka
     REVISIONS   :
+    * 4:21 PM 7/24/2020 added verbose
     * 9:51 AM 2/25/2020 condenced output
     * 8:50 PM 1/12/2020 expanded aliases
     * 11:23 AM 10/18/2018 ported from get-MsolUserLastSync()
@@ -27,6 +28,7 @@ Function get-MsolUserLastSync {
         [Parameter(Position = 0, Mandatory = $True, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true, HelpMessage = "MSolUser UPN")][ValidateNotNullOrEmpty()][string]$UserPrincipalName,
         [Parameter()]$Credential = $global:credo365TORSID
     ) ;
+    $verbose = ($VerbosePreference -eq "Continue") ; 
     try { Get-MsolAccountSku -ErrorAction Stop | out-null }
     catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
         write-verbose -verbose:$true "$((get-date).ToString('HH:mm:ss')):Not connected to MSOnline. Now connecting." ;
@@ -37,4 +39,5 @@ Function get-MsolUserLastSync {
         TimeGMT   = $LastDirSyncTime  ;
         TimeLocal = $LastDirSyncTime.ToLocalTime() ;
     } | write-output ;
-} ; #*------^ get-MsolUserLastSync.ps1 ^------
+}
+#*------^ get-MsolUserLastSync.ps1 ^------

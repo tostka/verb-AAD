@@ -1,4 +1,4 @@
-#*------v Function Wait-AADSync.ps1 v------
+#*------v Wait-AADSync.ps1 v------
 Function Wait-AADSync {
     <#
     .SYNOPSIS
@@ -16,6 +16,7 @@ Function Wait-AADSync {
     Tags        : Powershell
     Updated By: : Todd Kadrie
     REVISIONS   :
+    * 4:22 PM 7/24/2020 added verbose
     * 12:14 PM 5/27/2020 moved alias:wait-msolsync win the func
     * 10:27 AM 2/25/2020 bumped polling interval to 30s
     * 8:50 PM 1/12/2020 expanded aliases
@@ -36,6 +37,7 @@ Function Wait-AADSync {
     [CmdletBinding()]
     [Alias('Wait-MSolSync')]
     Param([Parameter()]$Credential = $global:credo365TORSID) ;
+    $verbose = ($VerbosePreference -eq "Continue") ; 
     try { Get-MsolAccountSku -ErrorAction Stop | out-null }
     catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
         "Not connected to MSOnline. Now connecting." ;
@@ -46,5 +48,5 @@ Function Wait-AADSync {
     Do { Connect-AAD  ; write-host "." -NoNewLine ; Start-Sleep -m (1000 * 30) ; Connect-MSOL } Until ((Get-MsolCompanyInformation).LastDirSyncTime -ne $DirSyncLast) ;
     write-host -foregroundcolor yellow "]`n$((get-date).ToString('HH:mm:ss')):AD->AAD REPLICATED!" ;
     write-host "`a" ; write-host "`a" ; write-host "`a" ;
-} ; #*------^ END Function Wait-AADSync ^------
-
+}
+#*------^ Wait-AADSync.ps1 ^------

@@ -1,5 +1,4 @@
-
-#*------v Function get-AADCertToken v------
+#*------v get-AADCertToken.ps1 v------
 function get-AADCertToken {
     <#
     .SYNOPSIS
@@ -154,7 +153,7 @@ function get-AADCertToken {
         [Parameter(HelpMessage = "Debugging Flag [-showDebug]")]
         [switch] $showDebug
     ) # PARAM BLOCK END ;
-
+    $verbose = ($VerbosePreference -eq "Continue") ; 
     if($Certificate = Get-Item Cert:\CurrentUser\My\$Certificate){ 
         ( $certificate| fl Subject,DnsNameList,FriendlyName,Not*,Thumbprint | out-string).trim() | write-verbose -Verbose:$verbose ;
         $Scope = "https://graph.microsoft.com/.default" ;
@@ -242,5 +241,5 @@ function get-AADCertToken {
     }
     else { $token | write-output }
     
-} ; #*------^ END Function get-AADCertToken ^------
-
+}
+#*------^ get-AADCertToken.ps1 ^------

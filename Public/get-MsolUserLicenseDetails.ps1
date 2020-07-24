@@ -1,4 +1,4 @@
-#*------v Function get-MsolUserLicenseDetails v------
+#*------v get-MsolUserLicenseDetails.ps1 v------
 Function get-MsolUserLicenseDetails {
     <#
     .SYNOPSIS
@@ -10,6 +10,7 @@ Function get-MsolUserLicenseDetails {
     Based on work by :Brad Wyatt
     Website: https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     REVISIONS   :
+    * 4:22 PM 7/24/2020 added verbose
     * 8:50 PM 1/12/2020 expanded aliases
     * 12:00 PM 1/9/2019 replaced broken aggreg with simpler cobj -prop $hash set, now returns proper mult lics
     * 11:42 AM 1/9/2019 added "MS_TEAMS_IW"      (portal displayname used below)
@@ -45,7 +46,7 @@ Function get-MsolUserLicenseDetails {
         [Parameter()]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage = "Debugging Flag [-showDebug]")][switch] $showDebug
     ) ;
-
+    $verbose = ($VerbosePreference -eq "Continue") ; 
     $Retries = 4 ;
     $RetrySleep = 5 ;
     #Connect-AAD ;
@@ -279,4 +280,5 @@ Function get-MsolUserLicenseDetails {
     } # loop-E
 
     $AggregLics | write-output ; # 11:33 AM 1/9/2019 export the aggreg, NewObject02 was never more than a single lic
-} ; #*------^ END Function get-MsolUserLicenseDetails.ps1 ^------
+}
+#*------^ get-MsolUserLicenseDetails.ps1 ^------

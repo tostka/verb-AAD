@@ -1,4 +1,4 @@
-#*------v Function get-AADLastSync v------
+#*------v get-AADLastSync.ps1 v------
 Function get-AADLastSync {
   <#
     .SYNOPSIS
@@ -8,6 +8,7 @@ Function get-AADLastSync {
     Website     :	https://www.toddomation.com
     Twitter     :	@tostka
     REVISIONS   :
+    * 4:08 PM 7/24/2020 added full multi-ten cred support
     * 1:03 PM 5/27/2020 moved alias: get-MsolLastSync win func
     * 9:51 AM 2/25/2020 condenced output
     * 8:50 PM 1/12/2020 expanded aliases
@@ -28,10 +29,13 @@ Function get-AADLastSync {
     [CmdletBinding()]
     [Alias('get-MsolLastSync')]
     Param([Parameter()]$Credential = $global:credo365TORSID) ;
+    $verbose = ($VerbosePreference -eq "Continue") ; 
     try { Get-MsolAccountSku -ErrorAction Stop | out-null }
     catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
-      "Not connected to MSOnline. Now connecting." ;
-      Connect-MsolService ;
+      "Not connected to MSOnline. Now connecting to $($credo365.username.split('@')[1])." ;
+      $MFA = get-TenantMFARequirement -Credential $Credential ;
+      if($MFA){ Connect-MsolService }
+      else {Connect-MsolService -Credential $Credential ;}
     } ;
     $LastDirSyncTime = (Get-MsolCompanyInformation).LastDirSyncTime ;
     New-Object PSObject -Property @{
@@ -39,5 +43,3 @@ Function get-AADLastSync {
       TimeLocal = $LastDirSyncTime.ToLocalTime() ;
     } | write-output ;
 } ; #*------^ END Function get-AADLastSync ^------
-# 11:19 AM 10/18/2018 add msol alias
-if(!(get-alias get-MsolLastSync -ea 0) ) {Set-Alias 'get-MsolLastSync' -Value 'get-AADLastSync' ; }
