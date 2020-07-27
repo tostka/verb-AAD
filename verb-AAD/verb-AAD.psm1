@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.18
+Version     : 1.0.19
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -682,6 +682,68 @@ Function Connect-MSOL {
 }
 
 #*------^ Connect-MSOL.ps1 ^------
+
+#*------v Disconnect-AAD.ps1 v------
+Function Disconnect-AAD {
+    <#
+    .SYNOPSIS
+    Disconnect-AAD - Disconnect authenticated session to AzureAD Graph Module (AzureAD), as the MSOL & orig AAD2 didn't support, but *now* it does
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-07-27
+    FileName    : Disconnect-AAD.ps1
+    License     : MIT License
+    Copyright   : (c) 2020 Todd Kadrie
+    Github      : https://github.com/tostka
+    Tags        : Powershell,AzureAD
+    AddedCredit : REFERENCE
+    AddedWebsite:	URL
+    AddedTwitter:	URL
+    REVISIONS   :
+    * 3:15 PM 7/27/2020 init vers
+    .DESCRIPTION
+    Disconnect-AAD - Disconnect authenticated session to AzureAD Graph Module (AzureAD), as the MSOL & orig AAD2 didn't support, but *now* it does
+    .PARAMETER Credential
+    Credential to be used for connection - doesn't actually authenticate with the credential, but is used to remove console matching title tag for the tenant
+    .INPUTS
+    None. Does not accepted piped input.
+    .OUTPUTS
+    None. Returns no objects or output.
+    .EXAMPLE
+    Disconnect-AAD
+    .EXAMPLE
+    Disconnect-AAD -Credential $cred
+    .LINK
+    https://docs.microsoft.com/en-us/powershell/module/azuread/disconnect-azuread?view=azureadps-2.0
+    #>
+    [CmdletBinding()] 
+    [Alias('daad')]
+    Param(
+        [Parameter()][boolean]$ProxyEnabled = $False,
+        [Parameter()]$Credential = $global:credo365TORSID
+    ) ;
+    BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
+    PROCESS {
+        if(get-command disconnect-AzureAD){
+            $sTitleBarTag="AAD" ;
+            $AADTenDtl = Get-AzureADTenantDetail ; 
+            if($AADTenDtl){
+                write-verbose "(Disconnecting from  AAD:$($AADTenDtl.displayname))" ;
+                Remove-PSTitleBar -Tag $sTitleBarTag ; 
+                $TentantTag=get-TenantTag -Credential $Credential ; 
+                if($TentantTag -ne 'TOR'){
+                    Remove-PSTitleBar -Tag $TentantTag
+                } ; 
+            } else { write-verbose "(No existing AAD tenant connection)" } ;
+        } else {write-verbose "(The AzureAD module isn't currently loaded)" } ; 
+    } ; 
+    END {} ;
+}
+
+#*------^ Disconnect-AAD.ps1 ^------
 
 #*------v get-AADCertToken.ps1 v------
 function get-AADCertToken {
@@ -1420,14 +1482,14 @@ Function Wait-AADSync {
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,get-AADCertToken,get-AADLastSync,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Wait-AADSync -Alias *
+Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADCertToken,get-AADLastSync,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Wait-AADSync -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUkZF1KCMxK7cxR9koCgHsvHH3
-# ezmgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUJkLlaCiC8VsDPoDZrrNPwvWr
+# hT2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1442,9 +1504,9 @@ Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,ca
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSIMz4P
-# 2WjvIPjjGGf2CCyTVXla6jANBgkqhkiG9w0BAQEFAASBgJOZRDmWO4AAdd5H5Se9
-# 1YbVE+KqR7oaPkg06siPvUtLw5QqCOXTx+6eQvjBnP2lRsSBnWogG+uQw2gLWJXi
-# z+i75JHMaTOxVfuuesuNEKehZ3GIkpg2yaLIGaF2bmpJVAm7S9ZPT4p1ogdFbQvW
-# sVcXRjlIjxX2C0UDlFNse97j
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQeNRfr
+# /HuInAN4bjHo7O1PuqdyVjANBgkqhkiG9w0BAQEFAASBgKQ0gev8lOGJmVMKHbgS
+# RCBCeq6kTIuF4ZP/MCEDkSHVPLi1bY251Rnq8vEWpawAb5bt6EZk5UcHrZltuoI2
+# kb/JX0V3aQKwvZhQINuvhlDpqMfr64f0pj9gKXKk7k/zCLghOhcXCRURVDVk500l
+# VDE4/XWVdQATo+spPT4KTNDa
 # SIG # End signature block
