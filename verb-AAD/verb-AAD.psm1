@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.19
+Version     : 1.0.20
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -261,6 +261,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 11:38 AM 7/28/2020 added verbose credential echo and other detail for tenant-match confirmations
     * 12:47 PM 7/24/2020 added code to test for match between get-azureadTenantDetail.VerifiedDomains list and the domain in use for the specified Credential, if no match, it triggers a full credentialed logon (working around the complete lack of an explicit disconnect-AzureAD cmdlet, for permitting changing Tenants)
     * 7:13 AM 7/22/2020 replaced codeblock w get-TenantTag()
     * 4:36 PM 7/21/2020 updated various psms for VEN tenant
@@ -296,6 +297,7 @@ Function Connect-AAD {
     ) ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
+        write-verbose "(Credential specified: $($Credential.username))" ; 
         $MFA = get-TenantMFARequirement -Credential $Credential ;
 
         $sTitleBarTag="AAD" ;
@@ -307,29 +309,27 @@ Function Connect-AAD {
 
         Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
         Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
-        #try { Get-AzureADTenantDetail | out-null  } # authenticated
-        <# with multitenants and changes between, and no explicit disconnect-azuread, we need ot test 'what tenant' we're connected to
-        
-        #>
+        #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
+        # with multitenants and changes between, instead we need ot test 'what tenant' we're connected to
         TRY { 
-            $AADTenDtl = Get-AzureADTenantDetail ; 
+            $AADTenDtl = Get-AzureADTenantDetail ; # err indicates no authenticated connection
+            #if connected,verify cred-specified Tenant
             if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
                 write-verbose "(Authenticated to AAD:$($AADTenDtl.displayname))"
             } else { 
-                write-verbose "(NOT Authenticated to Credentialed Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                Disconnect-AzureAD ; 
                 throw "" 
             }
         } 
         #CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException] {
         # for changing Tenant logons, we need to trigger a full credential reconnect, even if connected and not thowing AadNeedAuthenticationException
         CATCH{
-            Write-Host "Authenticating to AAD:$($Credential.username.split('@')[1].tostring())..."  ;
             TRY {
                 if(!$Credential){
                     if(get-command -Name get-admincred) {
                         Get-AdminCred ;
                     } else {
-                    
                         $credDom = ($Credential.username.split("@"))[1] ;
                         $Metas=(get-variable *meta|?{$_.name -match '^\w{3}Meta$'}) ; 
                         foreach ($Meta in $Metas){
@@ -342,38 +342,19 @@ Function Connect-AAD {
                             write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
                             $Credential = Get-Credential ; 
                         } ;
-                        <# ===
-                        switch($env:USERDOMAIN){
-                            "TORO" {
-                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365AdmUid ))" ;
-                            if(!$bUseo365COAdminUID){
-                                if($o365AdmUid ){$Credential = Get-Credential -Credential $o365AdmUid } else { $Credential = Get-Credential } ;
-                            } else {
-                                if($o365COAdmUid){global:o365cred = Get-Credential -Credential $o365COAdmUid} else { $Credential = Get-Credential } ;
-                            } ;
-                            }
-                            "TORO-LAB" {
-                                write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365LabAdmUid ))" ;
-                                if(!$bUseo365COAdminUID){
-                                    if($o365LabAdmUid){$Credential = Get-Credential -Credential $o365LabAdmUid} else { $Credential = Get-Credential } ;
-                                } else {
-                                    if($o365LabCOAdmUid){$Credential = Get-Credential -Credential $o365LabCOAdmUid} else { $Credential = Get-Credential } ;
-                                } ;
-                            }
-                            default {
-                                write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
-                                $Credential = Get-Credential
-                            } ;
-                        } ;
-                        #>
                     }  ;
                 } ;
-                if(!$MFA){Connect-AzureAD -Credential $Credential -ErrorAction Stop ;} 
-                else {Connect-AzureAD -AccountID $Credential.userName ;} ;
+                Write-Host "Authenticating to AAD:$($Credential.username.split('@')[1].tostring()), w $($Credential.username)..."  ;
+                if(!$MFA){
+                    write-verbose "EXEC:Connect-AzureAD -Credential $($Credential.username) (no MFA, full credential)" ; 
+                    Connect-AzureAD -Credential $Credential -ErrorAction Stop ;
+                } else {
+                    write-verbose "EXEC:Connect-AzureAD -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
+                    Connect-AzureAD -AccountID $Credential.userName ;
+                } ;
 
                 # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
                 if ($?) { write-verbose -verbose:$true  "(connected to AzureAD ver2)" ; Add-PSTitleBar $sTitleBarTag ; } ;
-                Write-Verbose -verbose:$true "(connected to AzureAD ver2)" ; 
             } CATCH {
                 Write-Verbose "There was an error Connecting to Azure Ad - Ensure the module is installed" ;
                 Write-Verbose "Download PowerShell 5 or PowerShellGet" ;
@@ -706,8 +687,6 @@ Function Disconnect-AAD {
     * 3:15 PM 7/27/2020 init vers
     .DESCRIPTION
     Disconnect-AAD - Disconnect authenticated session to AzureAD Graph Module (AzureAD), as the MSOL & orig AAD2 didn't support, but *now* it does
-    .PARAMETER Credential
-    Credential to be used for connection - doesn't actually authenticate with the credential, but is used to remove console matching title tag for the tenant
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
@@ -721,10 +700,7 @@ Function Disconnect-AAD {
     #>
     [CmdletBinding()] 
     [Alias('daad')]
-    Param(
-        [Parameter()][boolean]$ProxyEnabled = $False,
-        [Parameter()]$Credential = $global:credo365TORSID
-    ) ;
+    Param() ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
         if(get-command disconnect-AzureAD){
@@ -733,10 +709,6 @@ Function Disconnect-AAD {
             if($AADTenDtl){
                 write-verbose "(Disconnecting from  AAD:$($AADTenDtl.displayname))" ;
                 Remove-PSTitleBar -Tag $sTitleBarTag ; 
-                $TentantTag=get-TenantTag -Credential $Credential ; 
-                if($TentantTag -ne 'TOR'){
-                    Remove-PSTitleBar -Tag $TentantTag
-                } ; 
             } else { write-verbose "(No existing AAD tenant connection)" } ;
         } else {write-verbose "(The AzureAD module isn't currently loaded)" } ; 
     } ; 
@@ -1488,8 +1460,8 @@ Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,ca
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUJkLlaCiC8VsDPoDZrrNPwvWr
-# hT2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+vCBFLgfd6gbKC1CKlMtTuZK
+# g7KgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1504,9 +1476,9 @@ Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,ca
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQeNRfr
-# /HuInAN4bjHo7O1PuqdyVjANBgkqhkiG9w0BAQEFAASBgKQ0gev8lOGJmVMKHbgS
-# RCBCeq6kTIuF4ZP/MCEDkSHVPLi1bY251Rnq8vEWpawAb5bt6EZk5UcHrZltuoI2
-# kb/JX0V3aQKwvZhQINuvhlDpqMfr64f0pj9gKXKk7k/zCLghOhcXCRURVDVk500l
-# VDE4/XWVdQATo+spPT4KTNDa
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQAC7g6
+# LL+rkY81IRRB18071EfNyDANBgkqhkiG9w0BAQEFAASBgHT36to/0JFvWF2yvj5e
+# QegSV8qu5olqmBuVZYcyVjQ0YieqyjCaG8ELpp9shCEwMjRhez/xMlykYNUqqe0U
+# L5iFDrdcR5H1Gk2qGdlX15VZEZ77h2ok6A8O97XaUk8vXE/X7q3fyDW83acAUVGM
+# WoD95INabVpkaSdBweMihoep
 # SIG # End signature block

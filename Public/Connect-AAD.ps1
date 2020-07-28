@@ -18,6 +18,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 11:38 AM 7/28/2020 added verbose credential echo and other detail for tenant-match confirmations
     * 12:47 PM 7/24/2020 added code to test for match between get-azureadTenantDetail.VerifiedDomains list and the domain in use for the specified Credential, if no match, it triggers a full credentialed logon (working around the complete lack of an explicit disconnect-AzureAD cmdlet, for permitting changing Tenants)
     * 7:13 AM 7/22/2020 replaced codeblock w get-TenantTag()
     * 4:36 PM 7/21/2020 updated various psms for VEN tenant
@@ -53,6 +54,7 @@ Function Connect-AAD {
     ) ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
+        write-verbose "(Credential specified: $($Credential.username))" ; 
         $MFA = get-TenantMFARequirement -Credential $Credential ;
 
         $sTitleBarTag="AAD" ;
@@ -64,29 +66,27 @@ Function Connect-AAD {
 
         Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
         Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
-        #try { Get-AzureADTenantDetail | out-null  } # authenticated
-        <# with multitenants and changes between, and no explicit disconnect-azuread, we need ot test 'what tenant' we're connected to
-        
-        #>
+        #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
+        # with multitenants and changes between, instead we need ot test 'what tenant' we're connected to
         TRY { 
-            $AADTenDtl = Get-AzureADTenantDetail ; 
+            $AADTenDtl = Get-AzureADTenantDetail ; # err indicates no authenticated connection
+            #if connected,verify cred-specified Tenant
             if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
                 write-verbose "(Authenticated to AAD:$($AADTenDtl.displayname))"
             } else { 
-                write-verbose "(NOT Authenticated to Credentialed Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                Disconnect-AzureAD ; 
                 throw "" 
             }
         } 
         #CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException] {
         # for changing Tenant logons, we need to trigger a full credential reconnect, even if connected and not thowing AadNeedAuthenticationException
         CATCH{
-            Write-Host "Authenticating to AAD:$($Credential.username.split('@')[1].tostring())..."  ;
             TRY {
                 if(!$Credential){
                     if(get-command -Name get-admincred) {
                         Get-AdminCred ;
                     } else {
-                    
                         $credDom = ($Credential.username.split("@"))[1] ;
                         $Metas=(get-variable *meta|?{$_.name -match '^\w{3}Meta$'}) ; 
                         foreach ($Meta in $Metas){
@@ -99,38 +99,19 @@ Function Connect-AAD {
                             write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
                             $Credential = Get-Credential ; 
                         } ;
-                        <# ===
-                        switch($env:USERDOMAIN){
-                            "TORO" {
-                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365AdmUid ))" ;
-                            if(!$bUseo365COAdminUID){
-                                if($o365AdmUid ){$Credential = Get-Credential -Credential $o365AdmUid } else { $Credential = Get-Credential } ;
-                            } else {
-                                if($o365COAdmUid){global:o365cred = Get-Credential -Credential $o365COAdmUid} else { $Credential = Get-Credential } ;
-                            } ;
-                            }
-                            "TORO-LAB" {
-                                write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($o365LabAdmUid ))" ;
-                                if(!$bUseo365COAdminUID){
-                                    if($o365LabAdmUid){$Credential = Get-Credential -Credential $o365LabAdmUid} else { $Credential = Get-Credential } ;
-                                } else {
-                                    if($o365LabCOAdmUid){$Credential = Get-Credential -Credential $o365LabCOAdmUid} else { $Credential = Get-Credential } ;
-                                } ;
-                            }
-                            default {
-                                write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
-                                $Credential = Get-Credential
-                            } ;
-                        } ;
-                        #>
                     }  ;
                 } ;
-                if(!$MFA){Connect-AzureAD -Credential $Credential -ErrorAction Stop ;} 
-                else {Connect-AzureAD -AccountID $Credential.userName ;} ;
+                Write-Host "Authenticating to AAD:$($Credential.username.split('@')[1].tostring()), w $($Credential.username)..."  ;
+                if(!$MFA){
+                    write-verbose "EXEC:Connect-AzureAD -Credential $($Credential.username) (no MFA, full credential)" ; 
+                    Connect-AzureAD -Credential $Credential -ErrorAction Stop ;
+                } else {
+                    write-verbose "EXEC:Connect-AzureAD -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
+                    Connect-AzureAD -AccountID $Credential.userName ;
+                } ;
 
                 # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
                 if ($?) { write-verbose -verbose:$true  "(connected to AzureAD ver2)" ; Add-PSTitleBar $sTitleBarTag ; } ;
-                Write-Verbose -verbose:$true "(connected to AzureAD ver2)" ; 
             } CATCH {
                 Write-Verbose "There was an error Connecting to Azure Ad - Ensure the module is installed" ;
                 Write-Verbose "Download PowerShell 5 or PowerShellGet" ;
@@ -139,5 +120,5 @@ Function Connect-AAD {
         } ;
     } ; 
     END {} ;
-}
+} ; 
 #*------^ Connect-AAD.ps1 ^------
