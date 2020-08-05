@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.20
+Version     : 1.0.21
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -297,21 +297,23 @@ Function Connect-AAD {
     ) ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
-        write-verbose "(Credential specified: $($Credential.username))" ; 
+        write-verbose "EXEC:get-TenantMFARequirement -Credential $($Credential.username)" ; 
         $MFA = get-TenantMFARequirement -Credential $Credential ;
-
         $sTitleBarTag="AAD" ;
+        write-verbose "EXEC:get-TenantTag -Credential $($Credential.username)" ; 
         $TentantTag=get-TenantTag -Credential $Credential ; 
         if($TentantTag -ne 'TOR'){
             # explicitly leave this tenant (default) untagged
             $sTitleBarTag += $TentantTag ;
         } ; 
-
+        write-verbose "(Check for/install AzureAD module)" ; 
         Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
+        write-verbose "Import-Module -Name AzureAD -MinimumVersion '2.0.0.131'" ; 
         Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
         #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         # with multitenants and changes between, instead we need ot test 'what tenant' we're connected to
         TRY { 
+            write-verbose "EXEC:Get-AzureADTenantDetail" ; 
             $AADTenDtl = Get-AzureADTenantDetail ; # err indicates no authenticated connection
             #if connected,verify cred-specified Tenant
             if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
@@ -684,6 +686,7 @@ Function Disconnect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 8:13 AM 8/5/2020 added verbose outputs, try/catch, and catch targeting unauthenticated status
     * 3:15 PM 7/27/2020 init vers
     .DESCRIPTION
     Disconnect-AAD - Disconnect authenticated session to AzureAD Graph Module (AzureAD), as the MSOL & orig AAD2 didn't support, but *now* it does
@@ -703,14 +706,26 @@ Function Disconnect-AAD {
     Param() ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
+        write-verbose "get-command disconnect-AzureAD" ; 
         if(get-command disconnect-AzureAD){
             $sTitleBarTag="AAD" ;
-            $AADTenDtl = Get-AzureADTenantDetail ; 
-            if($AADTenDtl){
-                write-verbose "(Disconnecting from  AAD:$($AADTenDtl.displayname))" ;
-                Remove-PSTitleBar -Tag $sTitleBarTag ; 
-            } else { write-verbose "(No existing AAD tenant connection)" } ;
-        } else {write-verbose "(The AzureAD module isn't currently loaded)" } ; 
+            $error.clear() ;
+            TRY {
+                write-verbose "Checking for existing AzureADTenantDetail (AAD connection)" ; 
+                $AADTenDtl = Get-AzureADTenantDetail ; 
+                if($AADTenDtl){
+                    write-host "(disconnect-AzureAD from:$($AADTenDtl.displayname))" ;
+                    disconnect-AzureAD ; 
+                    write-verbose "Remove-PSTitleBar -Tag $($sTitleBarTag)" ; 
+                    Remove-PSTitleBar -Tag $sTitleBarTag ; 
+                } else { write-host "(No existing AAD tenant connection)" } ;
+            } CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException]{
+                write-host "(No existing AAD tenant connection)"
+            } CATCH {
+                Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
+            } ; 
+        } else {write-host "(The AzureAD module isn't currently loaded)" } ; 
     } ; 
     END {} ;
 }
@@ -1460,8 +1475,8 @@ Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,ca
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+vCBFLgfd6gbKC1CKlMtTuZK
-# g7KgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUplSACIFnDeV/SBxac1tzlx4L
+# K02gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1476,9 +1491,9 @@ Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,ca
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQAC7g6
-# LL+rkY81IRRB18071EfNyDANBgkqhkiG9w0BAQEFAASBgHT36to/0JFvWF2yvj5e
-# QegSV8qu5olqmBuVZYcyVjQ0YieqyjCaG8ELpp9shCEwMjRhez/xMlykYNUqqe0U
-# L5iFDrdcR5H1Gk2qGdlX15VZEZ77h2ok6A8O97XaUk8vXE/X7q3fyDW83acAUVGM
-# WoD95INabVpkaSdBweMihoep
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTr+0Dx
+# ol9NbczDj8dyxA03oUiaRjANBgkqhkiG9w0BAQEFAASBgLEC3sl3Iy1MyEdLYJJ5
+# ay+Gv6JoWesLj3nfA6iDBTI1zMzRAgiTDEqKsz//dHxWLbEe5Gn3r3JM5GAh5VOd
+# ghUXjHtfxX568sfJLVdfPFaOI/UwYdB1rhURVwh98vSXxBUXSEhBRLdgdSwMNNvD
+# VghkeZ5+iPqlvn+GG93zk3RD
 # SIG # End signature block

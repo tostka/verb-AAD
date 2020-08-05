@@ -1,4 +1,4 @@
-# verb-aad.psm1
+﻿# verb-aad.psm1
 
 
 <#
@@ -297,23 +297,21 @@ Function Connect-AAD {
     ) ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
-        write-verbose "EXEC:get-TenantMFARequirement -Credential $($Credential.username)" ; 
+        write-verbose "(Credential specified: $($Credential.username))" ; 
         $MFA = get-TenantMFARequirement -Credential $Credential ;
+
         $sTitleBarTag="AAD" ;
-        write-verbose "EXEC:get-TenantTag -Credential $($Credential.username)" ; 
         $TentantTag=get-TenantTag -Credential $Credential ; 
         if($TentantTag -ne 'TOR'){
             # explicitly leave this tenant (default) untagged
             $sTitleBarTag += $TentantTag ;
         } ; 
-        write-verbose "(Check for/install AzureAD module)" ; 
+
         Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
-        write-verbose "Import-Module -Name AzureAD -MinimumVersion '2.0.0.131'" ; 
         Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
         #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         # with multitenants and changes between, instead we need ot test 'what tenant' we're connected to
         TRY { 
-            write-verbose "EXEC:Get-AzureADTenantDetail" ; 
             $AADTenDtl = Get-AzureADTenantDetail ; # err indicates no authenticated connection
             #if connected,verify cred-specified Tenant
             if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
@@ -686,7 +684,6 @@ Function Disconnect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
-    * 8:13 AM 8/5/2020 added verbose outputs, try/catch, and catch targeting unauthenticated status
     * 3:15 PM 7/27/2020 init vers
     .DESCRIPTION
     Disconnect-AAD - Disconnect authenticated session to AzureAD Graph Module (AzureAD), as the MSOL & orig AAD2 didn't support, but *now* it does
@@ -706,26 +703,14 @@ Function Disconnect-AAD {
     Param() ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
-        write-verbose "get-command disconnect-AzureAD" ; 
         if(get-command disconnect-AzureAD){
             $sTitleBarTag="AAD" ;
-            $error.clear() ;
-            TRY {
-                write-verbose "Checking for existing AzureADTenantDetail (AAD connection)" ; 
-                $AADTenDtl = Get-AzureADTenantDetail ; 
-                if($AADTenDtl){
-                    write-host "(disconnect-AzureAD from:$($AADTenDtl.displayname))" ;
-                    disconnect-AzureAD ; 
-                    write-verbose "Remove-PSTitleBar -Tag $($sTitleBarTag)" ; 
-                    Remove-PSTitleBar -Tag $sTitleBarTag ; 
-                } else { write-host "(No existing AAD tenant connection)" } ;
-            } CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException]{
-                write-host "(No existing AAD tenant connection)"
-            } CATCH {
-                Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
-                Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
-            } ; 
-        } else {write-host "(The AzureAD module isn't currently loaded)" } ; 
+            $AADTenDtl = Get-AzureADTenantDetail ; 
+            if($AADTenDtl){
+                write-verbose "(Disconnecting from  AAD:$($AADTenDtl.displayname))" ;
+                Remove-PSTitleBar -Tag $sTitleBarTag ; 
+            } else { write-verbose "(No existing AAD tenant connection)" } ;
+        } else {write-verbose "(The AzureAD module isn't currently loaded)" } ; 
     } ; 
     END {} ;
 }
@@ -1471,3 +1456,29 @@ Function Wait-AADSync {
 
 Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADCertToken,get-AADLastSync,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Wait-AADSync -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+vCBFLgfd6gbKC1CKlMtTuZK
+# g7KgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQAC7g6
+# LL+rkY81IRRB18071EfNyDANBgkqhkiG9w0BAQEFAASBgHT36to/0JFvWF2yvj5e
+# QegSV8qu5olqmBuVZYcyVjQ0YieqyjCaG8ELpp9shCEwMjRhez/xMlykYNUqqe0U
+# L5iFDrdcR5H1Gk2qGdlX15VZEZ77h2ok6A8O97XaUk8vXE/X7q3fyDW83acAUVGM
+# WoD95INabVpkaSdBweMihoep
+# SIG # End signature block

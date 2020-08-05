@@ -18,6 +18,7 @@ Function Disconnect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 8:13 AM 8/5/2020 added verbose outputs, try/catch, and catch targeting unauthenticated status
     * 3:15 PM 7/27/2020 init vers
     .DESCRIPTION
     Disconnect-AAD - Disconnect authenticated session to AzureAD Graph Module (AzureAD), as the MSOL & orig AAD2 didn't support, but *now* it does
@@ -37,15 +38,27 @@ Function Disconnect-AAD {
     Param() ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
+        write-verbose "get-command disconnect-AzureAD" ; 
         if(get-command disconnect-AzureAD){
             $sTitleBarTag="AAD" ;
-            $AADTenDtl = Get-AzureADTenantDetail ; 
-            if($AADTenDtl){
-                write-verbose "(Disconnecting from  AAD:$($AADTenDtl.displayname))" ;
-                Remove-PSTitleBar -Tag $sTitleBarTag ; 
-            } else { write-verbose "(No existing AAD tenant connection)" } ;
-        } else {write-verbose "(The AzureAD module isn't currently loaded)" } ; 
+            $error.clear() ;
+            TRY {
+                write-verbose "Checking for existing AzureADTenantDetail (AAD connection)" ; 
+                $AADTenDtl = Get-AzureADTenantDetail ; 
+                if($AADTenDtl){
+                    write-host "(disconnect-AzureAD from:$($AADTenDtl.displayname))" ;
+                    disconnect-AzureAD ; 
+                    write-verbose "Remove-PSTitleBar -Tag $($sTitleBarTag)" ; 
+                    Remove-PSTitleBar -Tag $sTitleBarTag ; 
+                } else { write-host "(No existing AAD tenant connection)" } ;
+            } CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException]{
+                write-host "(No existing AAD tenant connection)"
+            } CATCH {
+                Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
+            } ; 
+        } else {write-host "(The AzureAD module isn't currently loaded)" } ; 
     } ; 
     END {} ;
-}
+} ; 
 #*------^ Disconnect-AAD.ps1 ^------

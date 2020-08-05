@@ -54,21 +54,23 @@ Function Connect-AAD {
     ) ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
-        write-verbose "(Credential specified: $($Credential.username))" ; 
+        write-verbose "EXEC:get-TenantMFARequirement -Credential $($Credential.username)" ; 
         $MFA = get-TenantMFARequirement -Credential $Credential ;
-
         $sTitleBarTag="AAD" ;
+        write-verbose "EXEC:get-TenantTag -Credential $($Credential.username)" ; 
         $TentantTag=get-TenantTag -Credential $Credential ; 
         if($TentantTag -ne 'TOR'){
             # explicitly leave this tenant (default) untagged
             $sTitleBarTag += $TentantTag ;
         } ; 
-
+        write-verbose "(Check for/install AzureAD module)" ; 
         Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
+        write-verbose "Import-Module -Name AzureAD -MinimumVersion '2.0.0.131'" ; 
         Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
         #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         # with multitenants and changes between, instead we need ot test 'what tenant' we're connected to
         TRY { 
+            write-verbose "EXEC:Get-AzureADTenantDetail" ; 
             $AADTenDtl = Get-AzureADTenantDetail ; # err indicates no authenticated connection
             #if connected,verify cred-specified Tenant
             if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
