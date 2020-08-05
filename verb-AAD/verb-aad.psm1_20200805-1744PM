@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.23
+Version     : 1.0.22
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -232,7 +232,7 @@ function cmsolTOL {Connect-MSOL -cred $credO365TOLSID}
 #*------^ cmsolTOL.ps1 ^------
 
 #*------v cmsolTOR.ps1 v------
-function cmsolTOR {Connect-MSOL -cred $credO365TORSID}
+function cmsolTOR {Connect-MSOL -cred $credO365CMWCSID}
 
 #*------^ cmsolTOR.ps1 ^------
 
@@ -1495,8 +1495,8 @@ Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,ca
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU1PtbleMAOFeqkBViFcxwyzl6
-# RkWgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU4b8/hrlY2PlFlBiHNrGnMk1p
+# ibqgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1511,9 +1511,9 @@ Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,ca
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSwatP5
-# tCKRqC3zVFkAVS1aJ2FT7zANBgkqhkiG9w0BAQEFAASBgBFpGvYSJcPPtYPDxpve
-# gM8uW22bXMNPCTV116HlNtT+J9nwswmv5/v2XVAgmmB701wOLLYs/h1oUFUEdjaE
-# LUlwXD/fQ3E5ITgVc2han8XOKssQUK8MPOG4MEdV2uhkSslvgEDwtlwtnroC42jB
-# 5dJTO6P5nel1A+B/Djy0O3uZ
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTmods0
+# EpsVjFddOOJyl2h8Va6pcDANBgkqhkiG9w0BAQEFAASBgD9ia3oPM1nOmBio2BI+
+# elPIF0PvM0JllqEvybcAlV/JkDqgxpLnJC95NtgImmvBFIlIZ1BPbzt8u7hP9xbQ
+# qrO4QgMgpyVGXScje2hcuKoeuOuvalxUbXPXw18R8GHM3idDzeclgCCZf0R2d9mK
+# DGjNHBPEqF5H2EC3Y9XRz661
 # SIG # End signature block

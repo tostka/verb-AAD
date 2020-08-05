@@ -18,7 +18,7 @@ Function Disconnect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
-    * 8:13 AM 8/5/2020 added verbose outputs, try/catch, and catch targeting unauthenticated status
+    * 5:17 PM 8/5/2020 strong-typed Credential;added verbose outputs, try/catch, and catch targeting unauthenticated status, added missing Disconnect-AzureAD (doh)
     * 3:15 PM 7/27/2020 init vers
     .DESCRIPTION
     Disconnect-AAD - Disconnect authenticated session to AzureAD Graph Module (AzureAD), as the MSOL & orig AAD2 didn't support, but *now* it does
@@ -60,5 +60,6 @@ Function Disconnect-AAD {
         } else {write-host "(The AzureAD module isn't currently loaded)" } ; 
     } ; 
     END {} ;
-} ; 
+}
+
 #*------^ Disconnect-AAD.ps1 ^------

@@ -10,6 +10,7 @@ Function get-MsolUserLicenseDetails {
     Based on work by :Brad Wyatt
     Website: https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     REVISIONS   :
+    * 5:17 PM 8/5/2020 strong-typed Credential
     * 4:22 PM 7/24/2020 added verbose
     * 8:50 PM 1/12/2020 expanded aliases
     * 12:00 PM 1/9/2019 replaced broken aggreg with simpler cobj -prop $hash set, now returns proper mult lics
@@ -43,7 +44,7 @@ Function get-MsolUserLicenseDetails {
     Param(
         [Parameter(Position = 0, Mandatory = $True, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true, HelpMessage = "An array of MSolUser objects")][ValidateNotNullOrEmpty()]
         [string]$UPNs,
-        [Parameter()]$Credential = $global:credo365TORSID,
+        [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage = "Debugging Flag [-showDebug]")][switch] $showDebug
     ) ;
     $verbose = ($VerbosePreference -eq "Continue") ; 
@@ -280,5 +281,5 @@ Function get-MsolUserLicenseDetails {
     } # loop-E
 
     $AggregLics | write-output ; # 11:33 AM 1/9/2019 export the aggreg, NewObject02 was never more than a single lic
-}
+} ; 
 #*------^ get-MsolUserLicenseDetails.ps1 ^------

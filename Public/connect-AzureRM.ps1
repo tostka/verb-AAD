@@ -17,6 +17,7 @@ function connect-AzureRM {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 5:17 PM 8/5/2020 strong-typed Credential
     * 7:13 AM 7/22/2020 replaced codeblock w get-TenantTag()
     # 5:04 PM 7/21/2020 VEN support added
     # 9:19 AM 2/25/2020 updated to reflect my credential prefs
@@ -38,7 +39,7 @@ function connect-AzureRM {
     #>
     Param(
         [Parameter()][boolean]$ProxyEnabled = $False,
-        [Parameter()]$Credential = $global:credo365TORSID
+        [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID
     ) ;
     $verbose = ($VerbosePreference -eq "Continue") ; 
     $MFA = get-TenantMFARequirement -Credential $Credential ;
@@ -113,4 +114,5 @@ function connect-AzureRM {
         }
     }
 }
+
 #*------^ connect-AzureRM.ps1 ^------

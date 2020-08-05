@@ -8,6 +8,7 @@ Function get-MsolUserLastSync {
     Website:	http://tinstoys.blogspot.com
     Twitter:	http://twitter.com/tostka
     REVISIONS   :
+    * 5:17 PM 8/5/2020 strong-typed Credential
     * 4:21 PM 7/24/2020 added verbose
     * 9:51 AM 2/25/2020 condenced output
     * 8:50 PM 1/12/2020 expanded aliases
@@ -26,7 +27,7 @@ Function get-MsolUserLastSync {
     #>
     Param(
         [Parameter(Position = 0, Mandatory = $True, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true, HelpMessage = "MSolUser UPN")][ValidateNotNullOrEmpty()][string]$UserPrincipalName,
-        [Parameter()]$Credential = $global:credo365TORSID
+        [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID
     ) ;
     $verbose = ($VerbosePreference -eq "Continue") ; 
     try { Get-MsolAccountSku -ErrorAction Stop | out-null }
@@ -40,4 +41,5 @@ Function get-MsolUserLastSync {
         TimeLocal = $LastDirSyncTime.ToLocalTime() ;
     } | write-output ;
 }
+
 #*------^ get-MsolUserLastSync.ps1 ^------

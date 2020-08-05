@@ -1,4 +1,4 @@
-#*------v Function Connect-MSOL v------
+#*------v Connect-MSOL.ps1 v------
 Function Connect-MSOL {
     <#    
     .SYNOPSIS
@@ -18,6 +18,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 5:17 PM 8/5/2020 strong-typed Credential, swapped in get-TenantTag()
     * 1:28 PM 7/27/2020 restored deleted file (was fat-thumbed 7/22)
     * 5:06 PM 7/21/2020 added VEN supp
     * 6:11 PM 2/26/2020 moved aliases below
@@ -56,7 +57,7 @@ Function Connect-MSOL {
     Param(
         [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()][string]$CommandPrefix,
-        [Parameter()]$Credential = $global:credo365TORSID
+        [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID
     ) ;
     BEGIN { $verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
@@ -66,25 +67,10 @@ Function Connect-MSOL {
         #if(!$CommandPrefix){ $CommandPrefix='aad' ; } ;
 
         $sTitleBarTag = "MSOL" ;
-        $credDom = ($Credential.username.split("@"))[1] ;
-        if($Credential.username.contains('.onmicrosoft.com')){
-            # cloud-first acct
-            switch ($credDom){
-                "$($TORMeta['o365_TenantDomain'])" { } 
-                "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
-                "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
-                "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
-                default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
-            } ; 
-        } else { 
-            # OP federated domain
-            switch ($credDom){
-                "$($TORMeta['o365_OPDomain'])" { }
-                "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
-                "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
-                "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
-                default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
-            } ; 
+        $TentantTag=get-TenantTag -Credential $Credential ; 
+        if($TentantTag -ne 'TOR'){
+            # explicitly leave this tenant (default) untagged
+            $sTitleBarTag += $TentantTag ;
         } ; 
 
         try { Get-MsolAccountSku -ErrorAction Stop | out-null }
@@ -173,5 +159,6 @@ Function Connect-MSOL {
         
     } ;
     END {} ;
-} ; #*------^ END Function Connect-MSOL ^------
+}
 
+#*------^ Connect-MSOL.ps1 ^------
