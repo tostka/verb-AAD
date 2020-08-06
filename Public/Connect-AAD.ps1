@@ -18,6 +18,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 3:24 PM 8/6/2020 added CATCH block for AzureAD perms errors seeing on one tenant, also shifted only the AAD cmdlets into TRY, to isolate errs ; flip catch blocks to throw (stop) vs Exit (kill ps, when run in shell)
     * 5:17 PM 8/5/2020 strong-typed Credential; implemented get-TenantID(), captured returned objects and validated single, post-validates Credential domain AzureADTenantDetail.ValidatedDomains match.
     * 11:38 AM 7/28/2020 added verbose credential echo and other detail for tenant-match confirmations; implemented get-TenantID()
     * 12:47 PM 7/24/2020 added code to test for match between get-azureadTenantDetail.VerifiedDomains list and the domain in use for the specified Credential, if no match, it triggers a full credentialed logon (working around the complete lack of an explicit disconnect-AzureAD cmdlet, for permitting changing Tenants)
@@ -80,83 +81,105 @@ Function Connect-AAD {
             } else { 
                 write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
                 Disconnect-AzureAD ; 
-                throw "" 
+                throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
             } ; 
-        } 
+        }   
         #CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException] {
         # for changing Tenant logons, we need to trigger a full credential reconnect, even if connected and not thowing AadNeedAuthenticationException
+        
+        CATCH [Microsoft.Open.AzureAD16.Client.ApiException] {
+            $ErrTrpd = $_ ; 
+            Write-Warning "$((get-date).ToString('HH:mm:ss')):AzureAD Tenant Permissions Error" ; 
+            Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+            throw $_ ; #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+        }
         CATCH{
-            TRY {
-                if(!$Credential){
-                    if(get-command -Name get-admincred) {
-                        Get-AdminCred ;
-                    } else {
-                        $credDom = ($Credential.username.split("@"))[1] ;
-                        $Metas=(get-variable *meta|?{$_.name -match '^\w{3}Meta$'}) ; 
-                        foreach ($Meta in $Metas){
-                                if( ($credDom -eq $Meta.value.legacyDomain) -OR ($credDom -eq $Meta.value.o365_TenantDomain) -OR ($credDom -eq $Meta.value.o365_OPDomain)){
-                                    if($Meta.value.o365_SIDUpn ){$Credential = Get-Credential -Credential $Meta.value.o365_SIDUpn } else { $Credential = Get-Credential } ;
-                                    $TenantID = get-TenantID -Credential $Credential ;
-                                    break ; 
-                                } ; 
-                        } ;
-                        if(!$Credential){
-                            write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
-                            $Credential = Get-Credential ; 
-                        } ;
-                    }  ;
-                } ; 
-                Write-Host "Authenticating to AAD:$($Credential.username.split('@')[1].tostring()), w $($Credential.username)..."  ;
-                $pltCAAD=[ordered]@{
-                        ErrorAction='Stop';
-                }; 
-                if($TenantID){
-                    write-verbose "Forcing TenantID:$($TenantID)" ; 
-                    $pltCAAD.add('TenantID',$TenantID) ;
-                } 
-                if(!$MFA){
-                    #Connect-AzureAD -Credential $Credential -ErrorAction Stop ;
-                    write-verbose "EXEC:Connect-AzureAD -Credential $($Credential.username) (no MFA, full credential)" ; 
-                    if($Credential.username){$pltCAAD.add('Credential',$Credential)} ;
+            
+            if(!$Credential){
+                if(get-command -Name get-admincred) {
+                    Get-AdminCred ;
                 } else {
-                    #Connect-AzureAD -AccountID $Credential.userName ;
-                    write-verbose "EXEC:Connect-AzureAD -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
-                    if($Credential.username){$pltCAAD.add('AccountId',$Credential.username)} ;
-                } ;
-                write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Connect-AzureAD w`n$(($pltCAAD|out-string).trim())" ; 
+                    $credDom = ($Credential.username.split("@"))[1] ;
+                    $Metas=(get-variable *meta|?{$_.name -match '^\w{3}Meta$'}) ; 
+                    foreach ($Meta in $Metas){
+                            if( ($credDom -eq $Meta.value.legacyDomain) -OR ($credDom -eq $Meta.value.o365_TenantDomain) -OR ($credDom -eq $Meta.value.o365_OPDomain)){
+                                if($Meta.value.o365_SIDUpn ){$Credential = Get-Credential -Credential $Meta.value.o365_SIDUpn } else { $Credential = Get-Credential } ;
+                                $TenantID = get-TenantID -Credential $Credential ;
+                                break ; 
+                            } ; 
+                    } ;
+                    if(!$Credential){
+                        write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
+                        $Credential = Get-Credential ; 
+                    } ;
+                }  ;
+            } ; 
+
+            Write-Host "Authenticating to AAD:$($Credential.username.split('@')[1].tostring()), w $($Credential.username)..."  ;
+            $pltCAAD=[ordered]@{
+                    ErrorAction='Stop';
+            }; 
+            if($TenantID){
+                write-verbose "Forcing TenantID:$($TenantID)" ; 
+                $pltCAAD.add('TenantID',$TenantID) ;
+            } 
+            if(!$MFA){
+                #Connect-AzureAD -Credential $Credential -ErrorAction Stop ;
+                write-verbose "EXEC:Connect-AzureAD -Credential $($Credential.username) (no MFA, full credential)" ; 
+                if($Credential.username){$pltCAAD.add('Credential',$Credential)} ;
+            } else {
+                #Connect-AzureAD -AccountID $Credential.userName ;
+                write-verbose "EXEC:Connect-AzureAD -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
+                if($Credential.username){$pltCAAD.add('AccountId',$Credential.username)} ;
+            } ;
+
+            write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Connect-AzureAD w`n$(($pltCAAD|out-string).trim())" ; 
+            TRY {
                 $AADConnection = Connect-AzureAD @pltCAAD ; 
-                write-host -foregroundcolor white "$(($AADConnection |ft -a account,environment,tenantId,TenantDomain,AccountType |out-string).trim())"
                 if($AADConnection -is [system.array]){
                     throw "MULTIPLE TENANT CONNECTIONS RETURNED BY connect-AzureAD!"
+                
                 } else {write-verbose "(single Tenant connection returned)" } ; 
-
-                # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
-                if ($?) { 
-                    #write-verbose -verbose:$true  "(connected to AzureAD ver2)" ; 
-                    Add-PSTitleBar $sTitleBarTag ; 
-                    write-verbose "EXEC:Get-AzureADTenantDetail" ; 
-                    $AADTenDtl = Get-AzureADTenantDetail ; # err indicates no authenticated connection
-                    if($AADTenDtl -is [system.array]){
-                        write-warning "AZUREAD IS CONNECTED TO MULTIPLE TENANTS!`n$(($AADTenDtl|ft -a ObjectId,DisplayName,VerifiedDomain |out-string).trim())`nISSUING Disconnect-AzureAD" ; 
-                        Disconnect-AzureAD ; 
-                        throw "" ;
-                    } ; 
-                    #if connected,verify cred-specified Tenant
-                    if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
-                        write-verbose "(Authenticated to AAD:$($AADTenDtl.displayname))" ;
-                    } else { 
-                        write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
-                        Disconnect-AzureAD ; 
-                        throw "" ;
-                    } ; 
-                } ;
             } CATCH {
-                Write-Verbose "There was an error Connecting to Azure Ad - Ensure the module is installed" ;
-                Write-Verbose "Download PowerShell 5 or PowerShellGet" ;
-                Write-Verbose "https://msdn.microsoft.com/en-us/powershell/wmf/5.1/install-configure" ;
+                Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                throw $_ #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+            } ; 
+            write-host -foregroundcolor white "$(($AADConnection |ft -a|out-string).trim())" ;
+
+            # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
+            if ($?) { 
+                #write-verbose -verbose:$true  "(connected to AzureAD ver2)" ; 
+                Add-PSTitleBar $sTitleBarTag ; 
+                write-verbose "EXEC:Get-AzureADTenantDetail" ; 
+                TRY {
+                    $AADTenDtl = Get-AzureADTenantDetail ; # err indicates no authenticated connection
+                } CATCH [Microsoft.Open.AzureAD16.Client.ApiException] {
+                    $ErrTrpd = $_ ; 
+                    Write-Warning "$((get-date).ToString('HH:mm:ss')):AzureAD Tenant Permissions Error" ; 
+                    Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                    throw $ErrTrpd ; #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                } CATCH {
+                    Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                    throw $_ ; #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                } ; 
+
+                if($AADTenDtl -is [system.array]){
+                    write-warning "AZUREAD IS CONNECTED TO MULTIPLE TENANTS!`n$(($AADTenDtl|ft -a ObjectId,DisplayName,VerifiedDomain |out-string).trim())`nISSUING Disconnect-AzureAD" ; 
+                    Disconnect-AzureAD ; 
+                    throw "" ;
+                } ; 
+                #if connected,verify cred-specified Tenant
+                if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
+                    write-verbose "(Authenticated to AAD:$($AADTenDtl.displayname))" ;
+                } else { 
+                    write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                    Disconnect-AzureAD ; 
+                    throw "" ;
+                } ; 
             } ;
-        } ;
+            
+        } ; # CATCH-E # err indicates no authenticated connection
     } ; 
     END {} ;
-} ;
+}
 #*------^ Connect-AAD.ps1 ^------
