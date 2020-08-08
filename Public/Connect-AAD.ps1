@@ -18,6 +18,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 3:10 PM 8/8/2020 remd'd block @ #463: CATCH [Microsoft.Open.AzureAD16.Client.ApiException] causes 'Unable to find type' errors on cold load ; rewrote to leverage AzureSession checks, without need to qry Get-AzureADTenantDetail (trying to avoid sporadic VEN AAD 'Forbidden' errors)
     * 3:24 PM 8/6/2020 added CATCH block for AzureAD perms errors seeing on one tenant, also shifted only the AAD cmdlets into TRY, to isolate errs ; flip catch blocks to throw (stop) vs Exit (kill ps, when run in shell)
     * 5:17 PM 8/5/2020 strong-typed Credential; implemented get-TenantID(), captured returned objects and validated single, post-validates Credential domain AzureADTenantDetail.ValidatedDomains match.
     * 11:38 AM 7/28/2020 added verbose credential echo and other detail for tenant-match confirmations; implemented get-TenantID()
@@ -54,8 +55,8 @@ Function Connect-AAD {
         [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID
     ) ;
-    BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
-    PROCESS {
+    BEGIN {
+        $verbose = ($VerbosePreference -eq "Continue") ;
         write-verbose "EXEC:get-TenantMFARequirement -Credential $($Credential.username)" ; 
         $MFA = get-TenantMFARequirement -Credential $Credential ;
         $sTitleBarTag="AAD" ;
@@ -66,6 +67,8 @@ Function Connect-AAD {
             $sTitleBarTag += $TentantTag ;
         } ; 
         $TenantID = get-TenantID -Credential $Credential ;
+    } ;
+    PROCESS {
         write-verbose "(Check for/install AzureAD module)" ; 
         Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
         write-verbose "Import-Module -Name AzureAD -MinimumVersion '2.0.0.131'" ; 
@@ -73,32 +76,82 @@ Function Connect-AAD {
         #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         # with multitenants and changes between, instead we need ot test 'what tenant' we're connected to
         TRY { 
+            <# older code - gen's the VEN errors
             write-verbose "EXEC:Get-AzureADTenantDetail" ; 
             $AADTenDtl = Get-AzureADTenantDetail ; # err indicates no authenticated connection
             #if connected,verify cred-specified Tenant
             if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
                 write-verbose "(Authenticated to AAD:$($AADTenDtl.displayname))"
             } else { 
-                write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                write-verbose "(Disconnecting from $($AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
                 Disconnect-AzureAD ; 
                 throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
             } ; 
+            #>
+            <# 12:35 PM 8/8/2020 looks like - with the new smaller Tenant, AAD will handle a ltd # of Get-AzureADTenantDetail qrys and then throw back
+                WARNING: 10:16:59: Failed processing .
+                Error Message: Error occurred while executing GetTenantDetails
+                Code: Authentication_Unauthorized
+                Message: User was not found.
+                RequestId: 375b3384-1f18-4eb7-a99c-06a9e5ef1108
+                DateTimeStamp: Wed, 05 Aug 2020 15:16:59 GMT
+                HttpStatusCode: Forbidden
+                HttpStatusDescription: Forbidden
+                HttpResponseStatus: Completed
+                Error Details: Error occurred while executing GetTenantDetails
+                Code: Authentication_Unauthorized
+                Message: User was not found.
+                RequestId: 375b3384-1f18-4eb7-a99c-06a9e5ef1108
+                DateTimeStamp: Wed, 05 Aug 2020 15:16:59 GMT
+                HttpStatusCode: Forbidden
+                HttpStatusDescription: Forbidden
+                HttpResponseStatus: Completed
+            But on fresh connectes gAADTD returns data wo issues. 
+            #>
+
+            #I'm going to assume that it's due to too many repeated req's for gAADTD
+            # so lets work with & eval the local AzureSession Token instead - it's got the userid, and the tenantid, both can validate the conn, wo any queries.:
+            $token = get-AADToken -verbose:$($verbose) ; 
+            if( ($null -eq $token) -OR ($token.count -eq 0)){
+                # not connected/authenticated
+                #Connect-AzureAD -TenantId $TenantID -Credential $Credential ; 
+                throw "" # gen an error to dump into generic CATCH block
+            }elseif($token.count -gt 1){
+                write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MULTIPLE TOKENS RETURNED!`n$(( ($token.AccessToken) | ft -a  TenantId,UserId,LoginType |out-string).trim())" ; 
+                # want to see if this winds up with a stack of parallel tokens
+            } else { 
+                write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                #if connected,verify cred-specified Tenant
+                #if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
+                if(($token.AccessToken).userid -eq $Credential.username){
+                    $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid ;                    
+                    #write-verbose "(Authenticated to AAD:$($AADTenDtl.displayname))"
+                    write-verbose "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
+                } else { 
+                    $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid -verbose:$($verbose) ; 
+                    write-verbose "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                    Disconnect-AzureAD ; 
+                    throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
+                } ; 
+            } ; 
+
         }   
         #CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException] {
         # for changing Tenant logons, we need to trigger a full credential reconnect, even if connected and not thowing AadNeedAuthenticationException
-        
+        <# 3:53 PM 8/8/2020 on a cold no-auth start, it throws up on the below
         CATCH [Microsoft.Open.AzureAD16.Client.ApiException] {
             $ErrTrpd = $_ ; 
             Write-Warning "$((get-date).ToString('HH:mm:ss')):AzureAD Tenant Permissions Error" ; 
             Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
             throw $_ ; #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
-        }
-        CATCH{
+        }#>
+        CATCH {
             
             if(!$Credential){
                 if(get-command -Name get-admincred) {
                     Get-AdminCred ;
                 } else {
+                    # resolve suitable creds based on $credential domain specified
                     $credDom = ($Credential.username.split("@"))[1] ;
                     $Metas=(get-variable *meta|?{$_.name -match '^\w{3}Meta$'}) ; 
                     foreach ($Meta in $Metas){
@@ -150,6 +203,7 @@ Function Connect-AAD {
             if ($?) { 
                 #write-verbose -verbose:$true  "(connected to AzureAD ver2)" ; 
                 Add-PSTitleBar $sTitleBarTag ; 
+                <# older code thrat throws up for problem tenant
                 write-verbose "EXEC:Get-AzureADTenantDetail" ; 
                 TRY {
                     $AADTenDtl = Get-AzureADTenantDetail ; # err indicates no authenticated connection
@@ -176,10 +230,33 @@ Function Connect-AAD {
                     Disconnect-AzureAD ; 
                     throw "" ;
                 } ; 
+                #>
+                # work with the current AzureSession $token instead - shift into END{}
+                
+
             } ;
             
         } ; # CATCH-E # err indicates no authenticated connection
-    } ; 
-    END {} ;
+    } ;  # PROC-E
+    END {
+        $token = get-AADToken -verbose:$($verbose) ; 
+        if( ($null -eq $token) -OR ($token.count -eq 0)){
+            # not connected/authenticated
+            #Connect-AzureAD -TenantId $TenantID -Credential $Credential ; 
+            #throw "" # gen an error to dump into generic CATCH block
+        } else { 
+            write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+            if(($token.AccessToken).userid -eq $Credential.username){
+                $TokenTag = convert-TenantIdToTag -TenantId $TenantId ;                    
+                write-verbose "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
+            } else { 
+                $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).TenantID  -verbose:$($verbose) ; 
+                write-verbose "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                Disconnect-AzureAD ; 
+                throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
+            } ; 
+        } ; 
+    } ; # END-E
 }
+
 #*------^ Connect-AAD.ps1 ^------

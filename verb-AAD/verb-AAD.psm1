@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.24
+Version     : 1.0.26
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -261,6 +261,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 3:10 PM 8/8/2020 remd'd block @ #463: CATCH [Microsoft.Open.AzureAD16.Client.ApiException] causes 'Unable to find type' errors on cold load ; rewrote to leverage AzureSession checks, without need to qry Get-AzureADTenantDetail (trying to avoid sporadic VEN AAD 'Forbidden' errors)
     * 3:24 PM 8/6/2020 added CATCH block for AzureAD perms errors seeing on one tenant, also shifted only the AAD cmdlets into TRY, to isolate errs ; flip catch blocks to throw (stop) vs Exit (kill ps, when run in shell)
     * 5:17 PM 8/5/2020 strong-typed Credential; implemented get-TenantID(), captured returned objects and validated single, post-validates Credential domain AzureADTenantDetail.ValidatedDomains match.
     * 11:38 AM 7/28/2020 added verbose credential echo and other detail for tenant-match confirmations; implemented get-TenantID()
@@ -297,8 +298,8 @@ Function Connect-AAD {
         [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID
     ) ;
-    BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
-    PROCESS {
+    BEGIN {
+        $verbose = ($VerbosePreference -eq "Continue") ;
         write-verbose "EXEC:get-TenantMFARequirement -Credential $($Credential.username)" ; 
         $MFA = get-TenantMFARequirement -Credential $Credential ;
         $sTitleBarTag="AAD" ;
@@ -309,6 +310,8 @@ Function Connect-AAD {
             $sTitleBarTag += $TentantTag ;
         } ; 
         $TenantID = get-TenantID -Credential $Credential ;
+    } ;
+    PROCESS {
         write-verbose "(Check for/install AzureAD module)" ; 
         Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
         write-verbose "Import-Module -Name AzureAD -MinimumVersion '2.0.0.131'" ; 
@@ -316,32 +319,82 @@ Function Connect-AAD {
         #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         # with multitenants and changes between, instead we need ot test 'what tenant' we're connected to
         TRY { 
+            <# older code - gen's the VEN errors
             write-verbose "EXEC:Get-AzureADTenantDetail" ; 
             $AADTenDtl = Get-AzureADTenantDetail ; # err indicates no authenticated connection
             #if connected,verify cred-specified Tenant
             if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
                 write-verbose "(Authenticated to AAD:$($AADTenDtl.displayname))"
             } else { 
-                write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                write-verbose "(Disconnecting from $($AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
                 Disconnect-AzureAD ; 
                 throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
             } ; 
+            #>
+            <# 12:35 PM 8/8/2020 looks like - with the new smaller Tenant, AAD will handle a ltd # of Get-AzureADTenantDetail qrys and then throw back
+                WARNING: 10:16:59: Failed processing .
+                Error Message: Error occurred while executing GetTenantDetails
+                Code: Authentication_Unauthorized
+                Message: User was not found.
+                RequestId: 375b3384-1f18-4eb7-a99c-06a9e5ef1108
+                DateTimeStamp: Wed, 05 Aug 2020 15:16:59 GMT
+                HttpStatusCode: Forbidden
+                HttpStatusDescription: Forbidden
+                HttpResponseStatus: Completed
+                Error Details: Error occurred while executing GetTenantDetails
+                Code: Authentication_Unauthorized
+                Message: User was not found.
+                RequestId: 375b3384-1f18-4eb7-a99c-06a9e5ef1108
+                DateTimeStamp: Wed, 05 Aug 2020 15:16:59 GMT
+                HttpStatusCode: Forbidden
+                HttpStatusDescription: Forbidden
+                HttpResponseStatus: Completed
+            But on fresh connectes gAADTD returns data wo issues. 
+            #>
+
+            #I'm going to assume that it's due to too many repeated req's for gAADTD
+            # so lets work with & eval the local AzureSession Token instead - it's got the userid, and the tenantid, both can validate the conn, wo any queries.:
+            $token = get-AADToken -verbose:$($verbose) ; 
+            if( ($null -eq $token) -OR ($token.count -eq 0)){
+                # not connected/authenticated
+                #Connect-AzureAD -TenantId $TenantID -Credential $Credential ; 
+                throw "" # gen an error to dump into generic CATCH block
+            }elseif($token.count -gt 1){
+                write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MULTIPLE TOKENS RETURNED!`n$(( ($token.AccessToken) | ft -a  TenantId,UserId,LoginType |out-string).trim())" ; 
+                # want to see if this winds up with a stack of parallel tokens
+            } else { 
+                write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                #if connected,verify cred-specified Tenant
+                #if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
+                if(($token.AccessToken).userid -eq $Credential.username){
+                    $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid ;                    
+                    #write-verbose "(Authenticated to AAD:$($AADTenDtl.displayname))"
+                    write-verbose "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
+                } else { 
+                    $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid -verbose:$($verbose) ; 
+                    write-verbose "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                    Disconnect-AzureAD ; 
+                    throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
+                } ; 
+            } ; 
+
         }   
         #CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException] {
         # for changing Tenant logons, we need to trigger a full credential reconnect, even if connected and not thowing AadNeedAuthenticationException
-        
+        <# 3:53 PM 8/8/2020 on a cold no-auth start, it throws up on the below
         CATCH [Microsoft.Open.AzureAD16.Client.ApiException] {
             $ErrTrpd = $_ ; 
             Write-Warning "$((get-date).ToString('HH:mm:ss')):AzureAD Tenant Permissions Error" ; 
             Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
             throw $_ ; #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
-        }
-        CATCH{
+        }#>
+        CATCH {
             
             if(!$Credential){
                 if(get-command -Name get-admincred) {
                     Get-AdminCred ;
                 } else {
+                    # resolve suitable creds based on $credential domain specified
                     $credDom = ($Credential.username.split("@"))[1] ;
                     $Metas=(get-variable *meta|?{$_.name -match '^\w{3}Meta$'}) ; 
                     foreach ($Meta in $Metas){
@@ -393,6 +446,7 @@ Function Connect-AAD {
             if ($?) { 
                 #write-verbose -verbose:$true  "(connected to AzureAD ver2)" ; 
                 Add-PSTitleBar $sTitleBarTag ; 
+                <# older code thrat throws up for problem tenant
                 write-verbose "EXEC:Get-AzureADTenantDetail" ; 
                 TRY {
                     $AADTenDtl = Get-AzureADTenantDetail ; # err indicates no authenticated connection
@@ -419,11 +473,33 @@ Function Connect-AAD {
                     Disconnect-AzureAD ; 
                     throw "" ;
                 } ; 
+                #>
+                # work with the current AzureSession $token instead - shift into END{}
+                
+
             } ;
             
         } ; # CATCH-E # err indicates no authenticated connection
-    } ; 
-    END {} ;
+    } ;  # PROC-E
+    END {
+        $token = get-AADToken -verbose:$($verbose) ; 
+        if( ($null -eq $token) -OR ($token.count -eq 0)){
+            # not connected/authenticated
+            #Connect-AzureAD -TenantId $TenantID -Credential $Credential ; 
+            #throw "" # gen an error to dump into generic CATCH block
+        } else { 
+            write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+            if(($token.AccessToken).userid -eq $Credential.username){
+                $TokenTag = convert-TenantIdToTag -TenantId $TenantId ;                    
+                write-verbose "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
+            } else { 
+                $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).TenantID  -verbose:$($verbose) ; 
+                write-verbose "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                Disconnect-AzureAD ; 
+                throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
+            } ; 
+        } ; 
+    } ; # END-E
 }
 
 #*------^ Connect-AAD.ps1 ^------
@@ -567,6 +643,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 3:40 PM 8/8/2020 updated to match caad's options, aside from msol's lack of AzureSession token support - so this uses Get-MsolDomain & Get-MsolCompanyInformation to handle the new post-connect cred->tenant match validation
     * 5:17 PM 8/5/2020 strong-typed Credential, swapped in get-TenantTag()
     * 1:28 PM 7/27/2020 restored deleted file (was fat-thumbed 7/22)
     * 5:06 PM 7/21/2020 added VEN supp
@@ -587,6 +664,7 @@ Function Connect-MSOL {
     Connect-MSOL - Establish authenticated session to AzureAD/MSOL, also works as reconnect-AAD, there is no disConnect-MSOL (have to close Powershell to clear it).
     No need for separate reConnect-MSOL - this self tests for connection, and reconnects if it's missing.
     No support for disConnect-MSOL, because MSOL has no command to do it, but closing powershell.
+    Also an msol connectoin doesn't yield the same token - (([Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens).AccessToken) | fl * ;  - AAD does, though an AAD token can be used to authenticate (through -MsGraphAccessToken or -AdGraphAccessToken?)
     .PARAMETER  ProxyEnabled
     Proxyied connection support
     .PARAMETER CommandPrefix
@@ -611,6 +689,7 @@ Function Connect-MSOL {
     BEGIN { $verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
         $MFA = get-TenantMFARequirement -Credential $Credential ;
+        # msol doesn't support the -TenantID, it's imputed from the credential
 
         # 12:10 PM 3/15/2017 disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
         #if(!$CommandPrefix){ $CommandPrefix='aad' ; } ;
@@ -626,88 +705,80 @@ Function Connect-MSOL {
         catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
             Write-Verbose "Not connected to MSOnline. Now connecting." ;
             if (!$Credential) {
-                if (test-path function:\get-admincred) {
+                if(get-command -Name get-admincred) {
                     Get-AdminCred ;
-                }
-                else {
-                    switch ($env:USERDOMAIN) {
-                        "$($TORMeta['legacyDomain'])" {
-                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($TORMeta['o365_SIDUpn']))" ;
-                            if (!$bUseo365COAdminUID) {
-                                if ($TORMeta['o365_SIDUpn'] ) { 
-                                    $Credential = Get-Credential -Credential $TORMeta['o365_SIDUpn'] 
-                                } else { $Credential = Get-Credential } ;
-                            }
-                            else {
-                                if ($TORMeta['o365_CSIDUpn']) { 
-                                    $Credential = Get-Credential -Credential $TORMeta['o365_CSIDUpn'] 
-                                    global:o365cred = $Credential ; 
-                                } else { $Credential = Get-Credential } ;
-                            } ;
-                        }
-                        "$($TOLMeta['legacyDomain'])" {
-                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($TOLMeta['o365_SIDUpn']))" ;
-                            if (!$bUseo365COAdminUID) {
-                                if ($TOLMeta['o365_SIDUpn'] ) { 
-                                    $Credential = Get-Credential -Credential $TOLMeta['o365_SIDUpn'] 
-                                } else { $Credential = Get-Credential } ;
-                            }
-                            else {
-                                if ($TOLMeta['o365_CSIDUpn']) { 
-                                    $Credential = Get-Credential -Credential $TOLMeta['o365_CSIDUpn'] 
-                                    global:o365cred = $Credential ; 
-                                } else { $Credential = Get-Credential } ;
-                            } ;
-                        }
-                        "$($CMWMeta['legacyDomain'])" {
-                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($CMWMeta['o365_SIDUpn']))" ;
-                            if (!$bUseo365COAdminUID) {
-                                if ($CMWMeta['o365_SIDUpn'] ) { 
-                                    $Credential = Get-Credential -Credential $CMWMeta['o365_SIDUpn'] 
-                                } else { $Credential = Get-Credential } ;
-                            }
-                            else {
-                                if ($CMWMeta['o365_CSIDUpn']) { 
-                                    $Credential = Get-Credential -Credential $CMWMeta['o365_CSIDUpn'] 
-                                    global:o365cred = $Credential ; 
-                                } else { $Credential = Get-Credential } ;
-                            } ;
-                        }
-                        "$($VENMeta['legacyDomain'])" {
-                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($VENMeta['o365_SIDUpn']))" ;
-                            if (!$bUseo365COAdminUID) {
-                                if ($VENMeta['o365_SIDUpn'] ) { 
-                                    $Credential = Get-Credential -Credential $VENMeta['o365_SIDUpn'] 
-                                } else { $Credential = Get-Credential } ;
-                            }
-                            else {
-                                if ($VENMeta['o365_CSIDUpn']) { 
-                                    $Credential = Get-Credential -Credential $VENMeta['o365_CSIDUpn'] 
-                                    global:o365cred = $Credential ; 
-                                } else { $Credential = Get-Credential } ;
-                            } ;
-                        }
-                        default {
-                            write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
-                            $Credential = Get-Credential
-                        } ;
+                } else {
+                    # resolve suitable creds based on $credential domain specified
+                    $credDom = ($Credential.username.split("@"))[1] ;
+                    $Metas=(get-variable *meta|?{$_.name -match '^\w{3}Meta$'}) ; 
+                    foreach ($Meta in $Metas){
+                            if( ($credDom -eq $Meta.value.legacyDomain) -OR ($credDom -eq $Meta.value.o365_TenantDomain) -OR ($credDom -eq $Meta.value.o365_OPDomain)){
+                                if($Meta.value.o365_SIDUpn ){$Credential = Get-Credential -Credential $Meta.value.o365_SIDUpn } else { $Credential = Get-Credential } ;
+                                #$TenantID = get-TenantID -Credential $Credential ;
+                                break ; 
+                            } ; 
+                    } ;
+                    if(!$Credential){
+                        write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
+                        $Credential = Get-Credential ; 
                     } ;
                 }  ;
             } ;
-            Write-Host "Connecting to AzureAD/MSOL"  ;
+            Write-Host "Connecting to MSOL"  ;
+            $pltCMSOL=[ordered]@{
+                ErrorAction='Stop';
+            }; 
             $error.clear() ;
             if (!$MFA) {
-                Connect-MsolService -Credential $Credential -ErrorAction Stop ;
+                write-verbose "EXEC:Connect-MsolService -Credential $($Credential.username) (no MFA, full credential)" ; 
+                if($Credential.username){$pltCMSOL.add('Credential',$Credential)} ;
+                #Connect-MsolService -Credential $Credential -ErrorAction Stop ;
             }
             else {
-                Connect-MsolService -ErrorAction Stop ;
+                write-verbose "EXEC:Connect-MsolService -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
+                #if($Credential.username){$pltCMSOL.add('AccountId',$Credential.username)} ;
+                #Connect-MsolService -ErrorAction Stop ;
             } ;
+
+            write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Connect-MsolService w`n$(($pltCMSOL|out-string).trim())" ; 
+            TRY {
+                Connect-MsolService @pltCMSOL ; 
+            } CATCH {
+                Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                throw $_ #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+            } ; 
+
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
-            if ($?) { write-verbose -verbose:$true  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; } ;
+            if ($?) { 
+                write-verbose -verbose:$true  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; 
+            } ;
         } ;
         
     } ;
-    END {} ;
+    END {
+        write-verbose "EXEC:Get-MsolDomain" ; 
+        TRY {
+            $MSOLDoms = Get-MsolDomain ; # err indicates no authenticated connection ; 
+            $MsolCoInf = Get-MsolCompanyInformation ; 
+        } CATCH [Microsoft.Open.AzureAD16.Client.ApiException] {
+            $ErrTrpd = $_ ; 
+            Write-Warning "$((get-date).ToString('HH:mm:ss')):AzureAD Tenant Permissions Error" ; 
+            Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+            throw $ErrTrpd ; #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+        } CATCH {
+            Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+            throw $_ ; #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+        } ; 
+
+        #if connected,verify cred-specified Tenant
+        if( $msoldoms.name.contains($credO365TORSID.username.split('@')[1].tostring()) ){
+            write-verbose "(Authenticated to MSOL:$($MsolCoInf.DisplayName))" ;
+        } else { 
+            #write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+            #Disconnect-AzureAD ; 
+            throw "MSOLSERVICE IS CONNECTED TO WRONG TENANT!:$($MsolCoInf.DisplayName)" ;
+        } ;             
+    } ;
 }
 
 #*------^ Connect-MSOL.ps1 ^------
@@ -732,6 +803,7 @@ Function Disconnect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 3:03 PM 8/8/2020 rewrote to leverage AzureSession checks, without need to qry Get-AzureADTenantDetail (trying to avoid sporadic VEN AAD 'Forbidden' errors)
     * 3:24 PM 8/6/2020 added CATCH block for AzureAD perms errors seeing on one tenant, also shifted only the AAD cmdlets into TRY, to isolate errs
     * 5:17 PM 8/5/2020 strong-typed Credential;added verbose outputs, try/catch, and catch targeting unauthenticated status, added missing Disconnect-AzureAD (doh)
     * 3:15 PM 7/27/2020 init vers
@@ -758,6 +830,7 @@ Function Disconnect-AAD {
             $sTitleBarTag="AAD" ;
             $error.clear() ;
             TRY {
+                <# old code
                 write-verbose "Checking for existing AzureADTenantDetail (AAD connection)" ; 
                 $AADTenDtl = Get-AzureADTenantDetail ; 
                 if($AADTenDtl){
@@ -766,6 +839,21 @@ Function Disconnect-AAD {
                     write-verbose "Remove-PSTitleBar -Tag $($sTitleBarTag)" ; 
                     Remove-PSTitleBar -Tag $sTitleBarTag ; 
                 } else { write-host "(No existing AAD tenant connection)" } ;
+                #>
+                # shift to AzureSession token checks
+                $token = get-AADToken -verbose:$($verbose) ;
+                if( ($null -eq $token) -OR ($token.count -eq 0)){
+                    # not connected/authenticated
+                    #Connect-AzureAD -TenantId $TenantID -Credential $Credential ;
+                    #throw "" # gen an error to dump into generic CATCH block
+                } else {
+                    write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ;
+                    $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).TenantID  -verbose:$($verbose) ; 
+                    write-host "(disconnect-AzureAD from:$($TokenTag))" ;
+                    disconnect-AzureAD ; 
+                    write-verbose "Remove-PSTitleBar -Tag $($sTitleBarTag)" ; 
+                    Remove-PSTitleBar -Tag $sTitleBarTag ; 
+                } ; 
             } CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException]{
                 write-host "(No existing AAD tenant connection)"
             } CATCH [Microsoft.Open.AzureAD16.Client.ApiException] {
@@ -1078,6 +1166,85 @@ Function get-AADLastSync {
 }
 
 #*------^ get-AADLastSync.ps1 ^------
+
+#*------v get-AADToken.ps1 v------
+function get-AADToken {
+    <#
+    .SYNOPSIS
+    get-AADToken - Retrieve and summarize [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens
+    .NOTES
+    Version     : 1.0.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-08-08
+    FileName    : get-AADToken
+    License     : MIT License
+    Copyright   : (c) 2020 Todd Kadrie
+    Github      : https://github.com/tostka/verb-aad
+    REVISIONS
+    * 12:21 PM 8/8/2020 init
+    .DESCRIPTION
+    get-AADToken - Retrieve and summarize [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens
+    .EXAMPLE
+    $token = get-AADToken ; 
+    if( ($null -eq $token) -OR ($token.count -eq 0)){
+        # not connected/authenticated
+        Connect-AzureAD ; 
+    } else { 
+        write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+    } ; 
+    Retrieve and evaluate status of AzureSession token
+    .LINK
+    https://github.com/tostka/verb-aad
+    #>
+    [CmdletBinding()] 
+    Param([Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID) ;
+    BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
+    PROCESS {
+        $token = $false ;
+        $error.clear() ;
+        TRY {
+            $token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens ; 
+        } CATCH [System.Management.Automation.RuntimeException] {
+            # pre connect it throws this
+            <#
+                Unable to find type [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession].
+                At line:1 char:10
+                + $token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::Access ...
+                +          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                    + CategoryInfo          : InvalidOperation: (Microsoft.Open....ry.AzureSession:TypeName) [], RuntimeException
+                    + FullyQualifiedErrorId : TypeNotFound
+            #>
+            <#Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+            Exit #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+            #>
+            write-verbose "(No authenticated connection found)"
+            #$token = $false ; 
+        } CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException] {
+            # reflects unauthenticated
+            <#
+                At line:2 char:11
+            +  $myVar = Get-AzureADTenantDetail
+            +           ~~~~~~~~~~~~~~~~~~~~~~~
+                + CategoryInfo          : NotSpecified: (:) [Get-AzureADTenantDetail], AadNeedAuthenticationException
+                + FullyQualifiedErrorId : Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException,Microsoft.Open.AzureAD16.PowerShell.GetTenantDetails 
+            #>
+            write-verbose "(requires AAD authentication)"
+        } CATCH {
+            Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+            Exit #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+        } ;  
+    } ; 
+    END{ 
+        if($token.count -gt 1){
+            write-verbose "(returning $(($token|measure).count) tokens)" ; 
+        } ; 
+        $token | Write-Output 
+    } ;
+}
+
+#*------^ get-AADToken.ps1 ^------
 
 #*------v get-AADTokenHeaders.ps1 v------
 Function get-AADTokenHeaders {
@@ -1518,14 +1685,14 @@ Function get-AADLastSync {
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADCertToken,get-AADLastSync,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,get-AADLastSync -Alias *
+Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADCertToken,get-AADLastSync,get-AADToken,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,get-AADLastSync -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU7LeNi6V5sOOTcCnFQImEhRmM
-# laugggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUyq7O8E73iEobKYZH8Mr6Vdwj
+# dg2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1540,9 +1707,9 @@ Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,ca
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSifnse
-# XJJCOMcRKJMKVDvFMZjO6zANBgkqhkiG9w0BAQEFAASBgKg7nFJtyRbJyHhRr5NN
-# fC3v/Qg+3tzc5pOWuPTpT66UNeq6S03pXuv8oEA7US9v8qDAIHyHWU6MD6MB49d/
-# Jb8NXydsIeHmTvb+G4INpNgjqGS/uqI+rXtc17IyCrOlgDmPnBeekA7oUd+sC13A
-# k8K46QRW+OvwyFrFqXdlXArN
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQe2RbX
+# Zz0gLfaz9aXp7POnTs7qPTANBgkqhkiG9w0BAQEFAASBgEEkBZgO68VbA6PH0yP2
+# 0/AEnliGP2tyS17RnfQ1ADmjx/Cj6abxmE3wFPzW0G5sAYQrPGTahok3Pu2eikrj
+# zwxgCTtne26kFwwb7FfBRFn9Yt43JhVOGySnh92Oj47YIkhIRBI4oFAyMCD/I7g6
+# LXqBsBla8vAhuE/eFrbOL/lB
 # SIG # End signature block

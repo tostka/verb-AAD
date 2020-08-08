@@ -18,6 +18,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 3:40 PM 8/8/2020 updated to match caad's options, aside from msol's lack of AzureSession token support - so this uses Get-MsolDomain & Get-MsolCompanyInformation to handle the new post-connect cred->tenant match validation
     * 5:17 PM 8/5/2020 strong-typed Credential, swapped in get-TenantTag()
     * 1:28 PM 7/27/2020 restored deleted file (was fat-thumbed 7/22)
     * 5:06 PM 7/21/2020 added VEN supp
@@ -38,6 +39,7 @@ Function Connect-MSOL {
     Connect-MSOL - Establish authenticated session to AzureAD/MSOL, also works as reconnect-AAD, there is no disConnect-MSOL (have to close Powershell to clear it).
     No need for separate reConnect-MSOL - this self tests for connection, and reconnects if it's missing.
     No support for disConnect-MSOL, because MSOL has no command to do it, but closing powershell.
+    Also an msol connectoin doesn't yield the same token - (([Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens).AccessToken) | fl * ;  - AAD does, though an AAD token can be used to authenticate (through -MsGraphAccessToken or -AdGraphAccessToken?)
     .PARAMETER  ProxyEnabled
     Proxyied connection support
     .PARAMETER CommandPrefix
@@ -62,6 +64,7 @@ Function Connect-MSOL {
     BEGIN { $verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
         $MFA = get-TenantMFARequirement -Credential $Credential ;
+        # msol doesn't support the -TenantID, it's imputed from the credential
 
         # 12:10 PM 3/15/2017 disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
         #if(!$CommandPrefix){ $CommandPrefix='aad' ; } ;
@@ -77,88 +80,80 @@ Function Connect-MSOL {
         catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
             Write-Verbose "Not connected to MSOnline. Now connecting." ;
             if (!$Credential) {
-                if (test-path function:\get-admincred) {
+                if(get-command -Name get-admincred) {
                     Get-AdminCred ;
-                }
-                else {
-                    switch ($env:USERDOMAIN) {
-                        "$($TORMeta['legacyDomain'])" {
-                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($TORMeta['o365_SIDUpn']))" ;
-                            if (!$bUseo365COAdminUID) {
-                                if ($TORMeta['o365_SIDUpn'] ) { 
-                                    $Credential = Get-Credential -Credential $TORMeta['o365_SIDUpn'] 
-                                } else { $Credential = Get-Credential } ;
-                            }
-                            else {
-                                if ($TORMeta['o365_CSIDUpn']) { 
-                                    $Credential = Get-Credential -Credential $TORMeta['o365_CSIDUpn'] 
-                                    global:o365cred = $Credential ; 
-                                } else { $Credential = Get-Credential } ;
-                            } ;
-                        }
-                        "$($TOLMeta['legacyDomain'])" {
-                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($TOLMeta['o365_SIDUpn']))" ;
-                            if (!$bUseo365COAdminUID) {
-                                if ($TOLMeta['o365_SIDUpn'] ) { 
-                                    $Credential = Get-Credential -Credential $TOLMeta['o365_SIDUpn'] 
-                                } else { $Credential = Get-Credential } ;
-                            }
-                            else {
-                                if ($TOLMeta['o365_CSIDUpn']) { 
-                                    $Credential = Get-Credential -Credential $TOLMeta['o365_CSIDUpn'] 
-                                    global:o365cred = $Credential ; 
-                                } else { $Credential = Get-Credential } ;
-                            } ;
-                        }
-                        "$($CMWMeta['legacyDomain'])" {
-                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($CMWMeta['o365_SIDUpn']))" ;
-                            if (!$bUseo365COAdminUID) {
-                                if ($CMWMeta['o365_SIDUpn'] ) { 
-                                    $Credential = Get-Credential -Credential $CMWMeta['o365_SIDUpn'] 
-                                } else { $Credential = Get-Credential } ;
-                            }
-                            else {
-                                if ($CMWMeta['o365_CSIDUpn']) { 
-                                    $Credential = Get-Credential -Credential $CMWMeta['o365_CSIDUpn'] 
-                                    global:o365cred = $Credential ; 
-                                } else { $Credential = Get-Credential } ;
-                            } ;
-                        }
-                        "$($VENMeta['legacyDomain'])" {
-                            write-host -foregroundcolor yellow "PROMPTING FOR O365 CRED ($($VENMeta['o365_SIDUpn']))" ;
-                            if (!$bUseo365COAdminUID) {
-                                if ($VENMeta['o365_SIDUpn'] ) { 
-                                    $Credential = Get-Credential -Credential $VENMeta['o365_SIDUpn'] 
-                                } else { $Credential = Get-Credential } ;
-                            }
-                            else {
-                                if ($VENMeta['o365_CSIDUpn']) { 
-                                    $Credential = Get-Credential -Credential $VENMeta['o365_CSIDUpn'] 
-                                    global:o365cred = $Credential ; 
-                                } else { $Credential = Get-Credential } ;
-                            } ;
-                        }
-                        default {
-                            write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
-                            $Credential = Get-Credential
-                        } ;
+                } else {
+                    # resolve suitable creds based on $credential domain specified
+                    $credDom = ($Credential.username.split("@"))[1] ;
+                    $Metas=(get-variable *meta|?{$_.name -match '^\w{3}Meta$'}) ; 
+                    foreach ($Meta in $Metas){
+                            if( ($credDom -eq $Meta.value.legacyDomain) -OR ($credDom -eq $Meta.value.o365_TenantDomain) -OR ($credDom -eq $Meta.value.o365_OPDomain)){
+                                if($Meta.value.o365_SIDUpn ){$Credential = Get-Credential -Credential $Meta.value.o365_SIDUpn } else { $Credential = Get-Credential } ;
+                                #$TenantID = get-TenantID -Credential $Credential ;
+                                break ; 
+                            } ; 
+                    } ;
+                    if(!$Credential){
+                        write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
+                        $Credential = Get-Credential ; 
                     } ;
                 }  ;
             } ;
-            Write-Host "Connecting to AzureAD/MSOL"  ;
+            Write-Host "Connecting to MSOL"  ;
+            $pltCMSOL=[ordered]@{
+                ErrorAction='Stop';
+            }; 
             $error.clear() ;
             if (!$MFA) {
-                Connect-MsolService -Credential $Credential -ErrorAction Stop ;
+                write-verbose "EXEC:Connect-MsolService -Credential $($Credential.username) (no MFA, full credential)" ; 
+                if($Credential.username){$pltCMSOL.add('Credential',$Credential)} ;
+                #Connect-MsolService -Credential $Credential -ErrorAction Stop ;
             }
             else {
-                Connect-MsolService -ErrorAction Stop ;
+                write-verbose "EXEC:Connect-MsolService -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
+                #if($Credential.username){$pltCMSOL.add('AccountId',$Credential.username)} ;
+                #Connect-MsolService -ErrorAction Stop ;
             } ;
+
+            write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Connect-MsolService w`n$(($pltCMSOL|out-string).trim())" ; 
+            TRY {
+                Connect-MsolService @pltCMSOL ; 
+            } CATCH {
+                Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                throw $_ #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+            } ; 
+
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
-            if ($?) { write-verbose -verbose:$true  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; } ;
+            if ($?) { 
+                write-verbose -verbose:$true  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; 
+            } ;
         } ;
         
     } ;
-    END {} ;
+    END {
+        write-verbose "EXEC:Get-MsolDomain" ; 
+        TRY {
+            $MSOLDoms = Get-MsolDomain ; # err indicates no authenticated connection ; 
+            $MsolCoInf = Get-MsolCompanyInformation ; 
+        } CATCH [Microsoft.Open.AzureAD16.Client.ApiException] {
+            $ErrTrpd = $_ ; 
+            Write-Warning "$((get-date).ToString('HH:mm:ss')):AzureAD Tenant Permissions Error" ; 
+            Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+            throw $ErrTrpd ; #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+        } CATCH {
+            Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+            throw $_ ; #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+        } ; 
+
+        #if connected,verify cred-specified Tenant
+        if( $msoldoms.name.contains($credO365TORSID.username.split('@')[1].tostring()) ){
+            write-verbose "(Authenticated to MSOL:$($MsolCoInf.DisplayName))" ;
+        } else { 
+            #write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+            #Disconnect-AzureAD ; 
+            throw "MSOLSERVICE IS CONNECTED TO WRONG TENANT!:$($MsolCoInf.DisplayName)" ;
+        } ;             
+    } ;
 }
 
 #*------^ Connect-MSOL.ps1 ^------

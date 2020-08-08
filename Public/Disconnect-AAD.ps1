@@ -18,6 +18,7 @@ Function Disconnect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 3:03 PM 8/8/2020 rewrote to leverage AzureSession checks, without need to qry Get-AzureADTenantDetail (trying to avoid sporadic VEN AAD 'Forbidden' errors)
     * 3:24 PM 8/6/2020 added CATCH block for AzureAD perms errors seeing on one tenant, also shifted only the AAD cmdlets into TRY, to isolate errs
     * 5:17 PM 8/5/2020 strong-typed Credential;added verbose outputs, try/catch, and catch targeting unauthenticated status, added missing Disconnect-AzureAD (doh)
     * 3:15 PM 7/27/2020 init vers
@@ -44,6 +45,7 @@ Function Disconnect-AAD {
             $sTitleBarTag="AAD" ;
             $error.clear() ;
             TRY {
+                <# old code
                 write-verbose "Checking for existing AzureADTenantDetail (AAD connection)" ; 
                 $AADTenDtl = Get-AzureADTenantDetail ; 
                 if($AADTenDtl){
@@ -52,6 +54,21 @@ Function Disconnect-AAD {
                     write-verbose "Remove-PSTitleBar -Tag $($sTitleBarTag)" ; 
                     Remove-PSTitleBar -Tag $sTitleBarTag ; 
                 } else { write-host "(No existing AAD tenant connection)" } ;
+                #>
+                # shift to AzureSession token checks
+                $token = get-AADToken -verbose:$($verbose) ;
+                if( ($null -eq $token) -OR ($token.count -eq 0)){
+                    # not connected/authenticated
+                    #Connect-AzureAD -TenantId $TenantID -Credential $Credential ;
+                    #throw "" # gen an error to dump into generic CATCH block
+                } else {
+                    write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ;
+                    $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).TenantID  -verbose:$($verbose) ; 
+                    write-host "(disconnect-AzureAD from:$($TokenTag))" ;
+                    disconnect-AzureAD ; 
+                    write-verbose "Remove-PSTitleBar -Tag $($sTitleBarTag)" ; 
+                    Remove-PSTitleBar -Tag $sTitleBarTag ; 
+                } ; 
             } CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException]{
                 write-host "(No existing AAD tenant connection)"
             } CATCH [Microsoft.Open.AzureAD16.Client.ApiException] {
