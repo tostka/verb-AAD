@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.24
+Version     : 1.0.27
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -39,6 +39,50 @@ $script:ModuleVersion = (Import-PowerShellDataFile -Path (get-childitem $script:
 #*======v FUNCTIONS v======
 
 
+
+#*------v Add-ADALType.ps1 v------
+function Add-ADALType {
+    <#
+    .SYNOPSIS
+    Add-ADALType - Path & Load the AzureAD 'Microsoft.IdentityModel.Clients.ActiveDirectory.dll'
+    .NOTES
+    Version     : 1.0.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-08-08
+    FileName    : Add-ADALType
+    License     : (non asserted)
+    Copyright   : (non asserted)
+    Github      : https://github.com/tostka/verb-aad
+    REVISIONS
+    * 12:21 PM 8/8/2020 init
+    .DESCRIPTION
+    Add-ADALType - Path & Load the AzureAD 'Microsoft.IdentityModel.Clients.ActiveDirectory.dll'
+    Lifted from [PowerShell Gallery | CloudConnect.psm1 1.0.0](https://www.powershellgallery.com/packages/CloudConnect/1.0.0/Content/CloudConnect.psm1)
+    .EXAMPLE
+    $token = Add-ADALType ; 
+    if( ($null -eq $token) -OR ($token.count -eq 0)){
+        # not connected/authenticated
+        Connect-AzureAD ; 
+    } else { 
+        write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+    } ; 
+    Retrieve and evaluate status of AzureSession token
+    .LINK
+    https://github.com/tostka/verb-aad
+    #>
+    [CmdletBinding()] 
+    Param([Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID) ;
+    BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
+    PROCESS {
+        $path = join-path (split-path (Get-Module azuread -ListAvailable | Where-Object { $_.Version -eq '2.0.2.16' }).Path -parent) 'Microsoft.IdentityModel.Clients.ActiveDirectory.dll' ; 
+        Add-Type -Path $path ; 
+    } ; 
+    END{} ;
+}
+
+#*------^ Add-ADALType.ps1 ^------
 
 #*------v Build-AADSignErrorsHash.ps1 v------
 function Build-AADSignErrorsHash {
@@ -202,42 +246,42 @@ function Build-AADSignErrorsHash {
 #*------^ Build-AADSignErrorsHash.ps1 ^------
 
 #*------v caadCMW.ps1 v------
-function caadCMW {Connect-AAD -cred $credO365CMWCSID}
+function caadCMW {Connect-AAD -cred $credO365CMWCSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ caadCMW.ps1 ^------
 
 #*------v caadTOL.ps1 v------
-function caadtol {Connect-AAD -cred $credO365TOLSID}
+function caadtol {Connect-AAD -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ caadTOL.ps1 ^------
 
 #*------v caadTOR.ps1 v------
-function caadTOR {Connect-AAD -cred $credO365TORSID}
+function caadTOR {Connect-AAD -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ caadTOR.ps1 ^------
 
 #*------v caadVEN.ps1 v------
-function caadVEN {Connect-AAD -cred $credO365VENCSID}
+function caadVEN {Connect-AAD -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ caadVEN.ps1 ^------
 
 #*------v cmsolCMW.ps1 v------
-function cmsolcmw {Connect-MSOL -cred $credO365CMWCSID}
+function cmsolcmw {Connect-MSOL -cred $credO365CMWCSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ cmsolCMW.ps1 ^------
 
 #*------v cmsolTOL.ps1 v------
-function cmsolTOL {Connect-MSOL -cred $credO365TOLSID}
+function cmsolTOL {Connect-MSOL -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ cmsolTOL.ps1 ^------
 
 #*------v cmsolTOR.ps1 v------
-function cmsolTOR {Connect-MSOL -cred $credO365TORSID}
+function cmsolTOR {Connect-MSOL -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ cmsolTOR.ps1 ^------
 
 #*------v cmsolVEN.ps1 v------
-function cmsolVEN {Connect-MSOL -cred $credO365VENCSID}
+function cmsolVEN {Connect-MSOL -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ cmsolVEN.ps1 ^------
 
@@ -1634,6 +1678,172 @@ Function get-MsolUserLicenseDetails {
 
 #*------^ get-MsolUserLicenseDetails.ps1 ^------
 
+#*------v Get-ServiceToken.ps1 v------
+function Get-ServiceToken {
+    <#
+    .SYNOPSIS
+    Get-ServiceToken - Get a token for a given Microsoft Cloud Service 
+    .NOTES
+    Version     : 1.0.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-08-08
+    FileName    : Get-ServiceToken
+    License     : MIT License
+    Copyright   : (non asserted)
+    Github      : https://github.com/tostka/verb-aad
+    REVISIONS
+    * 12:21 PM 8/8/2020 init
+    .DESCRIPTION
+    Get-ServiceToken - Get a token for a given Microsoft Cloud Service 
+    Returns an ADAL token for a given Microsoft Cloud Service
+    Will attempt to acquire the token silently (refresh) if possible 
+    Lifted from [PowerShell Gallery | CloudConnect.psm1 1.0.0](https://www.powershellgallery.com/packages/CloudConnect/1.0.0/Content/CloudConnect.psm1)
+    # References https://github.com/AzureAD/azure-activedirectory-library-for-dotnet/wiki/AcquireTokenSilentAsync-using-a-cached-token
+     https://github.com/AzureAD/azure-activedirectory-library-for-dotnet/tree/adalv3/dev
+    .OUTPUTS
+    Returns a token object for the requested cloud service
+    .EXAMPLE
+    Get-ServiceToken -Service EXO
+    Returns a token for the Exchange Online Service.
+    .LINK
+    https://github.com/Canthv0/CloudAuthModule 
+    .LINK
+    https://github.com/tostka/verb-aad
+    #>
+    [CmdletBinding()] 
+    Param(
+        # Parameter help description
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("EXO","AzureGraph")]
+        [string]
+        $Service
+    ) ;
+    BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
+    PROCESS {
+        # Ensure our ADAL types are loaded and availble
+        Add-ADALType ; 
+
+        switch ($Service) {
+            exo {
+                # EXO Powershell Client ID
+                $clientId = "a0c73c16-a7e3-4564-9a95-2bdf47383716"  ; 
+                # Set redirect URI for PowerShell
+                $redirectUri = "urn:ietf:wg:oauth:2.0:oob" ; 
+                # Set Resource URI to EXO endpoint
+                $resourceAppIdURI = "https://outlook.office365.com" ; 
+                # Set Authority to Azure AD Tenant
+                $authority = "https://login.windows.net/common" ; 
+            } ; 
+            AzureGraph {
+                # Azure PowerShell Client ID
+                $clientId = "1950a258-227b-4e31-a9cf-717495945fc2" ; 
+                # Set redirect URI for PowerShell
+                $redirectUri = "urn:ietf:wg:oauth:2.0:oob" ; 
+                # Set Resource URI to EXO endpoint
+                $resourceAppIdURI = "https://graph.windows.net" ; 
+                # Set Authority to Azure AD Tenant
+                $authority = "https://login.windows.net/common"             ; 
+            } ; 
+            Default { Write-Error "Service Not Implemented" -ErrorAction Stop } ; 
+        } ; 
+
+        # Create AuthenticationContext tied to Azure AD Tenant
+        $authContext = New-Object "Microsoft.IdentityModel.Clients.ActiveDirectory.AuthenticationContext" -ArgumentList $authority ; 
+
+        # Create platform Options, we want it to prompt if it needs to.
+        $platformParameters = New-Object "Microsoft.IdentityModel.Clients.ActiveDirectory.PlatformParameters" -ArgumentList "Always" ; 
+
+        # Acquire token, this will place it in the token cache
+        # $authContext.AcquireTokenAsync($resourceAppIdURI, $clientId, $redirectUri, $platformParameters)
+
+        Write-Debug "Looking in token cache" ; 
+        $Result = $authContext.AcquireTokenSilentAsync($resourceAppIdURI, $clientId) ; 
+
+        while ($result.IsCompleted -ne $true) { Start-Sleep -Milliseconds 500; write-debug "silent sleep" }
+
+        # Check if we failed to get the token
+        if (!($Result.IsFaulted -eq $false)) {
+             
+            Write-Debug "Acquire token silent failed" ; 
+            switch ($Result.Exception.InnerException.ErrorCode) {
+                failed_to_acquire_token_silently { 
+                    # do nothing since we pretty much expect this to fail
+                    Write-Information "Cache miss, asking for credentials" ; 
+                    $Result = $authContext.AcquireTokenAsync($resourceAppIdURI, $clientId, $redirectUri, $platformParameters) ; 
+                    
+                    while ($result.IsCompleted -ne $true) { Start-Sleep -Milliseconds 500; write-debug "sleep" }
+                } ; 
+                multiple_matching_tokens_detected {
+                    # we could clear the cache here since we don't have a UPN, but we are just going to move on to prompting
+                    Write-Information "Multiple matching entries found, asking for credentials" ; 
+                    $Result = $authContext.AcquireTokenAsync($resourceAppIdURI, $clientId, $redirectUri, $platformParameters) ; 
+                    
+                    while ($result.IsCompleted -ne $true) { Start-Sleep -Milliseconds 500; write-debug "sleep" }
+                } ; 
+                Default { Write-Error -Message "Unknown Token Error $Result.Exception.InnerException.ErrorCode" -ErrorAction Stop } ; 
+            } ; 
+        }    ; 
+
+        Return $Result ; 
+    } ;  # PROC-E
+    END{} ;
+}
+
+#*------^ Get-ServiceToken.ps1 ^------
+
+#*------v Get-TokenCache.ps1 v------
+function Get-TokenCache {
+    <#
+    .SYNOPSIS
+    Get-TokenCache - Returns the current contents of the token cache 
+    .NOTES
+    Version     : 1.0.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-08-08
+    FileName    : Get-TokenCache
+    License     : (non asserted)
+    Copyright   : (non asserted)
+    Github      : https://github.com/tostka/verb-aad
+    REVISIONS
+    * 12:21 PM 8/8/2020 init
+    .DESCRIPTION
+    Get-TokenCache - Returns the current contents of the token cache 
+    Returns basic properties about the objects currently in the token cache.
+    Returns the local time that the token will expire. 
+    Lifted from [PowerShell Gallery | CloudConnect.psm1 1.0.0](https://www.powershellgallery.com/packages/CloudConnect/1.0.0/Content/CloudConnect.psm1)
+    .OUTPUTS
+    List of the information in the token cache. 
+    .EXAMPLE
+    Get-TokenCache
+    Displays the information currently in the token cache. 
+    .LINK
+    https://github.com/Canthv0/CloudAuthModule 
+    .LINK
+    https://github.com/tostka/verb-aad
+    #>
+    [CmdletBinding()] 
+    Param() ;
+    BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
+    PROCESS {
+        # Ensure our ADAL types are loaded and availble
+Add-ADALType ;
+        $cache = [Microsoft.IdentityModel.Clients.ActiveDirectory.TokenCache]::DefaultShared ;
+        if ($full){
+            Return $Cache.ReadItems() ;
+        } ;
+        else {
+            $cache.ReadItems() | Select-Object DisplayableId, Authority, ClientId, Resource, @{Name = "ExpiresOn"; Expression = { $_.ExpiresOn.localdatetime } } ;
+        } ;
+    } ; 
+    END{} ;
+}
+
+#*------^ Get-TokenCache.ps1 ^------
+
 #*------v Wait-AADSync.ps1 v------
 Function get-AADLastSync {
   <#
@@ -1685,5 +1895,5 @@ Function get-AADLastSync {
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADCertToken,get-AADLastSync,get-AADToken,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,get-AADLastSync -Alias *
+Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADCertToken,get-AADLastSync,get-AADToken,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,get-AADLastSync -Alias *
 

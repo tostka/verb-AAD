@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.28
+Version     : 1.0.27
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -246,42 +246,42 @@ function Build-AADSignErrorsHash {
 #*------^ Build-AADSignErrorsHash.ps1 ^------
 
 #*------v caadCMW.ps1 v------
-function caadCMW {Connect-AAD -cred $credO365CMWCSID -Verbose:($VerbosePreference -eq 'Continue') ; }
+function caadCMW {Connect-AAD -cred $credO365CMWCSID}
 
 #*------^ caadCMW.ps1 ^------
 
 #*------v caadTOL.ps1 v------
-function caadtol {Connect-AAD -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue') ; }
+function caadtol {Connect-AAD -cred $credO365TOLSID}
 
 #*------^ caadTOL.ps1 ^------
 
 #*------v caadTOR.ps1 v------
-function caadTOR {Connect-AAD -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; }
+function caadTOR {Connect-AAD -cred $credO365TORSID}
 
 #*------^ caadTOR.ps1 ^------
 
 #*------v caadVEN.ps1 v------
-function caadVEN {Connect-AAD -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; }
+function caadVEN {Connect-AAD -cred $credO365VENCSID}
 
 #*------^ caadVEN.ps1 ^------
 
 #*------v cmsolCMW.ps1 v------
-function cmsolcmw {Connect-MSOL -cred $credO365CMWCSID -Verbose:($VerbosePreference -eq 'Continue') ; }
+function cmsolcmw {Connect-MSOL -cred $credO365CMWCSID}
 
 #*------^ cmsolCMW.ps1 ^------
 
 #*------v cmsolTOL.ps1 v------
-function cmsolTOL {Connect-MSOL -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue') ; }
+function cmsolTOL {Connect-MSOL -cred $credO365TOLSID}
 
 #*------^ cmsolTOL.ps1 ^------
 
 #*------v cmsolTOR.ps1 v------
-function cmsolTOR {Connect-MSOL -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; }
+function cmsolTOR {Connect-MSOL -cred $credO365TORSID}
 
 #*------^ cmsolTOR.ps1 ^------
 
 #*------v cmsolVEN.ps1 v------
-function cmsolVEN {Connect-MSOL -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; }
+function cmsolVEN {Connect-MSOL -cred $credO365VENCSID}
 
 #*------^ cmsolVEN.ps1 ^------
 
@@ -1901,8 +1901,8 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUC79irFA7Lz8kXrKT/SChdROw
-# M/igggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUIDh6CA//stmZAvjB1HRJHNKF
+# Rs2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1917,9 +1917,9 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTd0bgX
-# AIq4g/1ds/RfwquWRx7O5zANBgkqhkiG9w0BAQEFAASBgJ/Z+aES6f75xTGnmgXr
-# FRp1HVRKDt2VBf6f1+LldCMI9fGQGagVKBAfnG0z0zHzPG06CPCFeOEJbtdXLNx0
-# yCz7AfpO2EfYVp61rGnjXRSD5r4yVyHT0XwxcziKxk3/2HsUa8z5jTm5m8CpR+Uy
-# agv3wzxv5Rngo3nhDqEFqzRw
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBS7HKM/
+# fVympvVS/vBgeQiupOZjCTANBgkqhkiG9w0BAQEFAASBgG3xtp3pdEJKH4UNgZ3f
+# p+Z/QLye2YUibUlhwMZc7FZGVLfmaj9PhJH2F1j2Usp1Eb+r4KdpVfB21WtXiCWL
+# T28PKO+QRnB33UjjfhHIB1RyrBmOgOoksdXn3F6CySuNhKjkZ8CbgXX1ty9XFmmX
+# 0OppwNl+JviP5C8RfBWQefYe
 # SIG # End signature block
