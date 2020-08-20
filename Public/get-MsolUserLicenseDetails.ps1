@@ -10,9 +10,12 @@ Function get-MsolUserLicenseDetails {
     Based on work by :Brad Wyatt
     Website: https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     REVISIONS   :
+    * 1:24 PM 8/20/2020 added a raft from the guest work, including collab-related items fr https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference
     * 5:17 PM 8/5/2020 strong-typed Credential
     * 4:22 PM 7/24/2020 added verbose
     * 8:50 PM 1/12/2020 expanded aliases
+    # 11:13 AM 1/9/2019: SPE_F1 isn't in thlist, 'SPE'=="Secure Productive Enterprise (SPE) Licensing Bundle"
+    # 11:42 AM 1/9/2019 added "MS_TEAMS_IW"      (portal displayname used below)
     * 12:00 PM 1/9/2019 replaced broken aggreg with simpler cobj -prop $hash set, now returns proper mult lics
     * 11:42 AM 1/9/2019 added "MS_TEAMS_IW"      (portal displayname used below)
     * 11:33 AM 1/9/2019 add SPE_F1 lic spec, and export the aggreg, NewObject02 was never more than a single lic (eg. support mult lics)
@@ -47,15 +50,13 @@ Function get-MsolUserLicenseDetails {
         [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage = "Debugging Flag [-showDebug]")][switch] $showDebug
     ) ;
-    $verbose = ($VerbosePreference -eq "Continue") ; 
+    $verbose = ($VerbosePreference -eq "Continue") ;
     $Retries = 4 ;
     $RetrySleep = 5 ;
     #Connect-AAD ;
     # 2:45 PM 11/15/2019
     Connect-Msol ;
 
-    # 11:13 AM 1/9/2019: SPE_F1 isn't in thlist, 'SPE'=="Secure Productive Enterprise (SPE) Licensing Bundle"
-    # 11:42 AM 1/9/2019 added "MS_TEAMS_IW"      (portal displayname used below)
     # [Product names and service plan identifiers for licensing in Azure Active Directory | Microsoft Docs](https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference)
 
     <# whatis an F1 lic: Office 365 F1 is designed to enable Firstline Workers to do their best work.
@@ -66,122 +67,142 @@ Function get-MsolUserLicenseDetails {
 
     # updating sort via text: gc c:\tmp\list.txt | sort ;
     $Sku = @{
+        "AAD_BASIC"                          = "Azure Active Directory Basic"
+        "AAD_PREMIUM"                        = "Azure Active Directory Premium"
+        "ATA"                                = "Advanced Threat Analytics"
+        "ATP_ENTERPRISE"                     = "Exchange Online Advanced Threat Protection"
+        "BI_AZURE_P1"                        = "Power BI Reporting and Analytics"
+        "CRMIUR"                             = "CMRIUR"
+        "CRMSTANDARD"                        = "Microsoft Dynamics CRM Online Professional"
+        "DESKLESSPACK"                       = "Office 365 (Plan K1)"
+        "DESKLESSPACK_GOV"                   = "Microsoft Office 365 (Plan K1) for Government"
+        "DESKLESSWOFFPACK"                   = "Office 365 (Plan K2)"
+        "DYN365_ENTERPRISE_P1_IW"            = "Dynamics 365 P1 Trial for Information Workers"
+        "DYN365_ENTERPRISE_PLAN1"            = "Dynamics 365 Customer Engagement Plan Enterprise Edition"
+        "DYN365_ENTERPRISE_SALES"            = "Dynamics Office 365 Enterprise Sales"
+        "DYN365_ENTERPRISE_TEAM_MEMBERS"     = "Dynamics 365 For Team Members Enterprise Edition"
+        "DYN365_FINANCIALS_BUSINESS_SKU"     = "Dynamics 365 for Financials Business Edition"
+        "DYN365_FINANCIALS_TEAM_MEMBERS_SKU" = "Dynamics 365 for Team Members Business Edition"
+        "ECAL_SERVICES"                      = "ECAL"
+        "EMS"                                = "Enterprise Mobility Suite"
+        "ENTERPRISEPACK"                     = "Enterprise Plan E3"
+        "ENTERPRISEPACK_B_PILOT"             = "Office 365 (Enterprise Preview)"
+        "ENTERPRISEPACK_FACULTY"             = "Office 365 (Plan A3) for Faculty"
+        "ENTERPRISEPACK_GOV"                 = "Microsoft Office 365 (Plan G3) for Government"
+        "ENTERPRISEPACK_STUDENT"             = "Office 365 (Plan A3) for Students"
+        "ENTERPRISEPACKLRG"                  = "Enterprise Plan E3"
+        "ENTERPRISEPREMIUM"                  = "Enterprise E5 (with Audio Conferencing)"
+        "ENTERPRISEPREMIUM_NOPSTNCONF"       = "Enterprise E5 (without Audio Conferencing)"
+        "ENTERPRISEWITHSCAL"                 = "Enterprise Plan E4"
+        "ENTERPRISEWITHSCAL_FACULTY"         = "Office 365 (Plan A4) for Faculty"
+        "ENTERPRISEWITHSCAL_GOV"             = "Microsoft Office 365 (Plan G4) for Government"
+        "ENTERPRISEWITHSCAL_STUDENT"         = "Office 365 (Plan A4) for Students"
+        "EOP_ENTERPRISE_FACULTY"             = "Exchange Online Protection for Faculty"
+        "EQUIVIO_ANALYTICS"                  = "Office 365 Advanced eDiscovery"
+        "ESKLESSWOFFPACK_GOV"                = "Microsoft Office 365 (Plan K2) for Government"
+        "EXCHANGE_L_STANDARD"                = "Exchange Online (Plan 1)"
+        "EXCHANGE_S_ARCHIVE_ADDON_GOV"       = "Exchange Online Archiving"
+        "EXCHANGE_S_DESKLESS"                = "Exchange Online Kiosk"
+        "EXCHANGE_S_DESKLESS_GOV"            = "Exchange Kiosk"
+        "EXCHANGE_S_ENTERPRISE_GOV"          = "Exchange Plan 2G"
+        "EXCHANGE_S_ESSENTIALS"              = "Exchange Online Essentials   "
+        "EXCHANGE_S_STANDARD_MIDMARKET"      = "Exchange Online (Plan 1)"
+        "EXCHANGEARCHIVE_ADDON"              = "Exchange Online Archiving For Exchange Online"
+        "EXCHANGEDESKLESS"                   = "Exchange Online Kiosk"
+        "EXCHANGEENTERPRISE"                 = "Exchange Online Plan 2"
+        "EXCHANGEENTERPRISE_GOV"             = "Microsoft Office 365 Exchange Online (Plan 2) only for Government"
+        "EXCHANGEESSENTIALS"                 = "Exchange Online Essentials"
+        "EXCHANGESTANDARD"                   = "Office 365 Exchange Online Only"
+        "EXCHANGESTANDARD_GOV"               = "Microsoft Office 365 Exchange Online (Plan 1) only for Government"
+        "EXCHANGESTANDARD_STUDENT"           = "Exchange Online (Plan 1) for Students"
+        "FLOW_FREE"                          = "Microsoft Flow Free"
+        "FLOW_P1"                            = "Microsoft Flow Plan 1"
+        "FLOW_P2"                            = "Microsoft Flow Plan 2"
+        "INTUNE_A"                           = "Windows Intune Plan A"
+        "LITEPACK"                           = "Office 365 (Plan P1)"
+        "LITEPACK_P2"                        = "Office 365 Small Business Premium"
+        "M365_F1"                            = "Microsoft 365 F1"
+        "MCOEV"                              = "Microsoft Phone System"
+        "MCOLITE"                            = "Lync Online (Plan 1)"
+        "MCOMEETACPEA"                       = "Pay Per Minute Audio Conferencing"
+        "MCOMEETADD"                         = "Audio Conferencing"
+        "MCOMEETADV"                         = "PSTN conferencing"
+        "MCOPSTN1"                           = "Domestic Calling Plan (3000 min US / 1200 min EU plans)"
+        "MCOPSTN2"                           = "International Calling Plan"
+        "MCOPSTN5"                           = "Domestic Calling Plan (120 min calling plan)"
+        "MCOPSTN6"                           = "Domestic Calling Plan (240 min calling plan) Note: Limited Availability"
+        "MCOPSTNC"                           = "Communications Credits"
+        "MCOPSTNPP"                          = "Communications Credits"
+        "MCOSTANDARD"                        = "Skype for Business Online Standalone Plan 2"
+        "MCOSTANDARD_GOV"                    = "Lync Plan 2G"
+        "MCOSTANDARD_MIDMARKET"              = "Lync Online (Plan 1)"
+        "MFA_PREMIUM"                        = "Azure Multi-Factor Authentication"
+        "MIDSIZEPACK"                        = "Office 365 Midsize Business"
+        "MS_TEAMS_IW"                        = "Microsoft Teams Trial"
+        "O365_BUSINESS"                      = "Office 365 Business"
         "O365_BUSINESS_ESSENTIALS"           = "Office 365 Business Essentials"
         "O365_BUSINESS_PREMIUM"              = "Office 365 Business Premium"
-        "DESKLESSPACK"                       = "Office 365 (Plan K1)"
-        "DESKLESSWOFFPACK"                   = "Office 365 (Plan K2)"
-        "LITEPACK"                           = "Office 365 (Plan P1)"
-        "EXCHANGESTANDARD"                   = "Office 365 Exchange Online Only"
-        "STANDARDPACK"                       = "Enterprise Plan E1"
-        "STANDARDWOFFPACK"                   = "Office 365 (Plan E2)"
-        "ENTERPRISEPACK"                     = "Enterprise Plan E3"
-        "ENTERPRISEPACKLRG"                  = "Enterprise Plan E3"
-        "ENTERPRISEWITHSCAL"                 = "Enterprise Plan E4"
-        "STANDARDPACK_STUDENT"               = "Office 365 (Plan A1) for Students"
-        "STANDARDWOFFPACKPACK_STUDENT"       = "Office 365 (Plan A2) for Students"
-        "ENTERPRISEPACK_STUDENT"             = "Office 365 (Plan A3) for Students"
-        "ENTERPRISEWITHSCAL_STUDENT"         = "Office 365 (Plan A4) for Students"
-        "STANDARDPACK_FACULTY"               = "Office 365 (Plan A1) for Faculty"
-        "STANDARDWOFFPACKPACK_FACULTY"       = "Office 365 (Plan A2) for Faculty"
-        "ENTERPRISEPACK_FACULTY"             = "Office 365 (Plan A3) for Faculty"
-        "ENTERPRISEWITHSCAL_FACULTY"         = "Office 365 (Plan A4) for Faculty"
-        "ENTERPRISEPACK_B_PILOT"             = "Office 365 (Enterprise Preview)"
-        "STANDARD_B_PILOT"                   = "Office 365 (Small Business Preview)"
-        "VISIOCLIENT"                        = "Visio Pro Online"
+        "OFFICE_PRO_PLUS_SUBSCRIPTION_SMBIZ" = "Office ProPlus"
+        "OFFICESUBSCRIPTION"                 = "Office ProPlus"
+        "OFFICESUBSCRIPTION_GOV"             = "Office ProPlus"
+        "OFFICESUBSCRIPTION_STUDENT"         = "Office ProPlus Student Benefit"
+        "PLANNERSTANDALONE"                  = "Planner Standalone"
         "POWER_BI_ADDON"                     = "Office 365 Power BI Addon"
         "POWER_BI_INDIVIDUAL_USE"            = "Power BI Individual User"
+        "POWER_BI_PRO"                       = "Power BI Pro"
         "POWER_BI_STANDALONE"                = "Power BI Stand Alone"
         "POWER_BI_STANDARD"                  = "Power-BI Standard"
-        "PROJECTESSENTIALS"                  = "Project Lite"
+        "PROJECT_MADEIRA_PREVIEW_IW_SKU"     = "Dynamics 365 for Financials for IWs"
         "PROJECTCLIENT"                      = "Project Professional"
+        "PROJECTESSENTIALS"                  = "Project Lite"
         "PROJECTONLINE_PLAN_1"               = "Project Online"
         "PROJECTONLINE_PLAN_2"               = "Project Online and PRO"
         "ProjectPremium"                     = "Project Online Premium"
-        "ECAL_SERVICES"                      = "ECAL"
-        "EMS"                                = "Enterprise Mobility Suite"
-        "RIGHTSMANAGEMENT_ADHOC"             = "Windows Azure Rights Management"
-        "MCOMEETADV"                         = "PSTN conferencing"
-        "SHAREPOINTSTORAGE"                  = "SharePoint storage"
-        "PLANNERSTANDALONE"                  = "Planner Standalone"
-        "CRMIUR"                             = "CMRIUR"
-        "BI_AZURE_P1"                        = "Power BI Reporting and Analytics"
-        "INTUNE_A"                           = "Windows Intune Plan A"
-        "PROJECTWORKMANAGEMENT"              = "Office 365 Planner Preview"
-        "ATP_ENTERPRISE"                     = "Exchange Online Advanced Threat Protection"
-        "EQUIVIO_ANALYTICS"                  = "Office 365 Advanced eDiscovery"
-        "AAD_BASIC"                          = "Azure Active Directory Basic"
-        "RMS_S_ENTERPRISE"                   = "Azure Active Directory Rights Management"
-        "AAD_PREMIUM"                        = "Azure Active Directory Premium"
-        "MFA_PREMIUM"                        = "Azure Multi-Factor Authentication"
-        "STANDARDPACK_GOV"                   = "Microsoft Office 365 (Plan G1) for Government"
-        "STANDARDWOFFPACK_GOV"               = "Microsoft Office 365 (Plan G2) for Government"
-        "ENTERPRISEPACK_GOV"                 = "Microsoft Office 365 (Plan G3) for Government"
-        "ENTERPRISEWITHSCAL_GOV"             = "Microsoft Office 365 (Plan G4) for Government"
-        "DESKLESSPACK_GOV"                   = "Microsoft Office 365 (Plan K1) for Government"
-        "ESKLESSWOFFPACK_GOV"                = "Microsoft Office 365 (Plan K2) for Government"
-        "EXCHANGESTANDARD_GOV"               = "Microsoft Office 365 Exchange Online (Plan 1) only for Government"
-        "EXCHANGEENTERPRISE_GOV"             = "Microsoft Office 365 Exchange Online (Plan 2) only for Government"
-        "SHAREPOINTDESKLESS_GOV"             = "SharePoint Online Kiosk"
-        "EXCHANGE_S_DESKLESS_GOV"            = "Exchange Kiosk"
-        "RMS_S_ENTERPRISE_GOV"               = "Windows Azure Active Directory Rights Management"
-        "OFFICESUBSCRIPTION_GOV"             = "Office ProPlus"
-        "MCOSTANDARD_GOV"                    = "Lync Plan 2G"
-        "SHAREPOINTWAC_GOV"                  = "Office Online for Government"
-        "SHAREPOINTENTERPRISE_GOV"           = "SharePoint Plan 2G"
-        "EXCHANGE_S_ENTERPRISE_GOV"          = "Exchange Plan 2G"
-        "EXCHANGE_S_ARCHIVE_ADDON_GOV"       = "Exchange Online Archiving"
-        "EXCHANGE_S_DESKLESS"                = "Exchange Online Kiosk"
-        "SHAREPOINTDESKLESS"                 = "SharePoint Online Kiosk"
-        "SHAREPOINTWAC"                      = "Office Online"
-        "YAMMER_ENTERPRISE"                  = "Yammer for the Starship Enterprise"
-        "EXCHANGE_L_STANDARD"                = "Exchange Online (Plan 1)"
-        "MCOLITE"                            = "Lync Online (Plan 1)"
-        "SHAREPOINTLITE"                     = "SharePoint Online (Plan 1)"
-        "OFFICE_PRO_PLUS_SUBSCRIPTION_SMBIZ" = "Office ProPlus"
-        "EXCHANGE_S_STANDARD_MIDMARKET"      = "Exchange Online (Plan 1)"
-        "MCOSTANDARD_MIDMARKET"              = "Lync Online (Plan 1)"
-        "SHAREPOINTENTERPRISE_MIDMARKET"     = "SharePoint Online (Plan 1)"
-        "OFFICESUBSCRIPTION"                 = "Office ProPlus"
-        "YAMMER_MIDSIZE"                     = "Yammer"
-        "DYN365_ENTERPRISE_PLAN1"            = "Dynamics 365 Customer Engagement Plan Enterprise Edition"
-        "ENTERPRISEPREMIUM_NOPSTNCONF"       = "Enterprise E5 (without Audio Conferencing)"
-        "ENTERPRISEPREMIUM"                  = "Enterprise E5 (with Audio Conferencing)"
-        "MCOSTANDARD"                        = "Skype for Business Online Standalone Plan 2"
-        "PROJECT_MADEIRA_PREVIEW_IW_SKU"     = "Dynamics 365 for Financials for IWs"
-        "STANDARDWOFFPACK_IW_STUDENT"        = "Office 365 Education for Students"
-        "STANDARDWOFFPACK_IW_FACULTY"        = "Office 365 Education for Faculty"
-        "EOP_ENTERPRISE_FACULTY"             = "Exchange Online Protection for Faculty"
-        "EXCHANGESTANDARD_STUDENT"           = "Exchange Online (Plan 1) for Students"
-        "OFFICESUBSCRIPTION_STUDENT"         = "Office ProPlus Student Benefit"
-        "STANDARDWOFFPACK_FACULTY"           = "Office 365 Education E1 for Faculty"
-        "STANDARDWOFFPACK_STUDENT"           = "Microsoft Office 365 (Plan A2) for Students"
-        "DYN365_FINANCIALS_BUSINESS_SKU"     = "Dynamics 365 for Financials Business Edition"
-        "DYN365_FINANCIALS_TEAM_MEMBERS_SKU" = "Dynamics 365 for Team Members Business Edition"
-        "FLOW_FREE"                          = "Microsoft Flow Free"
-        "POWER_BI_PRO"                       = "Power BI Pro"
-        "O365_BUSINESS"                      = "Office 365 Business"
-        "DYN365_ENTERPRISE_SALES"            = "Dynamics Office 365 Enterprise Sales"
-        "RIGHTSMANAGEMENT"                   = "Rights Management"
         "PROJECTPROFESSIONAL"                = "Project Professional"
-        "VISIOONLINE_PLAN1"                  = "Visio Online Plan 1"
-        "EXCHANGEENTERPRISE"                 = "Exchange Online Plan 2"
-        "DYN365_ENTERPRISE_P1_IW"            = "Dynamics 365 P1 Trial for Information Workers"
-        "DYN365_ENTERPRISE_TEAM_MEMBERS"     = "Dynamics 365 For Team Members Enterprise Edition"
-        "CRMSTANDARD"                        = "Microsoft Dynamics CRM Online Professional"
-        "EXCHANGEARCHIVE_ADDON"              = "Exchange Online Archiving For Exchange Online"
-        "EXCHANGEDESKLESS"                   = "Exchange Online Kiosk"
-        "SPZA_IW"                            = "App Connect"
-        "WINDOWS_STORE"                      = "Windows Store for Business"
-        "MCOEV"                              = "Microsoft Phone System"
-        "VIDEO_INTEROP"                      = "Polycom Skype Meeting Video Interop for Skype for Business"
-        "SPE_E5"                             = "Microsoft 365 E5"
+        "PROJECTWORKMANAGEMENT"              = "Office 365 Planner Preview"
+        "RIGHTSMANAGEMENT"                   = "Rights Management"
+        "RIGHTSMANAGEMENT_ADHOC"             = "Windows Azure Rights Management"
+        "RMS_S_ENTERPRISE"                   = "Azure Active Directory Rights Management"
+        "RMS_S_ENTERPRISE_GOV"               = "Windows Azure Active Directory Rights Management"
+        "SHAREPOINTDESKLESS"                 = "SharePoint Online Kiosk"
+        "SHAREPOINTDESKLESS_GOV"             = "SharePoint Online Kiosk"
+        "SHAREPOINTENTERPRISE"               = "Sharepoint Online (Plan 2)"
+        "SHAREPOINTENTERPRISE_GOV"           = "SharePoint Plan 2G"
+        "SHAREPOINTENTERPRISE_MIDMARKET"     = "SharePoint Online (Plan 1)"
+        "SHAREPOINTLITE"                     = "SharePoint Online (Plan 1)"
+        "SHAREPOINTSTANDARD"                 = "Sharepoint Online (Plan 1)"
+        "SHAREPOINTSTORAGE"                  = "SharePoint storage"
+        "SHAREPOINTWAC"                      = "Office Online"
+        "SHAREPOINTWAC_GOV"                  = "Office Online for Government"
+        "SMB_BUSINESS"                       = "Microsoft 365 Apps For Business"
+        "SMB_BUSINESS_ESSENTIALS"            = "Microsoft 365 Business Basic       "
+        "SMB_BUSINESS_PREMIUM"               = "Microsoft 365 Business Standard"
+        "SPB"                                = "Microsoft 365 Business Premium"
         "SPE_E3"                             = "Microsoft 365 E3"
+        "SPE_E5"                             = "Microsoft 365 E5"
         "SPE_F1"                             = "Office 365 F1"
-        "ATA"                                = "Advanced Threat Analytics"
-        "MCOPSTN2"                           = "Domestic and International Calling Plan"
-        "FLOW_P1"                            = "Microsoft Flow Plan 1"
-        "FLOW_P2"                            = "Microsoft Flow Plan 2"
-        "MS_TEAMS_IW"                        = "Microsoft Teams Trial"
+        "SPZA_IW"                            = "App Connect"
+        "STANDARD_B_PILOT"                   = "Office 365 (Small Business Preview)"
+        "STANDARDPACK"                       = "Enterprise Plan E1"
+        "STANDARDPACK_FACULTY"               = "Office 365 (Plan A1) for Faculty"
+        "STANDARDPACK_GOV"                   = "Microsoft Office 365 (Plan G1) for Government"
+        "STANDARDPACK_STUDENT"               = "Office 365 (Plan A1) for Students"
+        "STANDARDWOFFPACK"                   = "Office 365 (Plan E2)"
+        "STANDARDWOFFPACK_FACULTY"           = "Office 365 Education E1 for Faculty"
+        "STANDARDWOFFPACK_GOV"               = "Microsoft Office 365 (Plan G2) for Government"
+        "STANDARDWOFFPACK_IW_FACULTY"        = "Office 365 Education for Faculty"
+        "STANDARDWOFFPACK_IW_STUDENT"        = "Office 365 Education for Students"
+        "STANDARDWOFFPACK_STUDENT"           = "Microsoft Office 365 (Plan A2) for Students"
+        "STANDARDWOFFPACKPACK_FACULTY"       = "Office 365 (Plan A2) for Faculty"
+        "STANDARDWOFFPACKPACK_STUDENT"       = "Office 365 (Plan A2) for Students"
+        "TEAMS_COMMERCIAL_TRIAL"             = "Teams Commercial Trial"
+        "TEAMS_EXPLORATORY"                  = "Teams Exploratory"
+        "VIDEO_INTEROP"                      = "Polycom Skype Meeting Video Interop for Skype for Business"
+        "VISIOCLIENT"                        = "Visio Pro Online"
+        "VISIOONLINE_PLAN1"                  = "Visio Online Plan 1"
+        "WINDOWS_STORE"                      = "Windows Store for Business"
+        "YAMMER_ENTERPRISE"                  = "Yammer for the Starship Enterprise"
+        "YAMMER_MIDSIZE"                     = "Yammer"
     }
 
     Foreach ($User in $UPNs) {
@@ -193,8 +214,7 @@ Function get-MsolUserLicenseDetails {
                 $MsolU = Get-MsolUser -UserPrincipalName $User ;
                 $Licenses = $MsolU.Licenses.AccountSkuID
                 $Exit = $Retries ;
-            }
-            Catch {
+            } Catch {
                 Start-Sleep -Seconds $RetrySleep ;
                 $Exit ++ ;
                 Write-Verbose "Failed to exec cmd because: $($Error[0])" ;
@@ -212,8 +232,8 @@ Function get-MsolUserLicenseDetails {
                 $TextLic = $Sku.Item("$LicenseItem")
                 If (!($TextLic)) {
                     $smsg = "Error: The Hash Table has no match for $LicenseItem for $($MsolU.DisplayName)!"
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
-                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }
+                    else { write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     $LicenseFallBackName = $License.AccountSkuId
 
                     $LicSummary = New-Object PSObject -Property @{
@@ -224,8 +244,7 @@ Function get-MsolUserLicenseDetails {
                     };
                     $AggregLics += $LicSummary ;
 
-                }
-                Else {
+                } Else {
                     $LicSummary = New-Object PSObject -Property @{
                         DisplayName         = $MsolU.DisplayName
                         UserPrincipalName   = $MsolU.Userprincipalname
@@ -235,8 +254,7 @@ Function get-MsolUserLicenseDetails {
                     $AggregLics += $LicSummary ;
                 } # if-E
             } # loop-E
-        }
-        Else {
+        } Else {
             if ($showdebug) { Write-Host "Finding $Licenses in the Hash Table..." -ForegroundColor White } ;
             $Exit = 0 ;
             Do {
@@ -245,8 +263,7 @@ Function get-MsolUserLicenseDetails {
                     $LicenseID = ((Get-MsolUser -UserPrincipalName $MsolU.Userprincipalname).Licenses).AccountSkuID
                     $LicenseItem = $LicenseID -split ":" | Select-Object -Last 1
                     $Exit = $Retries ;
-                }
-                Catch {
+                } Catch {
                     Start-Sleep -Seconds $RetrySleep ;
                     $Exit ++ ;
                     Write-Verbose "Failed to exec cmd because: $($Error[0])" ;
@@ -257,8 +274,8 @@ Function get-MsolUserLicenseDetails {
             $TextLic = $Sku.Item("$LicenseItem")
             If (!($TextLic)) {
                 $smsg = "Error: The Hash Table has no match for $LicenseItem for $($MsolU.DisplayName)!"
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }
+                else { write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 $LicenseFallBackName = $License.AccountSkuId
                 $LicSummary = New-Object PSObject -Property @{
                     DisplayName         = $MsolU.DisplayName
@@ -267,8 +284,7 @@ Function get-MsolUserLicenseDetails {
                     LicenseFriendlyName = $LicenseFallBackName
                 };
                 $AggregLics += $LicSummary ;
-            }
-            Else {
+            } Else {
                 $LicSummary = New-Object PSObject -Property @{
                     DisplayName         = $MsolU.DisplayName
                     UserPrincipalName   = $MsolU.Userprincipalname
@@ -281,5 +297,5 @@ Function get-MsolUserLicenseDetails {
     } # loop-E
 
     $AggregLics | write-output ; # 11:33 AM 1/9/2019 export the aggreg, NewObject02 was never more than a single lic
-} ; 
+} ;
 #*------^ get-MsolUserLicenseDetails.ps1 ^------
