@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.32
+Version     : 1.0.31
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -1899,7 +1899,7 @@ Function resolve-GuestExternalAddr2UPN {
     #>
     #Requires -Version 3
     #requires -PSEdition Desktop
-    #Requires -Modules AzureAD
+    ##Requires -Modules AzureAD, verb-AAD
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     # SMTP rgx: "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$"
     Param(
@@ -2007,8 +2007,8 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUHW2ydlkJt5WTeOAAMpb/b4Ng
-# JYOgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+mZfJhtk1783O5hVl6ncUIBZ
+# VJqgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -2023,9 +2023,9 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT2a0zv
-# lFLAM+zstZQWarT44iDYqzANBgkqhkiG9w0BAQEFAASBgCQUTfTEdoZDn6dZOHcc
-# icWcV2LgRYHqgKZ82ybL5die/cuNh76AWNSZky3b+8JO9HHVlp/8rk/O8o8cYsvu
-# r0gComULdWiTO27Gc9jFl3T+I6TJsrWK0lyYrqC2NGNaiSWGAlZckD+9D4xokC34
-# xAJl+ufkWExx/Y5sS0Pq7CSy
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSzq5lS
+# kke1ANUQ7rS9sFBUTc7GKDANBgkqhkiG9w0BAQEFAASBgC0jK+WIO1l2ayTtbUr5
+# KCou8QiPvZ5V4RSdczUzQ+ga5hL4LRY+pHObcbuNK86bezB8Q123mbkL+SnhRGfS
+# nURubqLYMDphaGljV+/W4BLfySRWq+1Gt4RuP3Dz1Qd3U3YbQvOydd0a5pYsRapp
+# 0j/WJhiUeyATrPzZJjNx1c5g
 # SIG # End signature block
