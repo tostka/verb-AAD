@@ -12,7 +12,7 @@
 RootModule = 'verb-AAD.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.0.32'
+ModuleVersion = '1.0.34'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -69,7 +69,7 @@ Description = 'Azure AD-related generic functions'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('Add-ADALType','Build-AADSignErrorsHash','caadCMW','caadtol','caadTOR','caadVEN','cmsolcmw','cmsolTOL','cmsolTOR','cmsolVEN','Connect-AAD','connect-AzureRM','Connect-MSOL','Disconnect-AAD','get-AADCertToken','get-AADLastSync','get-AADToken','get-AADTokenHeaders','get-MsolUserLastSync','get-MsolUserLicenseDetails','Get-ServiceToken','Get-TokenCache','resolve-GuestExternalAddr2UPN','get-AADLastSync')
+FunctionsToExport = @('Add-ADALType','Build-AADSignErrorsHash','caadCMW','caadtol','caadTOR','caadVEN','cmsolcmw','cmsolTOL','cmsolTOR','cmsolVEN','Connect-AAD','connect-AzureRM','Connect-MSOL','Disconnect-AAD','get-AADCertToken','get-AADLastSync','get-AADlicensePlanList','get-AADToken','get-AADTokenHeaders','get-MsolUserLastSync','get-MsolUserLicenseDetails','Get-ServiceToken','Get-TokenCache','resolve-GuestExternalAddr2UPN','get-AADLastSync')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = '*'
@@ -126,8 +126,8 @@ PrivateData = @{
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUOog0zUSAgMQbjrvxHM4fUcUO
-# RzegggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUcyfCHGa0tEwpG/3UeEixri1A
+# EXugggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -142,9 +142,9 @@ PrivateData = @{
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT1mDLq
-# LTIDxkQuo9msFGxmjn6raTANBgkqhkiG9w0BAQEFAASBgEg6H7wKWBOFW65HXJ6q
-# yvBYY2BsTjFhkhb8R9Whrl+6HUBPp7k+0RZSXp0/2OpUKyos+7qd3IeMVqWRneQT
-# nHHdZxCL9CvPM/QFFLDWLmMcEXiz7MP7df2hh1rKAPlrlen/r4UtZ7tRjuu2fHJo
-# UfUAcNvU9pDFHYJ1obDO8NF/
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRQtKp3
+# 2VozJYa5H/HLrF80GaWmyTANBgkqhkiG9w0BAQEFAASBgI6Nr6SRu8uYKCSUAp0u
+# 49TrtnHmpmKGdThyoF+U4TdtUkiiqrluHzLaq/zK1wPK6OmKwCYhuHiT8gAiQNXK
+# x8vwDBS0shrJsLMO6uA8QjbPzDK46FfyBfRF5lxxgA9pkKbIwpzU5ugMFOlRxe9/
+# /Gseag9h9FRTXgCJMErq4bIK
 # SIG # End signature block
