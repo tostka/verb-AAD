@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.34
+Version     : 1.0.36
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -2072,24 +2072,31 @@ Function resolve-GuestExternalAddr2UPN {
 #*------^ resolve-GuestExternalAddr2UPN.ps1 ^------
 
 #*------v Wait-AADSync.ps1 v------
-Function get-AADLastSync {
-  <#
+Function Wait-AADSync {
+    <#
     .SYNOPSIS
-    get-AADLastSync - Get specific user's last AD-AAD sync (AzureAD/MSOL)
+    Wait-AADSync - Dawdle loop for notifying on next AzureAD sync (AzureAD/MSOL)
     .NOTES
+    Version     : 1.0.0
     Author      : Todd Kadrie
-    Website     :	https://www.toddomation.com
-    Twitter     :	@tostka
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-01-12
+    FileName    : Wait-AADSync.ps1
+    License     : MIT License
+    Copyright   : (c) 2020 Todd Kadrie
+    Github      : https://github.com/tostka
+    Tags        : Powershell
+    Updated By: : Todd Kadrie
     REVISIONS   :
-    * 5:17 PM 8/5/2020 strong-typed Credential
-    * 4:08 PM 7/24/2020 added full multi-ten cred support
-    * 1:03 PM 5/27/2020 moved alias: get-MsolLastSync win func
-    * 9:51 AM 2/25/2020 condenced output
+    * 4:22 PM 7/24/2020 added verbose
+    * 12:14 PM 5/27/2020 moved alias:wait-msolsync win the func
+    * 10:27 AM 2/25/2020 bumped polling interval to 30s
     * 8:50 PM 1/12/2020 expanded aliases
-    * 9:17 AM 10/9/2018 get-AADLastSync:simplified the collection, and built a Cobj returned in GMT & local timezone
-    * 12:30 PM 11/3/2017 initial version
+    * 11:38 AM 5/6/2019 moved from tsksid-incl-ServerApp.ps1
+    * 9:53 AM 3/1/2019 init vers, repl'd native cmsolsvc with Connect-AAD
     .DESCRIPTION
-    get-AADLastSync - Collect last AD-AAD sync (AzureAD/MSOL)
+    Wait-AADSync - Collect last AD-AAD sync (AzureAD/MSOL)
     .PARAMETER Credential
     Credential to be used for connection
     .INPUTS
@@ -2097,39 +2104,37 @@ Function get-AADLastSync {
     .OUTPUTS
     Returns an object with LastDirSyncTime, expressed as TimeGMT & TimeLocal
     .EXAMPLE
-    get-AADLastSync
+    Wait-AADSync
     .LINK
     #>
     [CmdletBinding()]
-    [Alias('get-MsolLastSync')]
-    Param([Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID) ;
+    [Alias('Wait-MSolSync')]
+    Param([Parameter()]$Credential = $global:credo365TORSID) ;
     $verbose = ($VerbosePreference -eq "Continue") ; 
     try { Get-MsolAccountSku -ErrorAction Stop | out-null }
     catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
-      "Not connected to MSOnline. Now connecting to $($credo365.username.split('@')[1])." ;
-      $MFA = get-TenantMFARequirement -Credential $Credential ;
-      if($MFA){ Connect-MsolService }
-      else {Connect-MsolService -Credential $Credential ;}
+        "Not connected to MSOnline. Now connecting." ;
+        Connect-AAD ;
     } ;
-    $LastDirSyncTime = (Get-MsolCompanyInformation).LastDirSyncTime ;
-    New-Object PSObject -Property @{
-      TimeGMT   = $LastDirSyncTime  ;
-      TimeLocal = $LastDirSyncTime.ToLocalTime() ;
-    } | write-output ;
+    $DirSyncLast = (Get-MsolCompanyInformation).LastDirSyncTime ;
+    write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):Waiting for next AAD Dirsync:`n(prior:$($DirSyncLast.ToLocalTime()))`n[" ;
+    Do { Connect-AAD  ; write-host "." -NoNewLine ; Start-Sleep -m (1000 * 30) ; Connect-MSOL } Until ((Get-MsolCompanyInformation).LastDirSyncTime -ne $DirSyncLast) ;
+    write-host -foregroundcolor yellow "]`n$((get-date).ToString('HH:mm:ss')):AD->AAD REPLICATED!" ;
+    write-host "`a" ; write-host "`a" ; write-host "`a" ;
 }
 
 #*------^ Wait-AADSync.ps1 ^------
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,resolve-GuestExternalAddr2UPN,get-AADLastSync -Alias *
+Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,resolve-GuestExternalAddr2UPN,Wait-AADSync -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUR1z/X/MozaQFqCJVtqN4EIiZ
-# 4emgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvkhEkKoRpfFCF87UCOTyl6mR
+# LBSgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -2144,9 +2149,9 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTqarEB
-# CdThPccAAZNHy9uUUVl8PzANBgkqhkiG9w0BAQEFAASBgI5p4A9jkxdGUg+cFG4i
-# fkPqEuCA2TOZxgLz/5uDocnp5JeJ/RxrzebciWpDGxBFlsC553Rn6lQv+rQpy+Xu
-# HN1oFUB7db4NeIPvVr0x0tkIxW/ZKmhyWQAKtDjuTz4PHEgX47IZJLLmfug073sZ
-# Oj0chRH6Urs2ZQBPaoMMJ5m0
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTy1QQw
+# u2zI4jWicJ/aZfvVBmRETzANBgkqhkiG9w0BAQEFAASBgEemcMCgxp9ixJW8QdiQ
+# LNHgUI/jnPMBZirgY7fLkpUoEatITuMAROTagv2XUxmrlCBJAgDAgCtday++Cyyg
+# sykSeAEIQmoPNCD4jkp4p/dzdxdfuKZWKRLRUEVNEWw2f+N5+QtADUh/uxRWGAxf
+# ls2PydSntR5fdaqSnQHoy0Dz
 # SIG # End signature block

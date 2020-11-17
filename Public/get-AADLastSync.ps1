@@ -42,4 +42,6 @@ Function get-AADLastSync {
       TimeGMT   = $LastDirSyncTime  ;
       TimeLocal = $LastDirSyncTime.ToLocalTime() ;
     } | write-output ;
-} ; #*------^ END Function get-AADLastSync ^------
+}
+
+#*------^ get-AADLastSync.ps1 ^------
