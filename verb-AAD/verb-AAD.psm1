@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.36
+Version     : 1.0.37
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -305,6 +305,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:10 PM 8/8/2020 remd'd block @ #463: CATCH [Microsoft.Open.AzureAD16.Client.ApiException] causes 'Unable to find type' errors on cold load ; rewrote to leverage AzureSession checks, without need to qry Get-AzureADTenantDetail (trying to avoid sporadic VEN AAD 'Forbidden' errors)
     * 3:24 PM 8/6/2020 added CATCH block for AzureAD perms errors seeing on one tenant, also shifted only the AAD cmdlets into TRY, to isolate errs ; flip catch blocks to throw (stop) vs Exit (kill ps, when run in shell)
     * 5:17 PM 8/5/2020 strong-typed Credential; implemented get-TenantID(), captured returned objects and validated single, post-validates Credential domain AzureADTenantDetail.ValidatedDomains match.
@@ -348,7 +349,7 @@ Function Connect-AAD {
         $MFA = get-TenantMFARequirement -Credential $Credential ;
         $sTitleBarTag="AAD" ;
         write-verbose "EXEC:get-TenantTag -Credential $($Credential.username)" ; 
-        $TentantTag=get-TenantTag -Credential $Credential ; 
+        $TentantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
         if($TentantTag -ne 'TOR'){
             # explicitly leave this tenant (default) untagged
             $sTitleBarTag += $TentantTag ;
@@ -532,6 +533,10 @@ Function Connect-AAD {
             #Connect-AzureAD -TenantId $TenantID -Credential $Credential ; 
             #throw "" # gen an error to dump into generic CATCH block
         } else { 
+            if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
+                $Host.UI.RawUI.BackgroundColor = $PSBgColor
+                $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
+            } ;
             write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
             if(($token.AccessToken).userid -eq $Credential.username){
                 $TokenTag = convert-TenantIdToTag -TenantId $TenantId ;                    
@@ -687,6 +692,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:40 PM 8/8/2020 updated to match caad's options, aside from msol's lack of AzureSession token support - so this uses Get-MsolDomain & Get-MsolCompanyInformation to handle the new post-connect cred->tenant match validation
     * 5:17 PM 8/5/2020 strong-typed Credential, swapped in get-TenantTag()
     * 1:28 PM 7/27/2020 restored deleted file (was fat-thumbed 7/22)
@@ -739,7 +745,7 @@ Function Connect-MSOL {
         #if(!$CommandPrefix){ $CommandPrefix='aad' ; } ;
 
         $sTitleBarTag = "MSOL" ;
-        $TentantTag=get-TenantTag -Credential $Credential ; 
+        $TentantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
         if($TentantTag -ne 'TOR'){
             # explicitly leave this tenant (default) untagged
             $sTitleBarTag += $TentantTag ;
@@ -816,6 +822,10 @@ Function Connect-MSOL {
 
         #if connected,verify cred-specified Tenant
         if( $msoldoms.name.contains($credO365TORSID.username.split('@')[1].tostring()) ){
+            if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
+                $Host.UI.RawUI.BackgroundColor = $PSBgColor
+                $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
+            } ;
             write-verbose "(Authenticated to MSOL:$($MsolCoInf.DisplayName))" ;
         } else { 
             #write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
@@ -847,6 +857,7 @@ Function Disconnect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:03 PM 8/8/2020 rewrote to leverage AzureSession checks, without need to qry Get-AzureADTenantDetail (trying to avoid sporadic VEN AAD 'Forbidden' errors)
     * 3:24 PM 8/6/2020 added CATCH block for AzureAD perms errors seeing on one tenant, also shifted only the AAD cmdlets into TRY, to isolate errs
     * 5:17 PM 8/5/2020 strong-typed Credential;added verbose outputs, try/catch, and catch targeting unauthenticated status, added missing Disconnect-AzureAD (doh)
@@ -897,6 +908,7 @@ Function Disconnect-AAD {
                     disconnect-AzureAD ; 
                     write-verbose "Remove-PSTitleBar -Tag $($sTitleBarTag)" ; 
                     Remove-PSTitleBar -Tag $sTitleBarTag ; 
+                    [console]::ResetColor()  # reset console colorscheme
                 } ; 
             } CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException]{
                 write-host "(No existing AAD tenant connection)"
@@ -2133,8 +2145,8 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvkhEkKoRpfFCF87UCOTyl6mR
-# LBSgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUk23qHRMfIdhqjmN1q5xAcjcK
+# Ht6gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -2149,9 +2161,9 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTy1QQw
-# u2zI4jWicJ/aZfvVBmRETzANBgkqhkiG9w0BAQEFAASBgEemcMCgxp9ixJW8QdiQ
-# LNHgUI/jnPMBZirgY7fLkpUoEatITuMAROTagv2XUxmrlCBJAgDAgCtday++Cyyg
-# sykSeAEIQmoPNCD4jkp4p/dzdxdfuKZWKRLRUEVNEWw2f+N5+QtADUh/uxRWGAxf
-# ls2PydSntR5fdaqSnQHoy0Dz
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQHm6A0
+# bPJAxuyty07u5JSaAERX/jANBgkqhkiG9w0BAQEFAASBgJi1ZQow2ImuV3yvOQSU
+# h0vMu6V6Zmbrd+QUEtI6itSHSFkEnZnQzg9evBzmqteaI+LIN2o9ReeI3k8dlqV0
+# 931NDVa0bDsE0TUHqt8IXyWKzK598X7k9BYl/FnrVuKX5yEIpTueVsQtd4gk4ql/
+# zLtq1rotM7HgmpxHMk1LWaFZ
 # SIG # End signature block

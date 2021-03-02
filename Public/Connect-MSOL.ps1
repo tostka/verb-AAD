@@ -17,6 +17,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:40 PM 8/8/2020 updated to match caad's options, aside from msol's lack of AzureSession token support - so this uses Get-MsolDomain & Get-MsolCompanyInformation to handle the new post-connect cred->tenant match validation
     * 5:17 PM 8/5/2020 strong-typed Credential, swapped in get-TenantTag()
     * 1:28 PM 7/27/2020 restored deleted file (was fat-thumbed 7/22)
@@ -69,7 +70,7 @@ Function Connect-MSOL {
         #if(!$CommandPrefix){ $CommandPrefix='aad' ; } ;
 
         $sTitleBarTag = "MSOL" ;
-        $TentantTag=get-TenantTag -Credential $Credential ; 
+        $TentantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
         if($TentantTag -ne 'TOR'){
             # explicitly leave this tenant (default) untagged
             $sTitleBarTag += $TentantTag ;
@@ -146,6 +147,10 @@ Function Connect-MSOL {
 
         #if connected,verify cred-specified Tenant
         if( $msoldoms.name.contains($credO365TORSID.username.split('@')[1].tostring()) ){
+            if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
+                $Host.UI.RawUI.BackgroundColor = $PSBgColor
+                $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
+            } ;
             write-verbose "(Authenticated to MSOL:$($MsolCoInf.DisplayName))" ;
         } else { 
             #write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
