@@ -1,4 +1,4 @@
-# verb-aad.psm1
+﻿# verb-aad.psm1
 
 
 <#
@@ -534,7 +534,6 @@ Function Connect-AAD {
             #throw "" # gen an error to dump into generic CATCH block
         } else { 
             if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
-                write-verbose "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
                 $Host.UI.RawUI.BackgroundColor = $PSBgColor
                 $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
             } ;
@@ -693,7 +692,6 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
-    * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
     * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:40 PM 8/8/2020 updated to match caad's options, aside from msol's lack of AzureSession token support - so this uses Get-MsolDomain & Get-MsolCompanyInformation to handle the new post-connect cred->tenant match validation
     * 5:17 PM 8/5/2020 strong-typed Credential, swapped in get-TenantTag()
@@ -783,10 +781,7 @@ Function Connect-MSOL {
             $error.clear() ;
             if (!$MFA) {
                 write-verbose "EXEC:Connect-MsolService -Credential $($Credential.username) (no MFA, full credential)" ; 
-                if($Credential.username){
-                    $pltCMSOL.add('Credential',$Credential) ; 
-                    write-verbose "(using cred:$($credential.username))" ; 
-                } ;
+                if($Credential.username){$pltCMSOL.add('Credential',$Credential)} ;
                 #Connect-MsolService -Credential $Credential -ErrorAction Stop ;
             }
             else {
@@ -805,7 +800,7 @@ Function Connect-MSOL {
 
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
             if ($?) { 
-                write-host -foregroundcolor darkgray  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; 
+                write-verbose -verbose:$true  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; 
             } ;
         } ;
         
@@ -2146,3 +2141,29 @@ Function Wait-AADSync {
 
 Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,resolve-GuestExternalAddr2UPN,Wait-AADSync -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUk23qHRMfIdhqjmN1q5xAcjcK
+# Ht6gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQHm6A0
+# bPJAxuyty07u5JSaAERX/jANBgkqhkiG9w0BAQEFAASBgJi1ZQow2ImuV3yvOQSU
+# h0vMu6V6Zmbrd+QUEtI6itSHSFkEnZnQzg9evBzmqteaI+LIN2o9ReeI3k8dlqV0
+# 931NDVa0bDsE0TUHqt8IXyWKzK598X7k9BYl/FnrVuKX5yEIpTueVsQtd4gk4ql/
+# zLtq1rotM7HgmpxHMk1LWaFZ
+# SIG # End signature block

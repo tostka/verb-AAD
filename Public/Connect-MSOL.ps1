@@ -17,6 +17,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
     * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:40 PM 8/8/2020 updated to match caad's options, aside from msol's lack of AzureSession token support - so this uses Get-MsolDomain & Get-MsolCompanyInformation to handle the new post-connect cred->tenant match validation
     * 5:17 PM 8/5/2020 strong-typed Credential, swapped in get-TenantTag()
@@ -106,7 +107,10 @@ Function Connect-MSOL {
             $error.clear() ;
             if (!$MFA) {
                 write-verbose "EXEC:Connect-MsolService -Credential $($Credential.username) (no MFA, full credential)" ; 
-                if($Credential.username){$pltCMSOL.add('Credential',$Credential)} ;
+                if($Credential.username){
+                    $pltCMSOL.add('Credential',$Credential) ; 
+                    write-verbose "(using cred:$($credential.username))" ; 
+                } ;
                 #Connect-MsolService -Credential $Credential -ErrorAction Stop ;
             }
             else {
@@ -125,7 +129,7 @@ Function Connect-MSOL {
 
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
             if ($?) { 
-                write-verbose -verbose:$true  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; 
+                write-host -foregroundcolor darkgray  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; 
             } ;
         } ;
         
@@ -147,10 +151,12 @@ Function Connect-MSOL {
 
         #if connected,verify cred-specified Tenant
         if( $msoldoms.name.contains($credO365TORSID.username.split('@')[1].tostring()) ){
+            <# borked by psreadline v1/v2 breaking changes
             if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
                 $Host.UI.RawUI.BackgroundColor = $PSBgColor
                 $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
             } ;
+            #>
             write-verbose "(Authenticated to MSOL:$($MsolCoInf.DisplayName))" ;
         } else { 
             #write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 

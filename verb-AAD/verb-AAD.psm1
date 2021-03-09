@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.37
+Version     : 1.0.38
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -534,6 +534,7 @@ Function Connect-AAD {
             #throw "" # gen an error to dump into generic CATCH block
         } else { 
             if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
+                write-verbose "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
                 $Host.UI.RawUI.BackgroundColor = $PSBgColor
                 $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
             } ;
@@ -692,6 +693,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
     * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:40 PM 8/8/2020 updated to match caad's options, aside from msol's lack of AzureSession token support - so this uses Get-MsolDomain & Get-MsolCompanyInformation to handle the new post-connect cred->tenant match validation
     * 5:17 PM 8/5/2020 strong-typed Credential, swapped in get-TenantTag()
@@ -781,7 +783,10 @@ Function Connect-MSOL {
             $error.clear() ;
             if (!$MFA) {
                 write-verbose "EXEC:Connect-MsolService -Credential $($Credential.username) (no MFA, full credential)" ; 
-                if($Credential.username){$pltCMSOL.add('Credential',$Credential)} ;
+                if($Credential.username){
+                    $pltCMSOL.add('Credential',$Credential) ; 
+                    write-verbose "(using cred:$($credential.username))" ; 
+                } ;
                 #Connect-MsolService -Credential $Credential -ErrorAction Stop ;
             }
             else {
@@ -800,7 +805,7 @@ Function Connect-MSOL {
 
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
             if ($?) { 
-                write-verbose -verbose:$true  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; 
+                write-host -foregroundcolor darkgray  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; 
             } ;
         } ;
         
@@ -2145,8 +2150,8 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUk23qHRMfIdhqjmN1q5xAcjcK
-# Ht6gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUHLlhpwyD6riSroGHF0X/2AyU
+# 9AigggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -2161,9 +2166,9 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQHm6A0
-# bPJAxuyty07u5JSaAERX/jANBgkqhkiG9w0BAQEFAASBgJi1ZQow2ImuV3yvOQSU
-# h0vMu6V6Zmbrd+QUEtI6itSHSFkEnZnQzg9evBzmqteaI+LIN2o9ReeI3k8dlqV0
-# 931NDVa0bDsE0TUHqt8IXyWKzK598X7k9BYl/FnrVuKX5yEIpTueVsQtd4gk4ql/
-# zLtq1rotM7HgmpxHMk1LWaFZ
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQXLttK
+# 2Zd0vnaRfUleNCCCUoLLPjANBgkqhkiG9w0BAQEFAASBgCzbmA6Qxyte0IWy5IRY
+# H5CTZN8k/T9meXyhgScxePQ2tNSkw2Jty3NqBPPvNC+DJfwslSKJIPWSmhEM7WWW
+# vG/VtTpjxU2/mVdStej2uVO6CGnXDoZCUXrLxDw2gDhI9oxAxkKrIji1yN5ICq6w
+# ZQMps5dQnpQ0ZZ6zsH1OmyEp
 # SIG # End signature block

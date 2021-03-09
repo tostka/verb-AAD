@@ -246,10 +246,13 @@ Function Connect-AAD {
             #Connect-AzureAD -TenantId $TenantID -Credential $Credential ; 
             #throw "" # gen an error to dump into generic CATCH block
         } else { 
+            <# borked by psreadline v1/v2 breaking changes
             if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
+                write-verbose "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
                 $Host.UI.RawUI.BackgroundColor = $PSBgColor
                 $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
             } ;
+            #>
             write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
             if(($token.AccessToken).userid -eq $Credential.username){
                 $TokenTag = convert-TenantIdToTag -TenantId $TenantId ;                    
