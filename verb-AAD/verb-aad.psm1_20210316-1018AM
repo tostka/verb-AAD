@@ -1,11 +1,11 @@
-# verb-aad.psm1
+﻿# verb-aad.psm1
 
 
 <#
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.41
+Version     : 1.0.40
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -851,7 +851,7 @@ Function Connect-MSOL {
 Function Disconnect-AAD {
     <#
     .SYNOPSIS
-    Disconnect-AAD - Disconnect current authenticated session to Azure Active Directory tenant via AzureAD Graph Module (AzureAD), as the MSOL & orig AAD2 didn't support, but *now* it does (wraps new underlying disconnect-azuread())
+    Disconnect-AAD - Disconnect authenticated session to AzureAD Graph Module (AzureAD), as the MSOL & orig AAD2 didn't support, but *now* it does
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
@@ -867,7 +867,6 @@ Function Disconnect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
-    * 10:58 AM 3/16/2021 updated cbh & new try-catch to accomodate non-existing 
     * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:03 PM 8/8/2020 rewrote to leverage AzureSession checks, without need to qry Get-AzureADTenantDetail (trying to avoid sporadic VEN AAD 'Forbidden' errors)
     * 3:24 PM 8/6/2020 added CATCH block for AzureAD perms errors seeing on one tenant, also shifted only the AAD cmdlets into TRY, to isolate errs
@@ -891,11 +890,6 @@ Function Disconnect-AAD {
     Param() ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
-        write-verbose "(Check for/install AzureAD module)" ; 
-        Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
-        write-verbose "Import-Module -Name AzureAD -MinimumVersion '2.0.0.131'" ; 
-        Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
-        #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         write-verbose "get-command disconnect-AzureAD" ; 
         if(get-command disconnect-AzureAD){
             $sTitleBarTag="AAD" ;
@@ -911,24 +905,6 @@ Function Disconnect-AAD {
                     Remove-PSTitleBar -Tag $sTitleBarTag ; 
                 } else { write-host "(No existing AAD tenant connection)" } ;
                 #>
-                try{
-                    Disconnect-AzureAD -EA SilentlyContinue -ErrorVariable AADError ;
-                    Write-Host -ForegroundColor green ("Azure Active Directory - Disconnected") ;
-                }
-                catch  {
-                    $ErrTrpd = $Error[0] ; 
-                    if($AADError.Exception.Message -eq "Object reference not set to an instance of an object."){
-                        Write-Host -foregroundcolor yellow "Azure AD - No active Azure Active Directory Connections" ;
-                    }else{
-                        Write-Host -foregroundcolor "Azure Active Directory - $($ErrTrpd.Exception.Message)" ;
-                        $error.clear() ;
-                        Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrpd.Exception.ItemName). `nError Message: $($ErrTrpd.Exception.Message)`nError Details: $($ErrTrpd)" ;
-                        $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($Error[0].Exception.GetType().FullName)]{" ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
-                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    } ; 
-        
-                } ;
                 # shift to AzureSession token checks
                 $token = get-AADToken -verbose:$($verbose) ;
                 if( ($null -eq $token) -OR ($token.count -eq 0)){
@@ -942,9 +918,8 @@ Function Disconnect-AAD {
                     disconnect-AzureAD ; 
                     write-verbose "Remove-PSTitleBar -Tag $($sTitleBarTag)" ; 
                     Remove-PSTitleBar -Tag $sTitleBarTag ; 
-                    #[console]::ResetColor()  # reset console colorscheme
+                    [console]::ResetColor()  # reset console colorscheme
                 } ; 
-            
             } CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException]{
                 write-host "(No existing AAD tenant connection)"
             } CATCH [Microsoft.Open.AzureAD16.Client.ApiException] {
@@ -2176,3 +2151,29 @@ Function Wait-AADSync {
 
 Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,get-MsolUserLastSync,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,resolve-GuestExternalAddr2UPN,Wait-AADSync -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjNkwaef1UUlTdrGWdbiqKpyY
+# OHGgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTD/KMt
+# pHUmPhWWe2ER0HnEO0rHEjANBgkqhkiG9w0BAQEFAASBgKRy0I/ZEyen5QCcR+zW
+# MVhJh7t+WK3jFT1pUXlINjFlJrgY/mwixDikS8MmtYyD6kNSw6Oeh7M9ylV1WEYk
+# Ng2Nm2EvzAVxGLYQ+yWMm4zPxeT+LsMH+uuE1nzt9cCeaiqq0/uULSdke+mCExNk
+# DqC6QpdoXIsG+tAnoZFIg6gK
+# SIG # End signature block

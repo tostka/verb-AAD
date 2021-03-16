@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.38
+Version     : 1.0.42
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -18,6 +18,7 @@ AddedCredit : REFERENCE
 AddedWebsite:	REFERENCEURL
 AddedTwitter:	@HANDLE / http://twitter.com/HANDLE
 REVISIONS
+* 3:45 PM 3/15/2021 disabled console coloring (psreadline breaking changes make it too hard to work everywhere)
 * 11:06 AM 2/25/2020 1.0.3 connect-azrm updated to reflect my credential prefs, broad updates and tightening across, also abstracted literals & constants out. Validated functions work post chgs
 * 12/17/2019 - 1.0.0
 * 10:55 AM 12/6/2019 Connect-MSOL & Connect-AAD:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
@@ -533,11 +534,13 @@ Function Connect-AAD {
             #Connect-AzureAD -TenantId $TenantID -Credential $Credential ; 
             #throw "" # gen an error to dump into generic CATCH block
         } else { 
+            <# borked by psreadline v1/v2 breaking changes
             if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
                 write-verbose "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
                 $Host.UI.RawUI.BackgroundColor = $PSBgColor
                 $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
             } ;
+            #>
             write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
             if(($token.AccessToken).userid -eq $Credential.username){
                 $TokenTag = convert-TenantIdToTag -TenantId $TenantId ;                    
@@ -827,10 +830,12 @@ Function Connect-MSOL {
 
         #if connected,verify cred-specified Tenant
         if( $msoldoms.name.contains($credO365TORSID.username.split('@')[1].tostring()) ){
+            <# borked by psreadline v1/v2 breaking changes
             if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
                 $Host.UI.RawUI.BackgroundColor = $PSBgColor
                 $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
             } ;
+            #>
             write-verbose "(Authenticated to MSOL:$($MsolCoInf.DisplayName))" ;
         } else { 
             #write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
@@ -846,7 +851,7 @@ Function Connect-MSOL {
 Function Disconnect-AAD {
     <#
     .SYNOPSIS
-    Disconnect-AAD - Disconnect authenticated session to AzureAD Graph Module (AzureAD), as the MSOL & orig AAD2 didn't support, but *now* it does
+    Disconnect-AAD - Disconnect current authenticated session to Azure Active Directory tenant via AzureAD Graph Module (AzureAD), as the MSOL & orig AAD2 didn't support, but *now* it does (wraps new underlying disconnect-azuread())
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
@@ -862,6 +867,7 @@ Function Disconnect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 10:58 AM 3/16/2021 updated cbh & new try-catch to accomodate non-existing 
     * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:03 PM 8/8/2020 rewrote to leverage AzureSession checks, without need to qry Get-AzureADTenantDetail (trying to avoid sporadic VEN AAD 'Forbidden' errors)
     * 3:24 PM 8/6/2020 added CATCH block for AzureAD perms errors seeing on one tenant, also shifted only the AAD cmdlets into TRY, to isolate errs
@@ -885,6 +891,11 @@ Function Disconnect-AAD {
     Param() ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
+        write-verbose "(Check for/install AzureAD module)" ; 
+        Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
+        write-verbose "Import-Module -Name AzureAD -MinimumVersion '2.0.0.131'" ; 
+        Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
+        #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         write-verbose "get-command disconnect-AzureAD" ; 
         if(get-command disconnect-AzureAD){
             $sTitleBarTag="AAD" ;
@@ -900,6 +911,24 @@ Function Disconnect-AAD {
                     Remove-PSTitleBar -Tag $sTitleBarTag ; 
                 } else { write-host "(No existing AAD tenant connection)" } ;
                 #>
+                try{
+                    Disconnect-AzureAD -EA SilentlyContinue -ErrorVariable AADError ;
+                    Write-Host -ForegroundColor green ("Azure Active Directory - Disconnected") ;
+                }
+                catch  {
+                    $ErrTrpd = $Error[0] ; 
+                    if($AADError.Exception.Message -eq "Object reference not set to an instance of an object."){
+                        Write-Host -foregroundcolor yellow "Azure AD - No active Azure Active Directory Connections" ;
+                    }else{
+                        Write-Host -foregroundcolor "Azure Active Directory - $($ErrTrpd.Exception.Message)" ;
+                        $error.clear() ;
+                        Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrpd.Exception.ItemName). `nError Message: $($ErrTrpd.Exception.Message)`nError Details: $($ErrTrpd)" ;
+                        $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($Error[0].Exception.GetType().FullName)]{" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ; 
+        
+                } ;
                 # shift to AzureSession token checks
                 $token = get-AADToken -verbose:$($verbose) ;
                 if( ($null -eq $token) -OR ($token.count -eq 0)){
@@ -913,8 +942,9 @@ Function Disconnect-AAD {
                     disconnect-AzureAD ; 
                     write-verbose "Remove-PSTitleBar -Tag $($sTitleBarTag)" ; 
                     Remove-PSTitleBar -Tag $sTitleBarTag ; 
-                    [console]::ResetColor()  # reset console colorscheme
+                    #[console]::ResetColor()  # reset console colorscheme
                 } ; 
+            
             } CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException]{
                 write-host "(No existing AAD tenant connection)"
             } CATCH [Microsoft.Open.AzureAD16.Client.ApiException] {
@@ -1366,6 +1396,7 @@ function get-AADToken {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/verb-aad
     REVISIONS
+    * 8:50 AM 3/16/2021 added extra catchblock on expired token, but found that MS had massive concurrent Auth issues, so didn't finish - isolated event, not a normal fail case
     * 12:21 PM 8/8/2020 init
     .DESCRIPTION
     get-AADToken - Retrieve and summarize [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens
@@ -1389,6 +1420,7 @@ function get-AADToken {
         $error.clear() ;
         TRY {
             $token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens ; 
+            # 3:50 PM 3/15/2021: I'm getting a token, but it's *expired*, need another test - actually MS was having massive auth issues concurrent w the error. Likely transitory
         } CATCH [System.Management.Automation.RuntimeException] {
             # pre connect it throws this
             <#
@@ -1398,9 +1430,6 @@ function get-AADToken {
                 +          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                     + CategoryInfo          : InvalidOperation: (Microsoft.Open....ry.AzureSession:TypeName) [], RuntimeException
                     + FullyQualifiedErrorId : TypeNotFound
-            #>
-            <#Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
-            Exit #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
             #>
             write-verbose "(No authenticated connection found)"
             #$token = $false ; 
@@ -1423,6 +1452,7 @@ function get-AADToken {
         if($token.count -gt 1){
             write-verbose "(returning $(($token|measure).count) tokens)" ; 
         } ; 
+        write-verbose "(Connected to tenant: $($token.AccessToken.TenantId) with user: $($token.AccessToken.UserId)" ; 
         $token | Write-Output 
     } ;
 }
@@ -2150,8 +2180,8 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUHLlhpwyD6riSroGHF0X/2AyU
-# 9AigggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUuVOxDcatgXJUqPS0063vQxkD
+# 0jugggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -2166,9 +2196,9 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQXLttK
-# 2Zd0vnaRfUleNCCCUoLLPjANBgkqhkiG9w0BAQEFAASBgCzbmA6Qxyte0IWy5IRY
-# H5CTZN8k/T9meXyhgScxePQ2tNSkw2Jty3NqBPPvNC+DJfwslSKJIPWSmhEM7WWW
-# vG/VtTpjxU2/mVdStej2uVO6CGnXDoZCUXrLxDw2gDhI9oxAxkKrIji1yN5ICq6w
-# ZQMps5dQnpQ0ZZ6zsH1OmyEp
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQrSOZC
+# tzBlGfv+UM3Btcyd7qs3LzANBgkqhkiG9w0BAQEFAASBgGF1Ga27jTRkAMnSCPzd
+# xkajX9rG+EnOw5YBIwQKTxBCmmxkN9ChXxnLxyHEsKPY4M6hhl7JPJAcU/0J9O5/
+# yl9qddq5z/yzeteMX8KOmootLiIjBQb+mQA1uq7vUhzPcg3YRkevRYUZF2RoZvG0
+# 0ElR75Vgh14UThkCP2vFkM/R
 # SIG # End signature block

@@ -2,7 +2,7 @@
 Function Disconnect-AAD {
     <#
     .SYNOPSIS
-    Disconnect-AAD - Disconnect authenticated session to AzureAD Graph Module (AzureAD), as the MSOL & orig AAD2 didn't support, but *now* it does
+    Disconnect-AAD - Disconnect current authenticated session to Azure Active Directory tenant via AzureAD Graph Module (AzureAD), as the MSOL & orig AAD2 didn't support, but *now* it does (wraps new underlying disconnect-azuread())
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
@@ -18,6 +18,7 @@ Function Disconnect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 10:58 AM 3/16/2021 updated cbh & new try-catch to accomodate non-existing 
     * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:03 PM 8/8/2020 rewrote to leverage AzureSession checks, without need to qry Get-AzureADTenantDetail (trying to avoid sporadic VEN AAD 'Forbidden' errors)
     * 3:24 PM 8/6/2020 added CATCH block for AzureAD perms errors seeing on one tenant, also shifted only the AAD cmdlets into TRY, to isolate errs
@@ -41,6 +42,11 @@ Function Disconnect-AAD {
     Param() ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
+        write-verbose "(Check for/install AzureAD module)" ; 
+        Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
+        write-verbose "Import-Module -Name AzureAD -MinimumVersion '2.0.0.131'" ; 
+        Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
+        #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         write-verbose "get-command disconnect-AzureAD" ; 
         if(get-command disconnect-AzureAD){
             $sTitleBarTag="AAD" ;
@@ -56,6 +62,24 @@ Function Disconnect-AAD {
                     Remove-PSTitleBar -Tag $sTitleBarTag ; 
                 } else { write-host "(No existing AAD tenant connection)" } ;
                 #>
+                try{
+                    Disconnect-AzureAD -EA SilentlyContinue -ErrorVariable AADError ;
+                    Write-Host -ForegroundColor green ("Azure Active Directory - Disconnected") ;
+                }
+                catch  {
+                    $ErrTrpd = $Error[0] ; 
+                    if($AADError.Exception.Message -eq "Object reference not set to an instance of an object."){
+                        Write-Host -foregroundcolor yellow "Azure AD - No active Azure Active Directory Connections" ;
+                    }else{
+                        Write-Host -foregroundcolor "Azure Active Directory - $($ErrTrpd.Exception.Message)" ;
+                        $error.clear() ;
+                        Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrpd.Exception.ItemName). `nError Message: $($ErrTrpd.Exception.Message)`nError Details: $($ErrTrpd)" ;
+                        $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($Error[0].Exception.GetType().FullName)]{" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ; 
+        
+                } ;
                 # shift to AzureSession token checks
                 $token = get-AADToken -verbose:$($verbose) ;
                 if( ($null -eq $token) -OR ($token.count -eq 0)){
@@ -69,8 +93,9 @@ Function Disconnect-AAD {
                     disconnect-AzureAD ; 
                     write-verbose "Remove-PSTitleBar -Tag $($sTitleBarTag)" ; 
                     Remove-PSTitleBar -Tag $sTitleBarTag ; 
-                    [console]::ResetColor()  # reset console colorscheme
+                    #[console]::ResetColor()  # reset console colorscheme
                 } ; 
+            
             } CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException]{
                 write-host "(No existing AAD tenant connection)"
             } CATCH [Microsoft.Open.AzureAD16.Client.ApiException] {

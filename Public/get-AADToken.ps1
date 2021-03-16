@@ -14,6 +14,7 @@ function get-AADToken {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/verb-aad
     REVISIONS
+    * 8:50 AM 3/16/2021 added extra catchblock on expired token, but found that MS had massive concurrent Auth issues, so didn't finish - isolated event, not a normal fail case
     * 12:21 PM 8/8/2020 init
     .DESCRIPTION
     get-AADToken - Retrieve and summarize [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens
@@ -37,6 +38,7 @@ function get-AADToken {
         $error.clear() ;
         TRY {
             $token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens ; 
+            # 3:50 PM 3/15/2021: I'm getting a token, but it's *expired*, need another test - actually MS was having massive auth issues concurrent w the error. Likely transitory
         } CATCH [System.Management.Automation.RuntimeException] {
             # pre connect it throws this
             <#
@@ -46,9 +48,6 @@ function get-AADToken {
                 +          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                     + CategoryInfo          : InvalidOperation: (Microsoft.Open....ry.AzureSession:TypeName) [], RuntimeException
                     + FullyQualifiedErrorId : TypeNotFound
-            #>
-            <#Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
-            Exit #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
             #>
             write-verbose "(No authenticated connection found)"
             #$token = $false ; 
@@ -71,7 +70,9 @@ function get-AADToken {
         if($token.count -gt 1){
             write-verbose "(returning $(($token|measure).count) tokens)" ; 
         } ; 
+        write-verbose "(Connected to tenant: $($token.AccessToken.TenantId) with user: $($token.AccessToken.UserId)" ; 
         $token | Write-Output 
     } ;
-} ; 
+}
+
 #*------^ get-AADToken.ps1 ^------
