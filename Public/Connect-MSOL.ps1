@@ -1,3 +1,4 @@
+#*------v Connect-MSOL.ps1 v------
 Function Connect-MSOL {
     <#    
     .SYNOPSIS
@@ -17,6 +18,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 12:16 PM 4/5/2021 updated w 7pswlt support ;replaced hard-coded cred with proper $Credential.username ref
     * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
     * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:40 PM 8/8/2020 updated to match caad's options, aside from msol's lack of AzureSession token support - so this uses Get-MsolDomain & Get-MsolCompanyInformation to handle the new post-connect cred->tenant match validation
@@ -55,6 +57,7 @@ Function Connect-MSOL {
     Connect-MSOL
     .LINK
     #>
+    #Requires -Modules MSOnline
     [CmdletBinding()]
     [Alias('cmsol','rmsol','Reconnect-MSOL')]
     Param(
@@ -62,7 +65,14 @@ Function Connect-MSOL {
         [Parameter()][string]$CommandPrefix,
         [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID
     ) ;
-    BEGIN { $verbose = ($VerbosePreference -eq "Continue") } ;
+    BEGIN { 
+        $verbose = ($VerbosePreference -eq "Continue") ;
+        $tmod = "MSOnline" ; 
+        write-verbose "(Check for/install $($tmod) module)" ; 
+        Try {Get-Module $tmod -listavailable -ErrorAction Stop | out-null } Catch {Install-Module $tmod -scope AllUsers ; } ;                 # installed
+        write-verbose "Import-Module -Name $($tmod)" ; 
+        Try {Get-Module $tmod -ErrorAction Stop | out-null } Catch {Import-Module -Name $tmod -ErrorAction Stop  } ; # imported
+    } ;
     PROCESS {
         $MFA = get-TenantMFARequirement -Credential $Credential ;
         # msol doesn't support the -TenantID, it's imputed from the credential
@@ -79,7 +89,7 @@ Function Connect-MSOL {
 
         try { Get-MsolAccountSku -ErrorAction Stop | out-null }
         catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
-            Write-Verbose "Not connected to MSOnline. Now connecting." ;
+            $smsg = "Not connected to MSOnline. Now connecting." ;
             if (!$Credential) {
                 if(get-command -Name get-admincred) {
                     Get-AdminCred ;
@@ -106,15 +116,15 @@ Function Connect-MSOL {
             }; 
             $error.clear() ;
             if (!$MFA) {
-                write-verbose "EXEC:Connect-MsolService -Credential $($Credential.username) (no MFA, full credential)" ; 
+                $smsg = "EXEC:Connect-MsolService -Credential $($Credential.username) (no MFA, full credential)" ; 
                 if($Credential.username){
                     $pltCMSOL.add('Credential',$Credential) ; 
-                    write-verbose "(using cred:$($credential.username))" ; 
+                    $smsg = "(using cred:$($credential.username))" ; 
                 } ;
                 #Connect-MsolService -Credential $Credential -ErrorAction Stop ;
             }
             else {
-                write-verbose "EXEC:Connect-MsolService -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
+                $smsg = "EXEC:Connect-MsolService -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
                 #if($Credential.username){$pltCMSOL.add('AccountId',$Credential.username)} ;
                 #Connect-MsolService -ErrorAction Stop ;
             } ;
@@ -123,19 +133,24 @@ Function Connect-MSOL {
             TRY {
                 Connect-MsolService @pltCMSOL ; 
             } CATCH {
-                Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                $smsg = "Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 throw $_ #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
             } ; 
 
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
             if ($?) { 
-                write-host -foregroundcolor darkgray  "(Connected to MSOL)" ; Add-PSTitleBar $sTitleBarTag ; 
+                Add-PSTitleBar $sTitleBarTag ; 
+                $smsg = "(Connected to MSOL)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ;
         } ;
         
     } ;
     END {
-        write-verbose "EXEC:Get-MsolDomain" ; 
+        $smsg = "EXEC:Get-MsolDomain" ; 
         TRY {
             $MSOLDoms = Get-MsolDomain ; # err indicates no authenticated connection ; 
             $MsolCoInf = Get-MsolCompanyInformation ; 
@@ -150,16 +165,16 @@ Function Connect-MSOL {
         } ; 
 
         #if connected,verify cred-specified Tenant
-        if( $msoldoms.name.contains($credO365TORSID.username.split('@')[1].tostring()) ){
+        if( $msoldoms.name.contains($Credential.username.split('@')[1].tostring()) ){
             <# borked by psreadline v1/v2 breaking changes
             if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
                 $Host.UI.RawUI.BackgroundColor = $PSBgColor
                 $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
             } ;
             #>
-            write-verbose "(Authenticated to MSOL:$($MsolCoInf.DisplayName))" ;
+            $smsg = "(Authenticated to MSOL:$($MsolCoInf.DisplayName))" ;
         } else { 
-            #write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+            #$smsg = "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
             #Disconnect-AzureAD ; 
             throw "MSOLSERVICE IS CONNECTED TO WRONG TENANT!:$($MsolCoInf.DisplayName)" ;
         } ;             

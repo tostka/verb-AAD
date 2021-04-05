@@ -18,6 +18,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 12:16 PM 4/5/2021 updated w 7pswlt support ; added #Requires -Modules AzureAD
     * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:10 PM 8/8/2020 remd'd block @ #463: CATCH [Microsoft.Open.AzureAD16.Client.ApiException] causes 'Unable to find type' errors on cold load ; rewrote to leverage AzureSession checks, without need to qry Get-AzureADTenantDetail (trying to avoid sporadic VEN AAD 'Forbidden' errors)
     * 3:24 PM 8/6/2020 added CATCH block for AzureAD perms errors seeing on one tenant, also shifted only the AAD cmdlets into TRY, to isolate errs ; flip catch blocks to throw (stop) vs Exit (kill ps, when run in shell)
@@ -50,6 +51,7 @@ Function Connect-AAD {
     Connect-AAD -Credential $cred
     .LINK
     #>
+    #Requires -Modules AzureAD
     [CmdletBinding()] 
     [Alias('caad','raad','reconnect-AAD')]
     Param(
@@ -58,10 +60,14 @@ Function Connect-AAD {
     ) ;
     BEGIN {
         $verbose = ($VerbosePreference -eq "Continue") ;
-        write-verbose "EXEC:get-TenantMFARequirement -Credential $($Credential.username)" ; 
+        $smsg = "EXEC:get-TenantMFARequirement -Credential $($Credential.username)" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $MFA = get-TenantMFARequirement -Credential $Credential ;
         $sTitleBarTag="AAD" ;
-        write-verbose "EXEC:get-TenantTag -Credential $($Credential.username)" ; 
+        $smsg = "EXEC:get-TenantTag -Credential $($Credential.username)" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $TentantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
         if($TentantTag -ne 'TOR'){
             # explicitly leave this tenant (default) untagged
@@ -70,46 +76,17 @@ Function Connect-AAD {
         $TenantID = get-TenantID -Credential $Credential ;
     } ;
     PROCESS {
-        write-verbose "(Check for/install AzureAD module)" ; 
+        $smsg = "(Check for/install AzureAD module)" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
-        write-verbose "Import-Module -Name AzureAD -MinimumVersion '2.0.0.131'" ; 
+        $smsg = "Import-Module -Name AzureAD -MinimumVersion '2.0.0.131'" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
         #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         # with multitenants and changes between, instead we need ot test 'what tenant' we're connected to
         TRY { 
-            <# older code - gen's the VEN errors
-            write-verbose "EXEC:Get-AzureADTenantDetail" ; 
-            $AADTenDtl = Get-AzureADTenantDetail ; # err indicates no authenticated connection
-            #if connected,verify cred-specified Tenant
-            if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
-                write-verbose "(Authenticated to AAD:$($AADTenDtl.displayname))"
-            } else { 
-                write-verbose "(Disconnecting from $($AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
-                Disconnect-AzureAD ; 
-                throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
-            } ; 
-            #>
-            <# 12:35 PM 8/8/2020 looks like - with the new smaller Tenant, AAD will handle a ltd # of Get-AzureADTenantDetail qrys and then throw back
-                WARNING: 10:16:59: Failed processing .
-                Error Message: Error occurred while executing GetTenantDetails
-                Code: Authentication_Unauthorized
-                Message: User was not found.
-                RequestId: 375b3384-1f18-4eb7-a99c-06a9e5ef1108
-                DateTimeStamp: Wed, 05 Aug 2020 15:16:59 GMT
-                HttpStatusCode: Forbidden
-                HttpStatusDescription: Forbidden
-                HttpResponseStatus: Completed
-                Error Details: Error occurred while executing GetTenantDetails
-                Code: Authentication_Unauthorized
-                Message: User was not found.
-                RequestId: 375b3384-1f18-4eb7-a99c-06a9e5ef1108
-                DateTimeStamp: Wed, 05 Aug 2020 15:16:59 GMT
-                HttpStatusCode: Forbidden
-                HttpStatusDescription: Forbidden
-                HttpResponseStatus: Completed
-            But on fresh connectes gAADTD returns data wo issues. 
-            #>
-
             #I'm going to assume that it's due to too many repeated req's for gAADTD
             # so lets work with & eval the local AzureSession Token instead - it's got the userid, and the tenantid, both can validate the conn, wo any queries.:
             $token = get-AADToken -verbose:$($verbose) ; 
@@ -121,16 +98,22 @@ Function Connect-AAD {
                 write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MULTIPLE TOKENS RETURNED!`n$(( ($token.AccessToken) | ft -a  TenantId,UserId,LoginType |out-string).trim())" ; 
                 # want to see if this winds up with a stack of parallel tokens
             } else { 
-                write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #if connected,verify cred-specified Tenant
                 #if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
                 if(($token.AccessToken).userid -eq $Credential.username){
                     $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid ;                    
-                    #write-verbose "(Authenticated to AAD:$($AADTenDtl.displayname))"
-                    write-verbose "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
+                    #$smsg = "(Authenticated to AAD:$($AADTenDtl.displayname))"
+                    $smsg = "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } else { 
                     $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid -verbose:$($verbose) ; 
-                    write-verbose "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                    $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     Disconnect-AzureAD ; 
                     throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
                 } ; 
@@ -174,67 +157,68 @@ Function Connect-AAD {
                     ErrorAction='Stop';
             }; 
             if($TenantID){
-                write-verbose "Forcing TenantID:$($TenantID)" ; 
+                $smsg = "Forcing TenantID:$($TenantID)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 $pltCAAD.add('TenantID',$TenantID) ;
             } 
             if(!$MFA){
                 #Connect-AzureAD -Credential $Credential -ErrorAction Stop ;
-                write-verbose "EXEC:Connect-AzureAD -Credential $($Credential.username) (no MFA, full credential)" ; 
+                $smsg = "EXEC:Connect-AzureAD -Credential $($Credential.username) (no MFA, full credential)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 if($Credential.username){$pltCAAD.add('Credential',$Credential)} ;
             } else {
                 #Connect-AzureAD -AccountID $Credential.userName ;
-                write-verbose "EXEC:Connect-AzureAD -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
+                $smsg = "EXEC:Connect-AzureAD -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
                 if($Credential.username){$pltCAAD.add('AccountId',$Credential.username)} ;
             } ;
 
-            write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Connect-AzureAD w`n$(($pltCAAD|out-string).trim())" ; 
+            $smsg = "Connect-AzureAD w`n$(($pltCAAD|out-string).trim())" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
             TRY {
                 $AADConnection = Connect-AzureAD @pltCAAD ; 
                 if($AADConnection -is [system.array]){
+                    $smsg = "MULTIPLE TENANT CONNECTIONS RETURNED BY connect-AzureAD!" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } #Error|Warn|Debug 
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     throw "MULTIPLE TENANT CONNECTIONS RETURNED BY connect-AzureAD!"
                 
-                } else {write-verbose "(single Tenant connection returned)" } ; 
+                } else {
+                    $smsg = "(single Tenant connection returned)" 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ $smsg = "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ; 
             } CATCH {
-                Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
-                throw $_ #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                $ErrTrapd=$Error[0] ;
+                $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #-=-record a STATUSWARN=-=-=-=-=-=-=
+                $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                if(gv passstatus -scope Script){$script:PassStatus += $statusdelta } ;
+                if(gv -Name PassStatus_$($tenorg) -scope Script){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                #-=-=-=-=-=-=-=-=
+                $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
             } ; 
-            write-host -foregroundcolor white "$(($AADConnection |ft -a|out-string).trim())" ;
+            
+            $smsg = "$(($AADConnection |ft -a|out-string).trim())" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
             if ($?) { 
                 #write-verbose -verbose:$true  "(connected to AzureAD ver2)" ; 
                 Add-PSTitleBar $sTitleBarTag ; 
-                <# older code thrat throws up for problem tenant
-                write-verbose "EXEC:Get-AzureADTenantDetail" ; 
-                TRY {
-                    $AADTenDtl = Get-AzureADTenantDetail ; # err indicates no authenticated connection
-                } CATCH [Microsoft.Open.AzureAD16.Client.ApiException] {
-                    $ErrTrpd = $_ ; 
-                    Write-Warning "$((get-date).ToString('HH:mm:ss')):AzureAD Tenant Permissions Error" ; 
-                    Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
-                    throw $ErrTrpd ; #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
-                } CATCH {
-                    Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
-                    throw $_ ; #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
-                } ; 
-
-                if($AADTenDtl -is [system.array]){
-                    write-warning "AZUREAD IS CONNECTED TO MULTIPLE TENANTS!`n$(($AADTenDtl|ft -a ObjectId,DisplayName,VerifiedDomain |out-string).trim())`nISSUING Disconnect-AzureAD" ; 
-                    Disconnect-AzureAD ; 
-                    throw "" ;
-                } ; 
-                #if connected,verify cred-specified Tenant
-                if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
-                    write-verbose "(Authenticated to AAD:$($AADTenDtl.displayname))" ;
-                } else { 
-                    write-verbose "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
-                    Disconnect-AzureAD ; 
-                    throw "" ;
-                } ; 
-                #>
                 # work with the current AzureSession $token instead - shift into END{}
-                
-
             } ;
             
         } ; # CATCH-E # err indicates no authenticated connection
@@ -248,18 +232,24 @@ Function Connect-AAD {
         } else { 
             <# borked by psreadline v1/v2 breaking changes
             if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
-                write-verbose "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
+                $smsg = "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
                 $Host.UI.RawUI.BackgroundColor = $PSBgColor
                 $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
             } ;
             #>
-            write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+            $smsg = "Connected to Tenant:`n$(($token.AccessToken | ft -a TenantId,UserId,LoginType|out-string).trim())" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ $smsg = "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             if(($token.AccessToken).userid -eq $Credential.username){
                 $TokenTag = convert-TenantIdToTag -TenantId $TenantId ;                    
-                write-verbose "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
+                $smsg = "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ $smsg = "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } else { 
                 $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).TenantID  -verbose:$($verbose) ; 
-                write-verbose "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ $smsg = "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 Disconnect-AzureAD ; 
                 throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
             } ; 
