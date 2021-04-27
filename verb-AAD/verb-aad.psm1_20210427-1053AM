@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.48
+Version     : 1.0.46
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -2418,22 +2418,16 @@ Function test-MsolUserLicenseDirectAssigned {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
-    * 10:52 AM 4/27/2021 expanded CBH, added simpler example ; renamed 'UserHasLicenseAssignedDirectly()' -> test-MsolUserLicenseDirectAssigned(); put into OTB format
+    * 9:23 AM 4/27/2021 renamed 'UserHasLicenseAssignedDirectly()' -> test-MsolUserLicenseDirectAssigned(); put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
     test-MsolUserLicenseDirectAssigned - AzureAD check if a particular product license is assigned directly.
     .PARAMETER  user
-    MSOL User object for target user [-user `$MsolUser]
     .PARAMETER  skuId
-    License AccountSkuID to be evaluated  [-skuID contoso:ENTERPRISEPACK]
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
     System.Boolean
-    .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
-    $msolu.licenses.accountskuid |%{ "==$($_):" ; test-MsolUserLicenseDirectAssigned -user $msolu -skuId $_ } ;
-    Evaluate all licenses on a target MSOLUser for Direct Assignement
     .EXAMPLE
     #the license SKU we are interested in. 
     $skuId = "contoso:EMS"
@@ -2448,9 +2442,7 @@ Function test-MsolUserLicenseDirectAssigned {
     #Requires -Modules MSOnline
     [CmdletBinding()] 
     Param(
-        [Parameter(HelpMessage="MSOL User object for target user [-user `$MsolUser]")]
         [Microsoft.Online.Administration.User]$user, 
-        [Parameter(HelpMessage="License AccountSkuID to be evaluated  [-skuID contoso:ENTERPRISEPACK]")]
         [string]$skuId
     ) ;
     BEGIN {
@@ -2498,22 +2490,16 @@ Function test-MsolUserLicenseGroupAssigned {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
-    * 10:52 AM 4/27/2021 expanded CBH, added simpler example ; renamed 'UserHasLicenseAssignedDirectly()' -> test-MsolUserLicenseGroupAssigned(); put into OTB format
+    * 9:23 AM 4/27/2021 renamed 'UserHasLicenseAssignedDirectly()' -> test-MsolUserLicenseGroupAssigned(); put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
     test-MsolUserLicenseGroupAssigned - AzureAD check if a particular product license is inheriting the license from a group.
     .PARAMETER  user
-    MSOL User object for target user [-user `$MsolUser]
     .PARAMETER  skuId
-    License AccountSkuID to be evaluated  [-skuID contoso:ENTERPRISEPACK]
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
     System.Boolean
-    .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
-    $msolu.licenses.accountskuid |%{ "==$($_):" ; test-MsolUserLicenseGroupAssigned -user $msolu -skuId $_ } ;
-    Evaluate all licenses on a target MSOLUser for Group Assignement
     .EXAMPLE
     #the license SKU we are interested in. 
     $skuId = "contoso:EMS"
@@ -2528,9 +2514,7 @@ Function test-MsolUserLicenseGroupAssigned {
     #Requires -Modules MSOnline
     [CmdletBinding()] 
     Param(
-        [Parameter(HelpMessage="MSOL User object for target user [-user `$MsolUser]")]
         [Microsoft.Online.Administration.User]$user, 
-        [Parameter(HelpMessage="License AccountSkuID to be evaluated  [-skuID contoso:ENTERPRISEPACK]")]
         [string]$skuId
     ) ;
     BEGIN {
@@ -2619,8 +2603,8 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvrBdo2W7ks8I894GG6fOVB+1
-# 54ygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUWBuJW5JoeK/8092hyghV8j78
+# 1oigggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -2635,9 +2619,9 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRoAloL
-# vakjDbFWZPfrEw/NFwgXsDANBgkqhkiG9w0BAQEFAASBgCGAUMMF+Aq/1thC5LvV
-# mtW52xD+fVABvBhm/FxRq4ErNFEI2OjsVvRLVSLnvTZRf5fgT3aY+bfV/NU5rouL
-# cq7UVuKrlnGf8NKTuQ3O3471c0dxB0XUzqbOffbQZyTnnujNNKTAdKnZIRVcjPLe
-# 09c/lwRIsO4lDTmR8Im9xr8n
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQjiA5C
+# GQC9IM+JZ2IdtzbA9tYm2DANBgkqhkiG9w0BAQEFAASBgD4vRN9bzFNAlfQMknMk
+# RnUzT33qG1cr7Fkro3sZrYYtxn5ErfzkPigOmXgqZ5ptVv6FA4vOWe/7Eqa66ZDi
+# 0VTfA6re+RY5qq65Ma08wjVtXm5LKtC+jMda8U9Ipk73NbJG8c4yDXAVVCA6Vpw/
+# IgSqfGqGl118cdNjr4V0/wlD
 # SIG # End signature block

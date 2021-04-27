@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.48
+Version     : 1.0.47
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -2418,7 +2418,7 @@ Function test-MsolUserLicenseDirectAssigned {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
-    * 10:52 AM 4/27/2021 expanded CBH, added simpler example ; renamed 'UserHasLicenseAssignedDirectly()' -> test-MsolUserLicenseDirectAssigned(); put into OTB format
+    * 9:23 AM 4/27/2021 renamed 'UserHasLicenseAssignedDirectly()' -> test-MsolUserLicenseDirectAssigned(); put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
     test-MsolUserLicenseDirectAssigned - AzureAD check if a particular product license is assigned directly.
@@ -2619,8 +2619,8 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvrBdo2W7ks8I894GG6fOVB+1
-# 54ygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUM8h6U+F/wduRXqdAwf9mGTCy
+# 25qgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -2635,9 +2635,9 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRoAloL
-# vakjDbFWZPfrEw/NFwgXsDANBgkqhkiG9w0BAQEFAASBgCGAUMMF+Aq/1thC5LvV
-# mtW52xD+fVABvBhm/FxRq4ErNFEI2OjsVvRLVSLnvTZRf5fgT3aY+bfV/NU5rouL
-# cq7UVuKrlnGf8NKTuQ3O3471c0dxB0XUzqbOffbQZyTnnujNNKTAdKnZIRVcjPLe
-# 09c/lwRIsO4lDTmR8Im9xr8n
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSSvG48
+# fseqg/+0JyGlcN9H4Qh5rzANBgkqhkiG9w0BAQEFAASBgLknElOfe1Zoodsl8TWn
+# K3fwf0pa0WEjusnudSaCb7fXWdMj5Oh3TKL+AAnKOaIysXqOUlFs2Cb1T3ZN+0TE
+# dWwhMaaRDaXkQFFLF4Sij1DFAofmctsVILRAkDRzjcMCJctoi/MgyZQljO2+gObZ
+# X25NjSSPlu7edfbKa4Pxqr2O
 # SIG # End signature block

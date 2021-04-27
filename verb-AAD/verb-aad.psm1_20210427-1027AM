@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.48
+Version     : 1.0.44
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -1214,6 +1214,59 @@ function get-AADCertToken {
 
 #*------^ get-AADCertToken.ps1 ^------
 
+#*------v Get-AADDisabledPlansForSKU.ps1 v------
+Function Get-AADDisabledPlansForSKU {
+    <#
+    .SYNOPSIS
+    Get-AADDisabledPlansForSKU - AzureAD produces a list of disabled service plan names for a set of plans we want to leave enabled.
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-12-16
+    FileName    : Get-AADDisabledPlansForSKU.ps1
+    License     : (non-asserted)
+    Copyright   : (non-asserted)
+    Github      : https://github.com/tostka
+    Tags        : Powershell,AzureAD,License
+    AddedCredit : Alex Buck (alexbuckgit)
+    AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
+    REVISIONS   :
+    * 9:23 AM 4/27/2021 renamed 'GetDisabledPlansForSKU()' -> Get-AADDisabledPlansForSKU; put into OTB format
+    * 12/16/2020 AB git-posted rev
+    .DESCRIPTION
+    Get-AADDisabledPlansForSKU - AzureAD produces a list of disabled service plan names for a set of plans we want to leave enabled.
+    .PARAMETER  
+    .INPUTS
+    None. Does not accepted piped input.
+    .OUTPUTS
+    System.Boolean
+    .EXAMPLE
+    .LINK
+    https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
+    .LINK
+    http://twitter.com/tostka/verb-aad
+    #>
+    #Requires -Modules MSOnline
+    [CmdletBinding()] 
+    Param(
+        [string]$skuId, 
+        [string[]]$enabledPlans
+    ) ; 
+    BEGIN {
+        $verbose = ($VerbosePreference -eq "Continue") ;
+    } ;
+    PROCESS {
+        $allPlans = Get-MsolAccountSku | where {$_.AccountSkuId -ieq $skuId} | Select -ExpandProperty ServiceStatus | Where {$_.ProvisioningStatus -ine "PendingActivation" -and $_.ServicePlan.TargetClass -ieq "User"} | Select -ExpandProperty ServicePlan | Select -ExpandProperty ServiceName ; 
+        $disabledPlans = $allPlans | Where {$enabledPlans -inotcontains $_} ; 
+        return $disabledPlans
+    } ;  # PROC-E
+    END {} ; # END-E
+}
+
+#*------^ Get-AADDisabledPlansForSKU.ps1 ^------
+
 #*------v get-AADLastSync.ps1 v------
 Function get-AADLastSync {
   <#
@@ -1518,18 +1571,18 @@ Function get-AADTokenHeaders {
 
 #*------^ get-AADTokenHeaders.ps1 ^------
 
-#*------v Get-MsolDisabledPlansForSKU.ps1 v------
-Function Get-MsolDisabledPlansForSKU {
+#*------v Get-AADUnexpectedEnabledPlansForUser.ps1 v------
+Function Get-AADUnexpectedEnabledPlansForUser {
     <#
     .SYNOPSIS
-    Get-MsolDisabledPlansForSKU - AzureAD produces a list of disabled service plan names for a set of plans we want to leave enabled.
+    Get-AADUnexpectedEnabledPlansForUser - AzureAD produces a list of enabled service plan names that are not present in the list specified by the -expectedDisabledPlans param.
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
     Website     :	http://www.toddomation.com
     Twitter     :	@tostka / http://twitter.com/tostka
     CreatedDate : 2020-12-16
-    FileName    : Get-MsolDisabledPlansForSKU.ps1
+    FileName    : Get-AADUnexpectedEnabledPlansForUser.ps1
     License     : (non-asserted)
     Copyright   : (non-asserted)
     Github      : https://github.com/tostka
@@ -1537,64 +1590,10 @@ Function Get-MsolDisabledPlansForSKU {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
-    * 9:23 AM 4/27/2021 renamed 'GetDisabledPlansForSKU()' -> Get-MsolDisabledPlansForSKU; put into OTB format
+    * 9:23 AM 4/27/2021 renamed 'GetDisabledPlansForSKU()' -> Get-AADUnexpectedEnabledPlansForUser; put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
-    Get-MsolDisabledPlansForSKU - AzureAD produces a list of disabled service plan names for a set of plans we want to leave enabled.
-    .PARAMETER  skuId
-    .PARAMETER enabledPlans
-    .INPUTS
-    None. Does not accepted piped input.
-    .OUTPUTS
-    System.object
-    .EXAMPLE
-    .LINK
-    https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
-    .LINK
-    http://twitter.com/tostka/verb-aad
-    #>
-    #Requires -Modules MSOnline
-    [CmdletBinding()] 
-    Param(
-        [string]$skuId, 
-        [string[]]$enabledPlans
-    ) ; 
-    BEGIN {
-        $verbose = ($VerbosePreference -eq "Continue") ;
-    } ;
-    PROCESS {
-        $allPlans = Get-MsolAccountSku | where {$_.AccountSkuId -ieq $skuId} | Select -ExpandProperty ServiceStatus | Where {$_.ProvisioningStatus -ine "PendingActivation" -and $_.ServicePlan.TargetClass -ieq "User"} | Select -ExpandProperty ServicePlan | Select -ExpandProperty ServiceName ; 
-        $disabledPlans = $allPlans | Where {$enabledPlans -inotcontains $_} ; 
-        return $disabledPlans
-    } ;  # PROC-E
-    END {} ; # END-E
-}
-
-#*------^ Get-MsolDisabledPlansForSKU.ps1 ^------
-
-#*------v Get-MsolUnexpectedEnabledPlansForUser.ps1 v------
-Function Get-MsolUnexpectedEnabledPlansForUser {
-    <#
-    .SYNOPSIS
-    Get-MsolUnexpectedEnabledPlansForUser - AzureAD produces a list of enabled service plan names that are not present in the list specified by the -expectedDisabledPlans param.
-    .NOTES
-    Version     : 1.0.0
-    Author      : Todd Kadrie
-    Website     :	http://www.toddomation.com
-    Twitter     :	@tostka / http://twitter.com/tostka
-    CreatedDate : 2020-12-16
-    FileName    : Get-MsolUnexpectedEnabledPlansForUser.ps1
-    License     : (non-asserted)
-    Copyright   : (non-asserted)
-    Github      : https://github.com/tostka
-    Tags        : Powershell,AzureAD,License
-    AddedCredit : Alex Buck (alexbuckgit)
-    AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
-    REVISIONS   :
-    * 9:23 AM 4/27/2021 renamed 'GetDisabledPlansForSKU()' -> Get-MsolUnexpectedEnabledPlansForUser; put into OTB format
-    * 12/16/2020 AB git-posted rev
-    .DESCRIPTION
-    Get-MsolUnexpectedEnabledPlansForUser - AzureAD produces a list of enabled service plan names that are not present in the list specified by the -expectedDisabledPlans param.
+    Get-AADUnexpectedEnabledPlansForUser - AzureAD produces a list of enabled service plan names that are not present in the list specified by the -expectedDisabledPlans param.
     .PARAMETER  user
     .PARAMETER skuId
     .PARAMETER expectedDisabledPlans
@@ -1619,7 +1618,7 @@ Function Get-MsolUnexpectedEnabledPlansForUser {
         $verbose = ($VerbosePreference -eq "Continue") ;
     } ;
     PROCESS {
-        $license = Get-MsolUserLicense $user $skuId ;
+        $license = Get-AADUserLicense $user $skuId ;
         $extraPlans = @();
         if($license -ne $null){
             $userDisabledPlans = $license.ServiceStatus | where {$_.ProvisioningStatus -ieq "Disabled"} | Select -ExpandProperty ServicePlan | Select -ExpandProperty ServiceName ;
@@ -1630,7 +1629,62 @@ Function Get-MsolUnexpectedEnabledPlansForUser {
     END {} ; # END-E
 }
 
-#*------^ Get-MsolUnexpectedEnabledPlansForUser.ps1 ^------
+#*------^ Get-AADUnexpectedEnabledPlansForUser.ps1 ^------
+
+#*------v Get-AADUserLicense.ps1 v------
+Function Get-AADUserLicense {
+    <#
+    .SYNOPSIS
+    Get-AADUserLicense - AzureAD Returns the license object corresponding to the skuId. Returns NULL if not found.
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-12-16
+    FileName    : Get-AADUserLicense.ps1
+    License     : (non-asserted)
+    Copyright   : (non-asserted)
+    Github      : https://github.com/tostka
+    Tags        : Powershell,AzureAD,License
+    AddedCredit : Alex Buck (alexbuckgit)
+    AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
+    REVISIONS   :
+    * 9:23 AM 4/27/2021 renamed 'GetUserLicense()' -> Get-AADUserLicense(); put into OTB format
+    * 12/16/2020 AB git-posted rev
+    .DESCRIPTION
+    Get-AADUserLicense - AzureAD Returns the license object corresponding to the skuId. Returns NULL if not found.
+    .PARAMETER  
+    .INPUTS
+    None. Does not accepted piped input.
+    .OUTPUTS
+    System.Boolean
+    .EXAMPLE
+    .LINK
+    https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
+    .LINK
+    http://twitter.com/tostka/verb-aad
+    #>
+    #Requires -Modules MSOnline
+    [CmdletBinding()] 
+    Param(
+        [Microsoft.Online.Administration.User]$user,
+        [string]$skuId, [Guid]$groupId
+    )
+    BEGIN {
+        $verbose = ($VerbosePreference -eq "Continue") ;
+    } ;
+    PROCESS {
+        #we look for the specific license SKU in all licenses assigned to the user
+        foreach($license in $user.Licenses) {
+            if ($license.AccountSkuId -ieq $skuId){return $license } ; 
+        } ; 
+        return $null ; 
+    } ;  # PROC-E
+    END {} ; # END-E
+}
+
+#*------^ Get-AADUserLicense.ps1 ^------
 
 #*------v get-MsolUserLastSync.ps1 v------
 Function get-MsolUserLastSync {
@@ -1677,62 +1731,6 @@ Function get-MsolUserLastSync {
 }
 
 #*------^ get-MsolUserLastSync.ps1 ^------
-
-#*------v Get-MsolUserLicense.ps1 v------
-Function Get-MsolUserLicense {
-    <#
-    .SYNOPSIS
-    Get-MsolUserLicense - AzureAD Returns the license object corresponding to the skuId. Returns NULL if not found.
-    .NOTES
-    Version     : 1.0.0
-    Author      : Todd Kadrie
-    Website     :	http://www.toddomation.com
-    Twitter     :	@tostka / http://twitter.com/tostka
-    CreatedDate : 2020-12-16
-    FileName    : Get-MsolUserLicense.ps1
-    License     : (non-asserted)
-    Copyright   : (non-asserted)
-    Github      : https://github.com/tostka
-    Tags        : Powershell,AzureAD,License
-    AddedCredit : Alex Buck (alexbuckgit)
-    AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
-    REVISIONS   :
-    * 9:23 AM 4/27/2021 renamed 'GetUserLicense()' -> Get-MsolUserLicense(); put into OTB format
-    * 12/16/2020 AB git-posted rev
-    .DESCRIPTION
-    Get-MsolUserLicense - AzureAD Returns the license object corresponding to the skuId. Returns NULL if not found.
-    .PARAMETER user, 
-    .PARAMETER groupId
-    .INPUTS
-    None. Does not accepted piped input.
-    .OUTPUTS
-    System.object
-    .EXAMPLE
-    .LINK
-    https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
-    .LINK
-    http://twitter.com/tostka/verb-aad
-    #>
-    #Requires -Modules MSOnline
-    [CmdletBinding()] 
-    Param(
-        [Microsoft.Online.Administration.User]$user,
-        [string]$skuId, [Guid]$groupId
-    )
-    BEGIN {
-        $verbose = ($VerbosePreference -eq "Continue") ;
-    } ;
-    PROCESS {
-        #we look for the specific license SKU in all licenses assigned to the user
-        foreach($license in $user.Licenses) {
-            if ($license.AccountSkuId -ieq $skuId){return $license } ; 
-        } ; 
-        return $null ; 
-    } ;  # PROC-E
-    END {} ; # END-E
-}
-
-#*------^ Get-MsolUserLicense.ps1 ^------
 
 #*------v get-MsolUserLicenseDetails.ps1 v------
 Function get-MsolUserLicenseDetails {
@@ -2203,18 +2201,18 @@ Add-ADALType ;
 
 #*------^ Get-TokenCache.ps1 ^------
 
-#*------v Remove-MsolUserDirectLicenses.ps1 v------
-Function Remove-MsolUserDirectLicenses{
+#*------v Remove-AADUserDirectLicenses.ps1 v------
+Function Remove-AADUserDirectLicenses{
     <#
     .SYNOPSIS
-    Remove-MsolUserDirectLicenses - The purpose of this script is to remove unnecessary direct licenses from users who already inherit the same license from a group; for example, as part of a transition to group-based licensing.
+    Remove-AADUserDirectLicenses - The purpose of this script is to remove unnecessary direct licenses from users who already inherit the same license from a group; for example, as part of a transition to group-based licensing.
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
     Website     :	http://www.toddomation.com
     Twitter     :	@tostka / http://twitter.com/tostka
     CreatedDate : 2020-12-16
-    FileName    : Remove-MsolUserDirectLicenses.ps1
+    FileName    : Remove-AADUserDirectLicenses.ps1
     License     : (non-asserted)
     Copyright   : (non-asserted)
     Github      : https://github.com/tostka
@@ -2222,10 +2220,10 @@ Function Remove-MsolUserDirectLicenses{
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
-    * 9:23 AM 4/27/2021 renamed Remove-MsolUserDirectLicenses; roughed in functionalize, put into OTB format, ren'd helperfuncs (added to verb-aad as well); COMPLETELY UNTESTED, REM'ING OUT THE GUTS, AGAINST FUTURE NEED
+    * 9:23 AM 4/27/2021 renamed Remove-AADUserDirectLicenses; roughed in functionalize, put into OTB format, ren'd helperfuncs (added to verb-aad as well); COMPLETELY UNTESTED, REM'ING OUT THE GUTS, AGAINST FUTURE NEED
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
-    Remove-MsolUserDirectLicenses - The purpose of this script is to remove unnecessary direct licenses from users who already inherit the same license from a group; for example, as part of a transition to group-based licensing.
+    Remove-AADUserDirectLicenses - The purpose of this script is to remove unnecessary direct licenses from users who already inherit the same license from a group; for example, as part of a transition to group-based licensing.
     [!NOTE] It is important to first validate that the direct licenses to be removed do not enable more service functionality than the inherited licenses. Otherwise, removing the direct license may disable access to services and data for users. Currently it is not possible to check via PowerShell which services are enabled via inherited licenses vs direct. In the script, we specify the minimum level of services we know are being inherited from groups and check against that to make sure users do not unexpectedly lose access to services.
     .PARAMETER skuId
     License to be removed - Office 365 E3[-skuId 'contoso:ENTERPRISEPACK']
@@ -2251,7 +2249,7 @@ Function Remove-MsolUserDirectLicenses{
         [Parameter(Mandatory=$True,HelpMessage="minimum set of service plans we know are inherited from groups - we want to make sure that there aren't any users who have more services enabled which could mean that they may lose access after we remove direct licenses[-servicePlansFromGroups ('EXCHANGE_S_ENTERPRISE', 'SHAREPOINTENTERPRISE', 'OFFICESUBSCRIPTION')]")]
         [string[]]$servicePlansFromGroups,
         [Parameter(Mandatory=$True,HelpMessage="the group to be processed[-groupId '48ca647b-7e4d-41e5-aa66-40cab1e19101']")]
-        [string]$groupId
+        [string]$groupId, 
     ) ; 
     
     BEGIN {
@@ -2269,7 +2267,7 @@ Function Remove-MsolUserDirectLicenses{
         #$servicePlansFromGroups = ("EXCHANGE_S_ENTERPRISE", "SHAREPOINTENTERPRISE", "OFFICESUBSCRIPTION")
 
         <#
-        $expectedDisabledPlans = Get-MsolUnexpectedEnabledPlansForUser $skuId $servicePlansFromGroups
+        $expectedDisabledPlans = Get-AADUnexpectedEnabledPlansForUser $skuId $servicePlansFromGroups
 
         #process all members in the group and get full info about each user in the group looping through group members. 
         Get-MsolGroupMember -All -GroupObjectId $groupId | Get-MsolUser -ObjectId {$_.ObjectId} | Foreach {
@@ -2277,11 +2275,11 @@ Function Remove-MsolUserDirectLicenses{
                 $operationResult = "";
 
                 #check if Direct license exists on the user
-                if (test-MsolUserLicenseDirectAssigned $user $skuId){
+                if (test-AADUserLicenseDirectAssigned $user $skuId){
                     #check if the license is assigned from this group, as expected
-                    if (test-MsolUserLicenseGroupAssigned $user $skuId $groupId){
+                    if (test-AADUserLicenseGroupAssigned $user $skuId $groupId){
                         #check if there are any extra plans we didn't expect - we are being extra careful not to remove unexpected services
-                        $extraPlans = Get-MsolUnexpectedEnabledPlansForUser $user $skuId $expectedDisabledPlans ; 
+                        $extraPlans = Get-AADUnexpectedEnabledPlansForUser $user $skuId $expectedDisabledPlans ; 
                         if ($extraPlans.Count -gt 0){
                             $operationResult = "User has extra plans that may be lost - license removal was skipped. Extra plans: $extraPlans" ; 
                         }else{
@@ -2308,7 +2306,7 @@ Function Remove-MsolUserDirectLicenses{
     END {} ; # END-E
 }
 
-#*------^ Remove-MsolUserDirectLicenses.ps1 ^------
+#*------^ Remove-AADUserDirectLicenses.ps1 ^------
 
 #*------v resolve-GuestExternalAddr2UPN.ps1 v------
 Function resolve-GuestExternalAddr2UPN {
@@ -2399,18 +2397,18 @@ Function resolve-GuestExternalAddr2UPN {
 
 #*------^ resolve-GuestExternalAddr2UPN.ps1 ^------
 
-#*------v test-MsolUserLicenseDirectAssigned.ps1 v------
-Function test-MsolUserLicenseDirectAssigned {
+#*------v test-AADUserLicenseDirectAssigned.ps1 v------
+Function test-AADUserLicenseDirectAssigned {
     <#
     .SYNOPSIS
-    test-MsolUserLicenseDirectAssigned - AzureAD check if a particular product license is assigned directly.
+    test-AADUserLicenseDirectAssigned - AzureAD check if a particular product license is assigned directly.
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
     Website     :	http://www.toddomation.com
     Twitter     :	@tostka / http://twitter.com/tostka
     CreatedDate : 2020-12-16
-    FileName    : test-MsolUserLicenseDirectAssigned.ps1
+    FileName    : test-AADUserLicenseDirectAssigned.ps1
     License     : (non-asserted)
     Copyright   : (non-asserted)
     Github      : https://github.com/tostka
@@ -2418,39 +2416,30 @@ Function test-MsolUserLicenseDirectAssigned {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
-    * 10:52 AM 4/27/2021 expanded CBH, added simpler example ; renamed 'UserHasLicenseAssignedDirectly()' -> test-MsolUserLicenseDirectAssigned(); put into OTB format
+    * 9:23 AM 4/27/2021 renamed 'UserHasLicenseAssignedDirectly()' -> test-AADUserLicenseDirectAssigned(); put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
-    test-MsolUserLicenseDirectAssigned - AzureAD check if a particular product license is assigned directly.
-    .PARAMETER  user
-    MSOL User object for target user [-user `$MsolUser]
-    .PARAMETER  skuId
-    License AccountSkuID to be evaluated  [-skuID contoso:ENTERPRISEPACK]
+    test-AADUserLicenseDirectAssigned - AzureAD check if a particular product license is assigned directly.
+    .PARAMETER  
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
     System.Boolean
     .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
-    $msolu.licenses.accountskuid |%{ "==$($_):" ; test-MsolUserLicenseDirectAssigned -user $msolu -skuId $_ } ;
-    Evaluate all licenses on a target MSOLUser for Direct Assignement
-    .EXAMPLE
     #the license SKU we are interested in. 
     $skuId = "contoso:EMS"
     #find all users that have the SKU license assigned
-    Get-MsolUser -All | where {$_.isLicensed -eq $true -and $_.Licenses.AccountSKUID -eq $skuId} | select  ObjectId,  @{Name="SkuId";Expression={$skuId}},  @{Name="AssignedDirectly";Expression={(test-MsolUserLicenseDirectAssigned -skuId $_ $skuId)}},  @{Name="AssignedFromGroup";Expression={(test-MsolUserLicenseGroupAssigned -skuId $_ $skuId)}} ; 
+    Get-MsolUser -All | where {$_.isLicensed -eq $true -and $_.Licenses.AccountSKUID -eq $skuId} | select  ObjectId,  @{Name="SkuId";Expression={$skuId}},  @{Name="AssignedDirectly";Expression={(test-UserLicenseDirectAssigned -skuId $_ $skuId)}},  @{Name="AssignedFromGroup";Expression={(test-AADUserLicenseGroupAssigned -skuId $_ $skuId)}} ; 
     Process all users in Org with specified license, and output whether AssignedFromGroup or AssignedDirectly status.
     .LINK
     https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     .LINK
-    http://twitter.com/tostka/verb-Msol
+    http://twitter.com/tostka/verb-aad
     #>
     #Requires -Modules MSOnline
     [CmdletBinding()] 
     Param(
-        [Parameter(HelpMessage="MSOL User object for target user [-user `$MsolUser]")]
         [Microsoft.Online.Administration.User]$user, 
-        [Parameter(HelpMessage="License AccountSkuID to be evaluated  [-skuID contoso:ENTERPRISEPACK]")]
         [string]$skuId
     ) ;
     BEGIN {
@@ -2477,20 +2466,20 @@ Function test-MsolUserLicenseDirectAssigned {
     END {} ; # END-E
 }
 
-#*------^ test-MsolUserLicenseDirectAssigned.ps1 ^------
+#*------^ test-AADUserLicenseDirectAssigned.ps1 ^------
 
-#*------v test-MsolUserLicenseGroupAssigned.ps1 v------
-Function test-MsolUserLicenseGroupAssigned {
+#*------v test-AADUserLicenseGroupAssigned.ps1 v------
+Function test-AADUserLicenseGroupAssigned {
     <#
     .SYNOPSIS
-    test-MsolUserLicenseGroupAssigned - AzureAD check if a particular product license is inheriting the license from a group.
+    test-AADUserLicenseGroupAssigned - AzureAD check if a particular product license is inheriting the license from a group.
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
     Website     :	http://www.toddomation.com
     Twitter     :	@tostka / http://twitter.com/tostka
     CreatedDate : 2020-12-16
-    FileName    : test-MsolUserLicenseGroupAssigned.ps1
+    FileName    : test-AADUserLicenseGroupAssigned.ps1
     License     : (non-asserted)
     Copyright   : (non-asserted)
     Github      : https://github.com/tostka
@@ -2498,39 +2487,30 @@ Function test-MsolUserLicenseGroupAssigned {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
-    * 10:52 AM 4/27/2021 expanded CBH, added simpler example ; renamed 'UserHasLicenseAssignedDirectly()' -> test-MsolUserLicenseGroupAssigned(); put into OTB format
+    * 9:23 AM 4/27/2021 renamed 'UserHasLicenseAssignedDirectly()' -> test-AADUserLicenseGroupAssigned(); put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
-    test-MsolUserLicenseGroupAssigned - AzureAD check if a particular product license is inheriting the license from a group.
-    .PARAMETER  user
-    MSOL User object for target user [-user `$MsolUser]
-    .PARAMETER  skuId
-    License AccountSkuID to be evaluated  [-skuID contoso:ENTERPRISEPACK]
+    test-AADUserLicenseGroupAssigned - AzureAD check if a particular product license is inheriting the license from a group.
+    .PARAMETER  
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
     System.Boolean
     .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
-    $msolu.licenses.accountskuid |%{ "==$($_):" ; test-MsolUserLicenseGroupAssigned -user $msolu -skuId $_ } ;
-    Evaluate all licenses on a target MSOLUser for Group Assignement
-    .EXAMPLE
     #the license SKU we are interested in. 
     $skuId = "contoso:EMS"
     #find all users that have the SKU license assigned
-    Get-MsolUser -All | where {$_.isLicensed -eq $true -and $_.Licenses.AccountSKUID -eq $skuId} | select  ObjectId,  @{Name="SkuId";Expression={$skuId}},  @{Name="AssignedDirectly";Expression={(test-MsolUserLicenseDirectAssigned -skuId $_ $skuId)}},  @{Name="AssignedFromGroup";Expression={(test-MsolUserLicenseGroupAssigned -skuId $_ $skuId)}} ; 
+    Get-MsolUser -All | where {$_.isLicensed -eq $true -and $_.Licenses.AccountSKUID -eq $skuId} | select  ObjectId,  @{Name="SkuId";Expression={$skuId}},  @{Name="AssignedDirectly";Expression={(test-UserLicenseDirectAssigned -skuId $_ $skuId)}},  @{Name="AssignedFromGroup";Expression={(test-AADUserLicenseGroupAssigned -skuId $_ $skuId)}} ; 
     Process all users in Org with specified license, and output whether AssignedFromGroup or AssignedDirectly status.
     .LINK
     https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     .LINK
-    http://twitter.com/tostka/verb-Msol
+    http://twitter.com/tostka/verb-aad
     #>
     #Requires -Modules MSOnline
     [CmdletBinding()] 
     Param(
-        [Parameter(HelpMessage="MSOL User object for target user [-user `$MsolUser]")]
         [Microsoft.Online.Administration.User]$user, 
-        [Parameter(HelpMessage="License AccountSkuID to be evaluated  [-skuID contoso:ENTERPRISEPACK]")]
         [string]$skuId
     ) ;
     BEGIN {
@@ -2555,7 +2535,7 @@ Function test-MsolUserLicenseGroupAssigned {
     END {} ; # END-E
 }
 
-#*------^ test-MsolUserLicenseGroupAssigned.ps1 ^------
+#*------^ test-AADUserLicenseGroupAssigned.ps1 ^------
 
 #*------v Wait-AADSync.ps1 v------
 Function Wait-AADSync {
@@ -2613,14 +2593,14 @@ Function Wait-AADSync {
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,get-MsolUserLastSync,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,Wait-AADSync -Alias *
+Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADCertToken,Get-AADDisabledPlansForSKU,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,Get-AADUnexpectedEnabledPlansForUser,Get-AADUserLicense,get-MsolUserLastSync,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,Remove-AADUserDirectLicenses,resolve-GuestExternalAddr2UPN,test-AADUserLicenseDirectAssigned,test-AADUserLicenseGroupAssigned,Wait-AADSync -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvrBdo2W7ks8I894GG6fOVB+1
-# 54ygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU7riO7uX6yvOXMTxRCcC0VvIv
+# tgSgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -2635,9 +2615,9 @@ Export-ModuleMember -Function Add-ADALType,Build-AADSignErrorsHash,caadCMW,caadt
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRoAloL
-# vakjDbFWZPfrEw/NFwgXsDANBgkqhkiG9w0BAQEFAASBgCGAUMMF+Aq/1thC5LvV
-# mtW52xD+fVABvBhm/FxRq4ErNFEI2OjsVvRLVSLnvTZRf5fgT3aY+bfV/NU5rouL
-# cq7UVuKrlnGf8NKTuQ3O3471c0dxB0XUzqbOffbQZyTnnujNNKTAdKnZIRVcjPLe
-# 09c/lwRIsO4lDTmR8Im9xr8n
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQMhdTg
+# JOjeMGZDXTJwyEaRhrRUtjANBgkqhkiG9w0BAQEFAASBgJlYVxIe5lu0PPhMCWDj
+# C1WVmBHF+BRpuzoClTBmOKE8a1JIRCAIesh4dYNJZKAmc1T+hkAF5mhjrA2pdzbt
+# EZ/7hzXoXDIaM5cvqvvyQc7+HBhnsfsrX4KIhmEuRmYiU+2MdUJsm4R58B5z/LlT
+# 02m4lNfcvVbSoAlX4XBNCtR4
 # SIG # End signature block
