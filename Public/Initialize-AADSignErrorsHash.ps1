@@ -1,16 +1,27 @@
-#*------v Build-AADSignErrorsHash.ps1 v------
-function Build-AADSignErrorsHash {
+#*------v Initialize-AADSignErrorsHash.ps1 v------
+function Initialize-AADSignErrorsHash {
     <#
     .SYNOPSIS
-    Build-AADSignErrorsHash - Builds a hash object containing AzureAD Sign-on Error codes & matching description
+    Initialize-AADSignErrorsHash - Builds a hash object containing AzureAD Sign-on Error codes & matching description
     .NOTES
-    Author: Todd Kadrie
-    Website:	http://www.toddomation.com
-    Twitter:	@tostka, http://twitter.com/tostka
-    Additional Credits: Sign-in activity report error codes in the Azure Active Directory portal
-    Website:	https://docs.microsoft.com/en-us/azure/active-directory/reports-monitoring/reference-sign-ins-error-codes
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     : http://www.toddomation.com
+    Twitter     : @tostka / http://twitter.com/tostka
+    CreatedDate : 2021-06-15
+    FileName    : Initialize-AADSignErrorsHash.ps1
+    License     : MIT License
+    Copyright   : (c) 2020 Todd Kadrie
+    Github      : https://github.com/tostka/verb-AAD
+    Tags        : Powershell,AzureAD,Errors,Reference
+    AddedCredit : Sign-in activity report error codes in the Azure Active Directory portal
+    AddedWebsite: https://docs.microsoft.com/en-us/azure/active-directory/reports-monitoring/reference-sign-ins-error-codes
+    AddedTwitter: URL
     REVISIONS   :
+    * 11:01 AM 6/15/2021 Ren'd Build-AADSignErrorsHash -> Initialize-AADSignErrorsHash (compliant verb) ; copied over vers from profile-AAD-Signons.ps1 ; kept updated CBH. 
     * 8:50 PM 1/12/2020 expanded aliases
+    * 9:53 AM 8/29/2019 amended 50135, 50125, with MS support comments, and reserached 50140 a bit
+    * 2:49 PM 8/27/2019 updated errornumber 0 to be (undocumented - successful), as it is the code on a non-error logon
     * 10:41 AM 5/13/2019 init vers
     .DESCRIPTION
     Build-AADSignErrorsHas.ps1 - Builds a hash object containing AzureAD Sign-on Error codes & matching description: [Sign-in activity report error codes in the Azure Active Directory portal | Microsoft Docs](https://docs.microsoft.com/en-us/azure/active-directory/reports-monitoring/reference-sign-ins-error-codes)
@@ -19,15 +30,18 @@ function Build-AADSignErrorsHash {
     .OUTPUTS
     Returns a populated hashtable of AAD signon error codes & descriptions
     .EXAMPLE
-    $AADSignOnErrors = Build-AADSignErrorsHash ; 
+    $AADSignOnErrors = Initialize-AADSignErrorsHash ; 
     $ErrDetail = $AADSignOnErrors[$errorCode] ; 
     Populate hash and lookup errorcode
     .LINK
     https://docs.microsoft.com/en-us/azure/active-directory/reports-monitoring/reference-sign-ins-error-codes)
     #>
-    #Error 	Description
+    [CmdletBinding()]
+    [Alias('Build-AADSignErrorsHash')]
+    PARAM() ;
+     #Error 	Description
     $AADSignOnError = [ordered]@{ } ;
-    $AADSignOnError.add("0", "(undocumented)") ;
+    $AADSignOnError.add("0", "(undocumented - ((Successful)))") ;
     $AADSignOnError.add("16000", "This is an internal implementation detail and not an error condition. You can safely ignore this reference.") ;
     $AADSignOnError.add("20001", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
     $AADSignOnError.add("20012", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
@@ -74,7 +88,7 @@ function Build-AADSignErrorsHash {
     $AADSignOnError.add("50107", "Requested federation realm object does not exist. Contact the tenant administrator.") ;
     $AADSignOnError.add("50120", "Issue with JWT header. Contact the tenant administrator.") ;
     $AADSignOnError.add("50124", "Claims Transformation contains invalid input parameter. Contact the tenant administrator to update the policy.") ;
-    $AADSignOnError.add("50125", "Sign-in was interrupted due to a password reset or password registration entry.") ;
+    $AADSignOnError.add("50125", "Sign-in was interrupted due to a password reset or password registration entry.(This error may come up due to an interruption in the network while the password was being changed/reset)") ;
     $AADSignOnError.add("50126", "Invalid username or password, or invalid on-premises username or password.") ;
     $AADSignOnError.add("50127", "User needs to install a broker application to gain access to this content.") ;
     $AADSignOnError.add("50128", "Invalid domain name - No tenant-identifying information found in either the request or implied by any provided credentials.") ;
@@ -82,10 +96,10 @@ function Build-AADSignErrorsHash {
     $AADSignOnError.add("50130", "Claim value cannot be interpreted as known auth method.") ;
     $AADSignOnError.add("50131", "Used in various conditional access errors. E.g. Bad Windows device state, request blocked due to suspicious activity, access policy, and security policy decisions.") ;
     $AADSignOnError.add("50132", "Credentials have been revoked due to the following reasons: , SSO Artifact is invalid or expired , Session not fresh enough for application , A silent sign-in request was sent but the users session with Azure AD is invalid or has expired. , ") ;
-    $AADSignOnError.add("50133", "Session is invalid due to expiration or recent password change.") ;
+    $AADSignOnError.add("50133", "Session is invalid due to expiration or recent password change.`n(Once a Password is changed, it is advised to close all the open sessions and re-login with the new password, else this error might pop-up)") ;
     $AADSignOnError.add("50135", "Password change is required due to account risk.") ;
     $AADSignOnError.add("50136", "Redirect MSA session to application - Single MSA session detected.") ;
-    $AADSignOnError.add("50140", "This error occurred due to 'Keep me signed in' interrupt when the user was signing-in. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.") ;
+    $AADSignOnError.add("50140", "This error occurred due to 'Keep me signed in' interrupt when the user was signing-in. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.`n(if user is functional, this error may be a log anomaly that can be safely ignored)") ;
     $AADSignOnError.add("50143", "Session mismatch - Session is invalid because user tenant does not match the domain hint due to different resource. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.") ;
     $AADSignOnError.add("50144", "Users Active Directory password has expired. Generate a new password for the user or have the end user using self-service reset tool.") ;
     $AADSignOnError.add("50146", "This application is required to be configured with an application-specific signing key. It is either not configured with one, or the key has expired or is not yet valid. Contact the application owner.") ;
@@ -156,4 +170,4 @@ function Build-AADSignErrorsHash {
     $AADSignOnError.add("530021", "Application does not meet the conditional access approved app requirements.") ;
     $AADSignOnError | write-output ;
 }
-#*------^ Build-AADSignErrorsHash.ps1 ^------
+#*------^ Initialize-AADSignErrorsHash.ps1 ^------

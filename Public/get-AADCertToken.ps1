@@ -9,10 +9,10 @@ function get-AADCertToken {
     Website     : https://automativity.com
     Twitter     : @AlexAsplund
     CreatedDate : 2019-08-12
-    FileName    : 
-    License     :
-    Copyright   : 
-    Github      : 
+    FileName    : get-AADCertToken.ps1
+    License     : (none asserted)
+    Copyright   : (none asserted)
+    Github      : https://github.com/tostka/verb-aad
     Tags        : Powershell,AzureAD,Authentication,GraphAPI,Microsoft
     AddedCredit : 
     AddedWebsite:	
@@ -255,7 +255,7 @@ function get-AADCertToken {
     write-verbose -Verbose:$verbose "$((get-date).ToString('HH:mm:ss')):get-AADCertToken w`n$(($pltAADCertToken|out-string).trim())" ; 
     $token =get-AADCertToken @pltAADCertToken ; 
     $AADTokenHeaders = get-AADTokenHeaders -token $token -Verbose:($VerbosePreference -eq 'Continue')
-
+    Streamlined example
     .LINK
     https://adamtheautomator.com/microsoft-graph-api-powershell/
     #>
@@ -341,17 +341,15 @@ function get-AADCertToken {
         $Header = @{
             Authorization = "Bearer $JWT" ;
         } ;
-        # Splat the parameters for Invoke-Restmethod for cleaner code
-        $PostSplat = @{
+        $pltPost = @{
             ContentType = 'application/x-www-form-urlencoded' ;
             Method = 'POST' ;
             Body = $Body ;
             Uri = $Url ;
             Headers = $Header ;
         } ;
-        write-verbose "$((get-date).ToString('HH:mm:ss')):Invoke-RestMethod w`n$(($PostSplat|out-string).trim())" ; 
-        $token = Invoke-RestMethod @PostSplat ; 
-
+        write-verbose "$((get-date).ToString('HH:mm:ss')):Obtain Token:Invoke-RestMethod w`n$(($pltPost|out-string).trim())" ; 
+        $token = Invoke-RestMethod @pltPost ; 
     } else { 
         write-warning "Unable to:Get-Item Cert:\CurrentUser\My\$($Certificate)"
         Stop
@@ -361,8 +359,6 @@ function get-AADCertToken {
     if ($token -eq $null) {
         Write-Output "ERROR: Failed to get an Access Token" ;
         exit
-    }
-    else { $token | write-output }
-    
+    } else { $token | write-output }
 } ; 
 #*------^ END Function get-AADCertToken ^------

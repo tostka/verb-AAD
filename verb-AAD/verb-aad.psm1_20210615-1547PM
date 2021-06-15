@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.53
+Version     : 1.0.51
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -3898,6 +3898,7 @@ Function search-AADSignInReports {
     .LINK
     https://github.com/TspringMSFT/PullAzureADSignInReports-
     #>
+    #Requires -Version 5.1
     #Requires -Modules verb-Auth, verb-IO, verb-logging, verb-Text
     #Requires -RunasAdministrator
     [CmdletBinding()]
@@ -5122,17 +5123,19 @@ Function search-AADSignInReports {
 
     #  .\profile-AAD-Signons.ps1 -Files $jsonFiles
     $msgHere=@"
-  To profile output jsons above, run:
-      profile-AAD-Signons -Files '$($jsonFiles -join "','")'
+        To profile output jsons above, run:
+            profile-AAD-Signons -Files '$($jsonFiles -join "','")'
 
-"@ ;
+    "@ ;
     if ($logging) { Write-Log -LogContent $msgHere -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
     else{ write-host -foregroundcolor green $msgHere } ;
 
     $smsg = -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($sBnr.replace('=v','=^').replace('v=','^='))" ;
     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-}
+} ; 
+#*------^ END Function search-AADSignInReports ^------
+
 
 #*------^ search-AADSignInReports.ps1 ^------
 
@@ -5601,8 +5604,8 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUREqEdU7BL3Gj85SiwNTNsBhq
-# 1OWgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUclnKt2ESoEW7mm6NfEH4gYSG
+# IC2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -5617,9 +5620,9 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTX9xtB
-# hQAAzgknT7Xa+10seHOvKzANBgkqhkiG9w0BAQEFAASBgBGECGprwPx3HOE6mvG4
-# xNmYooy1RyaMtOYqJfbQVDgPjsKX0I1eDbPFVdhDvDY8e/uPfGSiUmxkz0Ep+XMX
-# O/EI4rjXAUbnufcgk69LL/pHGhlfDfFkNMpCgE4b24uG4pfj47wTLqkmDsoblYR5
-# U4UEu1VgBfXwQ9MsYTFS/5Xu
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTWMtKa
+# m7MyYjBkZs6FrLTSM85ukzANBgkqhkiG9w0BAQEFAASBgKUB944UKJuB2De2yzBe
+# efGJlhFkuTYvX0dpfEfqfT1LutpxhBlFxuJky1qgGBkqd/1q1pufP2q4CXy7zYkE
+# MoFzY/RI5fvIzDKDfoii8myDicuCey3B6Voehiox+PYJggUgjnxR/yaCQMFVZ6TO
+# ne87UT7Gpj13Fjm6THFZBq3r
 # SIG # End signature block
