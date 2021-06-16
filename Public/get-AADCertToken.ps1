@@ -1,4 +1,4 @@
-#*------v Function get-AADCertToken v------
+#*------v get-AADCertToken.ps1 v------
 function get-AADCertToken {
     <#
     .SYNOPSIS
@@ -18,6 +18,7 @@ function get-AADCertToken {
     AddedWebsite:	
     AddedTwitter:	
     REVISIONS
+    * 1:13 PM 6/16/2021 logging: swapped wl for write-* ; swapped $XXXmeta. props for driver vari's
     * 3:16 PM 6/14/2021 fixed missing cert(s) on jbox, works now ; strongly typed $tickets array (was pulling 1st char instead of elem) ; subd out rednund -verbose params ;provide dyn param lookup on $TenOrg, via meta infra file, cleaned up the CBH auth & tenant config code (pki certs creation, CER & PFX export/import)
 * 10:56 AM 6/11/2021 added CBH example for TOL; expanded docs to reinforce cert needed, how to lookup name, and where needs to be stored per acct per machine.
     * 8:51 AM 1/30/2020
@@ -262,18 +263,31 @@ function get-AADCertToken {
     [CmdletBinding()]
     Param(
         [Parameter(HelpMessage = "AAD TenantID [-TenantID (guid)]]")]
-        [string]$tenantName = $global:o365_Toroco_TenantDomain,
+        [string]$tenantName = $global:TorMeta.o365_TenantDomain,
         [Parameter(HelpMessage = "AAD AppID [-AppID (guid)]]")]
-        [string]$AppID = $global:TOR_AAD_App_Audit_ID,
+        [string]$AppID = $global:TORMeta.AAD_App_Audit_I,
         [Parameter(HelpMessage = "Certificate Thumbprint [-Certificate (thumbprint)]]")]
-        $Certificate = $global:TOR_AAD_App_Audit_CertThumb,
+        $Certificate = $global:tormeta.AAD_App_Audit_CertThumb,
         [Parameter(HelpMessage = "Debugging Flag [-showDebug]")]
         [switch] $showDebug
-    ) # PARAM BLOCK END ;
-
+    ) ;
+    $verbose = ($VerbosePreference -eq "Continue") ;
     if($Certificate = Get-Item Cert:\CurrentUser\My\$Certificate){ 
-        ( $certificate| fl Subject,DnsNameList,FriendlyName,Not*,Thumbprint | out-string).trim() | write-verbose ;
-        $Scope = "https://graph.microsoft.com/.default" ;
+        $smsg = "Cert:$($Certificate.thumbprint):`n$(($certificate| fl Subject,DnsNameList,FriendlyName,Not*,Thumbprint|out-string).trim())" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        if(((get-date $Certificate.NotBefore) -lt (get-date)) -AND ((get-date) -lt (get-date $Certificate.NotAfter))){
+            $smsg = "(cert is in valid date window)" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } else { 
+            $smsg = "$(($Certificate.pspath.tostring() -split '::')[1]) *IS EXPIRED!*`n" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ; 
+        if(!$MSGraphScope){$MSGraphScope = 'https://graph.microsoft.com'} ; 
+        #$Scope = "https://graph.microsoft.com/.default" ;
+        $Scope = "$($MSGraphScope)/.default" ;
         $CertificateBase64Hash = [System.Convert]::ToBase64String($Certificate.GetCertHash()) ;
         # Create JWT timestamp for expiration
         $StartDate = (Get-Date "1970-01-01T00:00:00Z" ).ToUniversalTime() ;
@@ -312,53 +326,61 @@ function get-AADCertToken {
         # Join header and Payload with "." to create a valid (unsigned) JWT
         $JWT = $EncodedHeader + "." + $EncodedPayload ;
         # Get the private key object of your certificate
-        if(! $Certificate.PrivateKey){
-            $smsg = "Specified Certificate... $($Certificate.thumbprint)`nis *MISSING* its PRIVATE KEY!`nYou must export the key when moving the cert between hosts & accounts!`n(key is used for signing the token request)" ; 
+        if(!$Certificate.PrivateKey){
+            $smsg = "Specified Certificate... $($Certificate.thumbprint)`nis *MISSING* its PRIVATE KEY!`nYou must export the key - in PFX format - when moving the cert between hosts & accounts!`n(see get-help $($CmdletName) -detail for sample export code)" ; 
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
             else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             break ; 
-        } ; 
-        $PrivateKey = $Certificate.PrivateKey
-        # Define RSA signature and hashing algorithm
-        $RSAPadding = [Security.Cryptography.RSASignaturePadding]::Pkcs1 ;
-        $HashAlgorithm = [Security.Cryptography.HashAlgorithmName]::SHA256 ; 
-        # Create a signature of the JWT
-        $Signature = [Convert]::ToBase64String(
-            $PrivateKey.SignData([System.Text.Encoding]::UTF8.GetBytes($JWT),$HashAlgorithm,$RSAPadding) 
-        ) -replace '\+','-' -replace '/','_' -replace '=' ;
-        # Join the signature to the JWT with "."
-        $JWT = $JWT + "." + $Signature ;
-        # Create a hash with body parameters
-        $Body = @{
-            client_id = $AppId ;
-            client_assertion = $JWT ;
-            client_assertion_type = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" ;
-            scope = $Scope ;
-            grant_type = "client_credentials" ;
+        } else { 
+            $PrivateKey = $Certificate.PrivateKey ;
+            # Define RSA signature and hashing algorithm
+            $RSAPadding = [Security.Cryptography.RSASignaturePadding]::Pkcs1 ;
+            $HashAlgorithm = [Security.Cryptography.HashAlgorithmName]::SHA256 ; 
+            # Create a signature of the JWT
+            $Signature = [Convert]::ToBase64String(
+                $PrivateKey.SignData([System.Text.Encoding]::UTF8.GetBytes($JWT),$HashAlgorithm,$RSAPadding) 
+            ) -replace '\+','-' -replace '/','_' -replace '=' ;
+            # Join the signature to the JWT with "."
+            $JWT = $JWT + "." + $Signature ;
+            # Create a hash with body parameters
+            $Body = @{
+                client_id = $AppId ;
+                client_assertion = $JWT ;
+                client_assertion_type = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" ;
+                scope = $Scope ;
+                grant_type = "client_credentials" ;
+            } ;
+            $Url = "https://login.microsoftonline.com/$TenantName/oauth2/v2.0/token" ;
+            # Use the self-generated JWT as Authorization
+            $Header = @{Authorization = "Bearer $JWT" } ;
+            $pltPost = @{
+                ContentType = 'application/x-www-form-urlencoded' ;
+                Method = 'POST' ;
+                Body = $Body ;
+                Uri = $Url ;
+                Headers = $Header ;
+            } ;
+            $smsg = "Obtain Token:Invoke-RestMethod w`n$(($pltPost|out-string).trim())" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            $token = Invoke-RestMethod @pltPost ; 
         } ;
-        $Url = "https://login.microsoftonline.com/$TenantName/oauth2/v2.0/token" ;
-        # Use the self-generated JWT as Authorization
-        $Header = @{
-            Authorization = "Bearer $JWT" ;
-        } ;
-        $pltPost = @{
-            ContentType = 'application/x-www-form-urlencoded' ;
-            Method = 'POST' ;
-            Body = $Body ;
-            Uri = $Url ;
-            Headers = $Header ;
-        } ;
-        write-verbose "$((get-date).ToString('HH:mm:ss')):Obtain Token:Invoke-RestMethod w`n$(($pltPost|out-string).trim())" ; 
-        $token = Invoke-RestMethod @pltPost ; 
     } else { 
-        write-warning "Unable to:Get-Item Cert:\CurrentUser\My\$($Certificate)"
-        Stop
+        $smsg = "Unable to:Get-Item Cert:\CurrentUser\My\$($Certificate)" 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN} #Error|Warn|Debug 
+        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        Break;
     } ; 
 
-    write-verbose "`$token:`n$(($token|out-string).trim())" ;
+    $smsg = "`$token:`n$(($token|out-string).trim())" ;
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
     if ($token -eq $null) {
-        Write-Output "ERROR: Failed to get an Access Token" ;
-        exit
+        $smsg = "ERROR: Failed to get an Access Token" ; ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN} #Error|Warn|Debug 
+        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        break ;
     } else { $token | write-output }
-} ; 
-#*------^ END Function get-AADCertToken ^------
+}
+#*------^ get-AADCertToken.ps1 ^------

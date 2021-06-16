@@ -14,6 +14,7 @@ function Get-TokenCache {
     Copyright   : (non asserted)
     Github      : https://github.com/tostka/verb-aad
     REVISIONS
+    * 1:58 PM 6/16/2021 fixed typo (spurious ;)
     * 12:21 PM 8/8/2020 init
     .DESCRIPTION
     Get-TokenCache - Returns the current contents of the token cache 
@@ -35,15 +36,14 @@ function Get-TokenCache {
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
         # Ensure our ADAL types are loaded and availble
-Add-ADALType ;
+        Add-ADALType ;
         $cache = [Microsoft.IdentityModel.Clients.ActiveDirectory.TokenCache]::DefaultShared ;
         if ($full){
             Return $Cache.ReadItems() ;
-        } ;
-        else {
+        } else {
             $cache.ReadItems() | Select-Object DisplayableId, Authority, ClientId, Resource, @{Name = "ExpiresOn"; Expression = { $_.ExpiresOn.localdatetime } } ;
         } ;
     } ; 
     END{} ;
-} ; 
+}
 #*------^ Get-TokenCache.ps1 ^------

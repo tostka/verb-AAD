@@ -12,7 +12,7 @@
 RootModule = 'verb-AAD.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.0.53'
+ModuleVersion = '1.0.58'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -69,7 +69,7 @@ Description = 'Azure AD-related generic functions'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('Add-ADALType','caadCMW','caadtol','caadTOR','caadVEN','cmsolcmw','cmsolTOL','cmsolTOR','cmsolVEN','Connect-AAD','connect-AzureRM','Connect-MSOL','Disconnect-AAD','get-AADBearerToken','get-AADBearerTokenHeaders','get-AADCertToken','get-AADLastSync','get-AADlicensePlanList','get-AADToken','get-AADTokenHeaders','Get-MsolDisabledPlansForSKU','Get-MsolUnexpectedEnabledPlansForUser','get-MsolUserLastSync','Get-MsolUserLicense','get-MsolUserLicenseDetails','Get-ServiceToken','Get-TokenCache','Initialize-AADSignErrorsHash','profile-AAD-Signons','Write-Log','get-colorcombo','Initialize-AADSignErrorsHash','Cleanup','Remove-MsolUserDirectLicenses','resolve-GuestExternalAddr2UPN','search-AADSignInReports','search-GraphApiAAD','get-AADCertToken','get-AADTokenHeaders','search-GraphApiAAD','test-MsolUserLicenseDirectAssigned','test-MsolUserLicenseGroupAssigned','Wait-AADSync')
+FunctionsToExport = @('Add-ADALType','caadCMW','caadtol','caadTOR','caadVEN','cmsolcmw','cmsolTOL','cmsolTOR','cmsolVEN','Connect-AAD','connect-AzureRM','Connect-MSOL','Disconnect-AAD','get-AADBearerToken','get-AADBearerTokenHeaders','get-AADCertToken','get-AADLastSync','get-AADlicensePlanList','get-AADToken','get-AADTokenHeaders','Get-MsolDisabledPlansForSKU','Get-MsolUnexpectedEnabledPlansForUser','get-MsolUserLastSync','Get-MsolUserLicense','get-MsolUserLicenseDetails','Get-ServiceToken','Get-TokenCache','Initialize-AADSignErrorsHash','profile-AAD-Signons','Write-Log','get-colorcombo','Initialize-AADSignErrorsHash','Cleanup','Remove-MsolUserDirectLicenses','resolve-GuestExternalAddr2UPN','search-AADSignInReports','search-GraphApiAAD','test-MsolUserLicenseDirectAssigned','test-MsolUserLicenseGroupAssigned','Wait-AADSync')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = '*'
@@ -126,8 +126,8 @@ PrivateData = @{
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU1zOv27+pO4/xha9xTxUg/kFi
-# usegggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUQQ6LvcwL3NilbouOwHYSblfO
+# HLugggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -142,9 +142,9 @@ PrivateData = @{
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRPBeWG
-# x74Xs3XoMshXl3TWum+1NDANBgkqhkiG9w0BAQEFAASBgIbRbZF3lCIU6womz30F
-# kn+nsAHaqFB6d02rfB/HvgaP8pDXFQE/RQbKSdrfk5ZslUGkPNRzM4xeDbb87lSQ
-# q7VFctKs4h/afIssxbDGDdog+j+ZzWoaXRuZrvLE5dEB/jmq0fYczfu9odCPoIqb
-# e571AMn30OvaZuT73CrLLZ4Q
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRvIoG7
+# r7fgzAiRkeOl07zrwWJIcTANBgkqhkiG9w0BAQEFAASBgE74/YZ4z4FDBlSzv+eL
+# FWGhs915wS9VeO609VWISDjK3BzBGexsv4H0X1N2rgSYIEVPjrzfNccT+mSVUv8s
+# YCmh1sLBdReb8JhdszvIiEP7pf47kPxf+Bnsx/VfCsaWStibOJwcsIOebHQwuJfv
+# mi7qPBhbrE7HOKurVje8heVi
 # SIG # End signature block

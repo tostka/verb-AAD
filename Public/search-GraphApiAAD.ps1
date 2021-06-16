@@ -1,29 +1,28 @@
-#*------v Function search-GraphApiAAD v------
+#*------v search-GraphApiAAD.ps1 v------
 function search-GraphApiAAD {
-    #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-#VERB-NOUN.ps1, or #*----------v Function VERB-NOUN() v----------
-<#
-.SYNOPSIS
-search-GraphApiAAD - Execute a GraphAPI search and return report object, for pre-constructed -fullURI
-.NOTES
-Version     : 1.0.0
-Author      : Todd Kadrie
-Website     :	http://www.toddomation.com
-Twitter     :	@tostka / http://twitter.com/tostka
-CreatedDate : 2021-06-15
-FileName    : search-GraphApiAAD.ps1
-License     : MIT License
-Copyright   : (c) 2021 Todd Kadrie
-Github      : https://github.com/tostka/verb-aad
-Tags        : Powershell
-AddedCredit : Alex Asplund
-AddedWebsite:	https://automativity.com
-AddedTwitter:	@AlexAsplund
+    <#
+    .SYNOPSIS
+    search-GraphApiAAD - Execute a GraphAPI search and return report object, for pre-constructed -fullURI
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2021-06-15
+    FileName    : search-GraphApiAAD.ps1
+    License     : MIT License
+    Copyright   : (c) 2021 Todd Kadrie
+    Github      : https://github.com/tostka/verb-aad
+    Tags        : Powershell
+    AddedCredit : Alex Asplund
+    AddedWebsite:	https://automativity.com
+    AddedTwitter:	@AlexAsplund
     Tags        : Powershell,AzureAD,Authentication,GraphAPI,Microsoft
     REVISIONS
+    * 9:38 AM 6/16/2021 added non-splatted example
     * 3:11 PM 6/15/2021 functionalized graphapi query code by Alex Asplund from his AADsignInReports script
     * 3:16 PM 6/14/2021 fixed missing cert(s) on jbox, works now ; strongly typed $tickets array (was pulling 1st char instead of elem) ; subd out rednund -verbose params ;provide dyn param lookup on $TenOrg, via meta infra file, cleaned up the CBH auth & tenant config code (pki certs creation, CER & PFX export/import)
-* 10:56 AM 6/11/2021 added CBH example for TOL; expanded docs to reinforce cert needed, how to lookup name, and where needs to be stored per acct per machine.
+    * 10:56 AM 6/11/2021 added CBH example for TOL; expanded docs to reinforce cert needed, how to lookup name, and where needs to be stored per acct per machine.
     * 8:51 AM 1/30/2020
     * 2019-08-12 posted version 
     .DESCRIPTION
@@ -81,6 +80,15 @@ AddedTwitter:	@AlexAsplund
     $ReportOutputJson = "$($ofile).json" ;
     $SignInReportArray | Convertto-Json | Out-File $ReportOutputJson -Force ;
     $SignInReportArray | Select-Object * | Export-csv $ReportOutputCSV -NoTypeInformation -Force ; 
+    Splatted example - FullURI query specs are generated externally, and passed in as a complete ODATa syntax uri
+    .EXAMPLE
+    search-GraphApiAAD -fullURI $fulluri -token $token -tenantName $tenantName -tenantId $tenantId -AppID $AppID -Certificate $Certificate -showDebug $showDebug -Verbose:($VerbosePreference -eq 'Continue') ;
+    $ofile = 'd:\scripts\logs\report' ; 
+    $ReportOutputCSV = "$($ofile).csv" ;
+    $ReportOutputJson = "$($ofile).json" ;
+    $SignInReportArray | Convertto-Json | Out-File $ReportOutputJson -Force ;
+    $SignInReportArray | Select-Object * | Export-csv $ReportOutputCSV -NoTypeInformation -Force ; 
+    Non-splatted example - FullURI query specs are generated externally, and passed in as a complete ODATa syntax uri
     .LINK
     https://adamtheautomator.com/microsoft-graph-api-powershell/
     .LINK
@@ -106,9 +114,9 @@ AddedTwitter:	@AlexAsplund
     BEGIN {
         $verbose = ($VerbosePreference -eq "Continue") ;
 
-        # fulluri should resemble: https://graph.microsoft.com/beta/auditLogs/signIns?$filter=userPrincipalName eq 'Addy.Donkhong@toro.com'&$top=1
+        # fulluri should resemble: https://graph.microsoft.com/beta/auditLogs/signIns?$filter=userPrincipalName eq 'fname.lname@domain.com'&$top=1
         $smsg = "`nfullUri:`n$(($fullUri|out-string).trim())"  ;
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H3 } #Error|Warn|Debug 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         if($showdebug){$fullUri|C:\WINDOWS\System32\clip.exe} ;
     } 
@@ -116,8 +124,8 @@ AddedTwitter:	@AlexAsplund
         $smsg = "--------------------------------------------------------------" ;
         $smsg += "`nDownloading report from `n$($fullUri)"  ;
         $smsg += "`n--------------------------------------------------------------" ;
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H3 } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
     
         # we'll be flipping the $url to the next link after the first pass, so we need to use '$url' going into the loop
         $url = $fullUri ;
@@ -128,7 +136,7 @@ AddedTwitter:	@AlexAsplund
 
         Do {
             $smsg = "Fetching data using Url:`n$($url )" 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H3 } #Error|Warn|Debug 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
             Try {
@@ -156,7 +164,7 @@ AddedTwitter:	@AlexAsplund
                         
                 $url = $myReport.'@odata.nextLink'
                 $count = $count + $myReport.value.Count
-                "Total Fetched: $count" | write-verbose ; 
+                #"Total Fetched: $count" | write-verbose ; 
                 $retryCount = 0 ; 
 
             } Catch [System.Net.WebException] {
@@ -225,11 +233,11 @@ AddedTwitter:	@AlexAsplund
             }
         
             $smsg += "`n--------------------------------------------------------------" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H3 } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
        } while($myReport.'@odata.nextLink' -ne $null) ; # loop-E 
    }  # if-E-PROCESS 
    END {$ReportArray| write-output ; } 
-} ; 
-#*------^ END Function search-GraphApiAAD ^------
+}
+#*------^ search-GraphApiAAD.ps1 ^------

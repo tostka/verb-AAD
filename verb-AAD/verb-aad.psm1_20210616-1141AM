@@ -1,11 +1,11 @@
-# verb-aad.psm1
+﻿# verb-aad.psm1
 
 
 <#
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.57
+Version     : 1.0.55
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -57,14 +57,19 @@ function Add-ADALType {
     Copyright   : (non asserted)
     Github      : https://github.com/tostka/verb-aad
     REVISIONS
-    * 1:53 PM 6/16/2021 flip fr static rev to latest rev of azuread mod
     * 12:21 PM 8/8/2020 init
     .DESCRIPTION
     Add-ADALType - Path & Load the AzureAD 'Microsoft.IdentityModel.Clients.ActiveDirectory.dll'
     Lifted from [PowerShell Gallery | CloudConnect.psm1 1.0.0](https://www.powershellgallery.com/packages/CloudConnect/1.0.0/Content/CloudConnect.psm1)
     .EXAMPLE
-    Add-ADALType ; 
-    Ensure our ADAL types are loaded and available
+    $token = Add-ADALType ; 
+    if( ($null -eq $token) -OR ($token.count -eq 0)){
+        # not connected/authenticated
+        Connect-AzureAD ; 
+    } else { 
+        write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+    } ; 
+    Retrieve and evaluate status of AzureSession token
     .LINK
     https://github.com/tostka/verb-aad
     #>
@@ -72,9 +77,7 @@ function Add-ADALType {
     Param([Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID) ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
-        #$path = join-path (split-path (Get-Module azuread -ListAvailable | Where-Object { $_.Version -eq '2.0.2.16' }).Path -parent) 'Microsoft.IdentityModel.Clients.ActiveDirectory.dll' ; 
-        # hardcode fails, if vers not present; flip to latest of list
-        $path = join-path (split-path (Get-Module azuread -ListAvailable | sort Version | select -last 1).Path -parent) 'Microsoft.IdentityModel.Clients.ActiveDirectory.dll' ; 
+        $path = join-path (split-path (Get-Module azuread -ListAvailable | Where-Object { $_.Version -eq '2.0.2.16' }).Path -parent) 'Microsoft.IdentityModel.Clients.ActiveDirectory.dll' ; 
         Add-Type -Path $path ; 
     } ; 
     END{} ;
@@ -844,7 +847,6 @@ function get-AADBearerToken {
     }
     #-=-=-=-=-=-=-=-=
     REVISIONS   :
-    * 1:45 PM 6/16/2021 added logging (although borked, maybe they'll restore function later)
     5:41 PM 1/30/2020 BROKEN - whole concept of Bearer token pull: ADAL Azure mod dll no longer has an 'AcquireToken' method (revised away)
     .PARAMETER tenantId
     AAD TenantID (defaulted TOR) [-TenantID (guid)]]
@@ -895,10 +897,8 @@ At C:\usr\work\o365\scripts\Pull-AADSignInReports.ps1:434 char:8
     $token = $authResult.AccessToken
     write-verbose "`$token:`n$(($token|out-string).trim())" ;
     if ($token -eq $null) {
-        $smsg = "ERROR: Failed to get an Access Token" ; ; 
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN} #Error|Warn|Debug 
-        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        break ;
+        Write-Output "ERROR: Failed to get an Access Token" ;
+        exit
     }
     else { $token | write-output }
 }
@@ -973,7 +973,6 @@ function get-AADCertToken {
     AddedWebsite:	
     AddedTwitter:	
     REVISIONS
-    * 1:13 PM 6/16/2021 logging: swapped wl for write-* ; swapped $XXXmeta. props for driver vari's
     * 3:16 PM 6/14/2021 fixed missing cert(s) on jbox, works now ; strongly typed $tickets array (was pulling 1st char instead of elem) ; subd out rednund -verbose params ;provide dyn param lookup on $TenOrg, via meta infra file, cleaned up the CBH auth & tenant config code (pki certs creation, CER & PFX export/import)
 * 10:56 AM 6/11/2021 added CBH example for TOL; expanded docs to reinforce cert needed, how to lookup name, and where needs to be stored per acct per machine.
     * 8:51 AM 1/30/2020
@@ -1218,31 +1217,18 @@ function get-AADCertToken {
     [CmdletBinding()]
     Param(
         [Parameter(HelpMessage = "AAD TenantID [-TenantID (guid)]]")]
-        [string]$tenantName = $global:TorMeta.o365_TenantDomain,
+        [string]$tenantName = $global:o365_Toroco_TenantDomain,
         [Parameter(HelpMessage = "AAD AppID [-AppID (guid)]]")]
-        [string]$AppID = $global:TORMeta.AAD_App_Audit_I,
+        [string]$AppID = $global:TOR_AAD_App_Audit_ID,
         [Parameter(HelpMessage = "Certificate Thumbprint [-Certificate (thumbprint)]]")]
-        $Certificate = $global:tormeta.AAD_App_Audit_CertThumb,
+        $Certificate = $global:TOR_AAD_App_Audit_CertThumb,
         [Parameter(HelpMessage = "Debugging Flag [-showDebug]")]
         [switch] $showDebug
-    ) ;
-    $verbose = ($VerbosePreference -eq "Continue") ;
+    ) # PARAM BLOCK END ;
+
     if($Certificate = Get-Item Cert:\CurrentUser\My\$Certificate){ 
-        $smsg = "Cert:$($Certificate.thumbprint):`n$(($certificate| fl Subject,DnsNameList,FriendlyName,Not*,Thumbprint|out-string).trim())" ; 
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        if(((get-date $Certificate.NotBefore) -lt (get-date)) -AND ((get-date) -lt (get-date $Certificate.NotAfter))){
-            $smsg = "(cert is in valid date window)" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        } else { 
-            $smsg = "$(($Certificate.pspath.tostring() -split '::')[1]) *IS EXPIRED!*`n" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
-            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        } ; 
-        if(!$MSGraphScope){$MSGraphScope = 'https://graph.microsoft.com'} ; 
-        #$Scope = "https://graph.microsoft.com/.default" ;
-        $Scope = "$($MSGraphScope)/.default" ;
+        ( $certificate| fl Subject,DnsNameList,FriendlyName,Not*,Thumbprint | out-string).trim() | write-verbose ;
+        $Scope = "https://graph.microsoft.com/.default" ;
         $CertificateBase64Hash = [System.Convert]::ToBase64String($Certificate.GetCertHash()) ;
         # Create JWT timestamp for expiration
         $StartDate = (Get-Date "1970-01-01T00:00:00Z" ).ToUniversalTime() ;
@@ -1281,61 +1267,53 @@ function get-AADCertToken {
         # Join header and Payload with "." to create a valid (unsigned) JWT
         $JWT = $EncodedHeader + "." + $EncodedPayload ;
         # Get the private key object of your certificate
-        if(!$Certificate.PrivateKey){
-            $smsg = "Specified Certificate... $($Certificate.thumbprint)`nis *MISSING* its PRIVATE KEY!`nYou must export the key - in PFX format - when moving the cert between hosts & accounts!`n(see get-help $($CmdletName) -detail for sample export code)" ; 
+        if(! $Certificate.PrivateKey){
+            $smsg = "Specified Certificate... $($Certificate.thumbprint)`nis *MISSING* its PRIVATE KEY!`nYou must export the key when moving the cert between hosts & accounts!`n(key is used for signing the token request)" ; 
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
             else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             break ; 
-        } else { 
-            $PrivateKey = $Certificate.PrivateKey ;
-            # Define RSA signature and hashing algorithm
-            $RSAPadding = [Security.Cryptography.RSASignaturePadding]::Pkcs1 ;
-            $HashAlgorithm = [Security.Cryptography.HashAlgorithmName]::SHA256 ; 
-            # Create a signature of the JWT
-            $Signature = [Convert]::ToBase64String(
-                $PrivateKey.SignData([System.Text.Encoding]::UTF8.GetBytes($JWT),$HashAlgorithm,$RSAPadding) 
-            ) -replace '\+','-' -replace '/','_' -replace '=' ;
-            # Join the signature to the JWT with "."
-            $JWT = $JWT + "." + $Signature ;
-            # Create a hash with body parameters
-            $Body = @{
-                client_id = $AppId ;
-                client_assertion = $JWT ;
-                client_assertion_type = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" ;
-                scope = $Scope ;
-                grant_type = "client_credentials" ;
-            } ;
-            $Url = "https://login.microsoftonline.com/$TenantName/oauth2/v2.0/token" ;
-            # Use the self-generated JWT as Authorization
-            $Header = @{Authorization = "Bearer $JWT" } ;
-            $pltPost = @{
-                ContentType = 'application/x-www-form-urlencoded' ;
-                Method = 'POST' ;
-                Body = $Body ;
-                Uri = $Url ;
-                Headers = $Header ;
-            } ;
-            $smsg = "Obtain Token:Invoke-RestMethod w`n$(($pltPost|out-string).trim())" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            $token = Invoke-RestMethod @pltPost ; 
+        } ; 
+        $PrivateKey = $Certificate.PrivateKey
+        # Define RSA signature and hashing algorithm
+        $RSAPadding = [Security.Cryptography.RSASignaturePadding]::Pkcs1 ;
+        $HashAlgorithm = [Security.Cryptography.HashAlgorithmName]::SHA256 ; 
+        # Create a signature of the JWT
+        $Signature = [Convert]::ToBase64String(
+            $PrivateKey.SignData([System.Text.Encoding]::UTF8.GetBytes($JWT),$HashAlgorithm,$RSAPadding) 
+        ) -replace '\+','-' -replace '/','_' -replace '=' ;
+        # Join the signature to the JWT with "."
+        $JWT = $JWT + "." + $Signature ;
+        # Create a hash with body parameters
+        $Body = @{
+            client_id = $AppId ;
+            client_assertion = $JWT ;
+            client_assertion_type = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" ;
+            scope = $Scope ;
+            grant_type = "client_credentials" ;
         } ;
+        $Url = "https://login.microsoftonline.com/$TenantName/oauth2/v2.0/token" ;
+        # Use the self-generated JWT as Authorization
+        $Header = @{
+            Authorization = "Bearer $JWT" ;
+        } ;
+        $pltPost = @{
+            ContentType = 'application/x-www-form-urlencoded' ;
+            Method = 'POST' ;
+            Body = $Body ;
+            Uri = $Url ;
+            Headers = $Header ;
+        } ;
+        write-verbose "$((get-date).ToString('HH:mm:ss')):Obtain Token:Invoke-RestMethod w`n$(($pltPost|out-string).trim())" ; 
+        $token = Invoke-RestMethod @pltPost ; 
     } else { 
-        $smsg = "Unable to:Get-Item Cert:\CurrentUser\My\$($Certificate)" 
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN} #Error|Warn|Debug 
-        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        Break;
+        write-warning "Unable to:Get-Item Cert:\CurrentUser\My\$($Certificate)"
+        Stop
     } ; 
 
-    $smsg = "`$token:`n$(($token|out-string).trim())" ;
-    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-
+    write-verbose "`$token:`n$(($token|out-string).trim())" ;
     if ($token -eq $null) {
-        $smsg = "ERROR: Failed to get an Access Token" ; ; 
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN} #Error|Warn|Debug 
-        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        break ;
+        Write-Output "ERROR: Failed to get an Access Token" ;
+        exit
     } else { $token | write-output }
 }
 
@@ -2294,7 +2272,6 @@ function Get-TokenCache {
     Copyright   : (non asserted)
     Github      : https://github.com/tostka/verb-aad
     REVISIONS
-    * 1:58 PM 6/16/2021 fixed typo (spurious ;)
     * 12:21 PM 8/8/2020 init
     .DESCRIPTION
     Get-TokenCache - Returns the current contents of the token cache 
@@ -2316,11 +2293,12 @@ function Get-TokenCache {
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
         # Ensure our ADAL types are loaded and availble
-        Add-ADALType ;
+Add-ADALType ;
         $cache = [Microsoft.IdentityModel.Clients.ActiveDirectory.TokenCache]::DefaultShared ;
         if ($full){
             Return $Cache.ReadItems() ;
-        } else {
+        } ;
+        else {
             $cache.ReadItems() | Select-Object DisplayableId, Authority, ClientId, Resource, @{Name = "ExpiresOn"; Expression = { $_.ExpiresOn.localdatetime } } ;
         } ;
     } ; 
@@ -2516,8 +2494,7 @@ Function profile-AAD-Signons {
     Additional Credits: REFERENCE
     Website:	URL
     Twitter:	URL
-    REVISIONS   : 
-    * 3:04 PM 6/16/2021, shifted to standard start-log mod support, conditioned helper funcs, added test for events in target file, echo on gap
+    REVISIONS   :
     * 11:11 AM 6/15/2021 Ren'd Build-AADSignErrorsHash() -> Initialize-AADSignErrorsHash (compliant verb) ; sync'd copy & set it to defer to the verb-AAD mod version
     # 10:46 AM 6/2/2021 sub'd verb-logging for v-trans
     * 9:19 AM 8/29/2019 fixed $filterdesc's, alot didn't match the actual filters, added device.displayname (workstation name, blank on a lot of browsers too), also added correlid, requsestidto fail dumps, as some error recommend a ticket with those values and the errornumber
@@ -3958,10 +3935,12 @@ Function search-AADSignInReports {
 
     #region INIT; # ------
     #*======v SCRIPT/DOMAIN/MACHINE/INITIALIZATION-DECLARE-BOILERPLATE v======
-    $verbose = ($VerbosePreference -eq "Continue") ; 
+    $verbose = $VerbosePreference ;
+
     ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
     # Get parameters this function was invoked with
     $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+    $Verbose = ($VerbosePreference -eq 'Continue') ;
     if ($PSScriptRoot -eq "") {
         if ($psISE) { $ScriptName = $psISE.CurrentFile.FullPath }
         elseif ($context = $psEditor.GetEditorContext()) {$ScriptName = $context.CurrentFile.Path }
@@ -4000,7 +3979,7 @@ Function search-AADSignInReports {
     
     $sBnr="#*======v $(${CmdletName}): v======" ;
     $smsg = $sBnr ;
-    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } #Error|Warn|Debug
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
     # 1:11 PM 6/14/2021 provide dyn param lookup on $TenOrg, via meta infra file
@@ -4010,12 +3989,9 @@ Function search-AADSignInReports {
     if(!($AppID = (gv -name "$($TenOrg)meta").value.AAD_App_Audit_ID)){throw "missing $($TenOrg)meta.value.AAD_App_Audit_ID!" ; break ; } ;
     if(!($Certificate = (gv -name "$($TenOrg)meta").value.AAD_App_Audit_CertThumb)){throw "missing $($TenOrg)meta.value.AAD_App_Audit_CertThumb!" ; break ; } ;
 
-    if(!$MSGraphScope){
-        $MSGraphScope = 'https://graph.microsoft.com' ;
-        ##$resourceAppIdURI = "https://graph.microsoft.com"
-        #$MSGraphURI = "https://graph.microsoft.com"
-    } ;
-    $MSGraphURI = $MSGraphScope ;
+
+    ##$resourceAppIdURI = "https://graph.microsoft.com"
+    $MSGraphURI = "https://graph.microsoft.com"
 
     #$redirectUri      = "https://RedirectURI.com"                #Your Application's Redirect URI
     #$redirectUri = "https://placemarker.com"                #Your Application's Redirect URI
@@ -4029,6 +4005,7 @@ Function search-AADSignInReports {
         write-host -foregroundcolor RED "$((get-date).ToString('HH:mm:ss')):ERROR!:You have specified $($ttl) UPNs but only $($tickNum) tickets.`nPlease specified a matching number of both objects." ;
         Break ;
     } ;
+
 
     # below is hard-coded dates, 2/1/196am to 2/28/19 7am.
     #$fullUri = "https://graph.microsoft.com/beta/auditLogs/signIns?`$filter=createdDateTime%20ge%202019-02-01T06:00:00Z%20and%20createdDateTime%20le%202019-02-28T00:07:01.607Z&`$top=1000"
@@ -4047,13 +4024,13 @@ Function search-AADSignInReports {
     #$Request =get-AADCertToken -tenantName $tenantName -AppID $AppID -Certificate $Certificate -verbose:($VerbosePreference -eq 'Continue');
     # splatted:
     $smsg = "get-AADCertToken w`n$(($pltAADCertToken|out-string).trim())" ; 
-    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H3 } #Error|Warn|Debug 
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
     $token =get-AADCertToken @pltAADCertToken ; 
     # build tokenheader from token
     $pltAADCertTokenHdr=[ordered]@{token=$token ;Verbose=$($VerbosePreference -eq 'Continue');};
     $smsg = "get-AADTokenHeaders w`n$(($pltAADCertTokenHdr|out-string).trim())" ; 
-    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H3 } #Error|Warn|Debug 
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
     $AADTokenHeaders = get-AADTokenHeaders @pltAADCertTokenHdr ;
 
@@ -4252,14 +4229,14 @@ Function search-AADSignInReports {
         } CATCH {
             $ErrTrapd=$Error[0] ;
             $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
             else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         } ;
 
         #$sBnrS="`n#*------v ($($iProcd) / $($ttl)):Processing:$($UPN) v------" ;
         $sBnrS="`n#*------v ($($iProcd) / $($ttl)):Processing:$($pltSL.Tag) v------" ;
         $smsg = "$((get-date).ToString('HH:mm:ss')):$($sBnrS)" ;
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } #Error|Warn|Debug 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
         $path = 'beta/auditLogs/signIns'
@@ -4330,9 +4307,9 @@ Function search-AADSignInReports {
         if($returns = ($SignInReportArray|measure).count){
             $smsg = "(Report Records returned:$($returns))" ;
         } else { 
-            $smsg = "(*NO* Report Records returned)" ;
+            $smsg = "(*NO* Report Records returned" ;
         } ; 
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } #Error|Warn|Debug 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
         $ReportOutputCSV = $logfile.replace('-log.txt','.csv') ;
@@ -4349,11 +4326,11 @@ Function search-AADSignInReports {
             $smsg = "$($UPN):Sign in activity JSON report can be found at`n$($ReportOutputJson)."
             $smsg += "`n$($UPN):Sign in activity CSV report can be found at`n$($ReportOutputCSV)."
         } ;
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } #Error|Warn|Debug 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
         $smsg = $sBnrS.replace('-v','-^').replace('v-','^-') ;
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } #Error|Warn|Debug 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
     }  # loop-E
 
@@ -4364,11 +4341,11 @@ Function search-AADSignInReports {
       profile-AAD-Signons -Files '$($jsonFiles -join "','")'
 
 "@ ;
-    if ($logging) { Write-Log -LogContent $msgHere -Path $logfile -useHost -Level H2 } #Error|Warn|Debug 
+    if ($logging) { Write-Log -LogContent $msgHere -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
     else{ write-host -foregroundcolor green $msgHere } ;
 
     $smsg = $sBnr.replace('=v','=^').replace('v=','^=') ;
-    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } #Error|Warn|Debug 
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 }
 
@@ -4492,7 +4469,7 @@ function search-GraphApiAAD {
 
         # fulluri should resemble: https://graph.microsoft.com/beta/auditLogs/signIns?$filter=userPrincipalName eq 'fname.lname@domain.com'&$top=1
         $smsg = "`nfullUri:`n$(($fullUri|out-string).trim())"  ;
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H3 } #Error|Warn|Debug 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         if($showdebug){$fullUri|C:\WINDOWS\System32\clip.exe} ;
     } 
@@ -4500,8 +4477,8 @@ function search-GraphApiAAD {
         $smsg = "--------------------------------------------------------------" ;
         $smsg += "`nDownloading report from `n$($fullUri)"  ;
         $smsg += "`n--------------------------------------------------------------" ;
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H3 } #Error|Warn|Debug 
-        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
     
         # we'll be flipping the $url to the next link after the first pass, so we need to use '$url' going into the loop
         $url = $fullUri ;
@@ -4512,7 +4489,7 @@ function search-GraphApiAAD {
 
         Do {
             $smsg = "Fetching data using Url:`n$($url )" 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H3 } #Error|Warn|Debug 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
             Try {
@@ -4540,7 +4517,7 @@ function search-GraphApiAAD {
                         
                 $url = $myReport.'@odata.nextLink'
                 $count = $count + $myReport.value.Count
-                #"Total Fetched: $count" | write-verbose ; 
+                "Total Fetched: $count" | write-verbose ; 
                 $retryCount = 0 ; 
 
             } Catch [System.Net.WebException] {
@@ -4609,7 +4586,7 @@ function search-GraphApiAAD {
             }
         
             $smsg += "`n--------------------------------------------------------------" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H3 } #Error|Warn|Debug 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
        } while($myReport.'@odata.nextLink' -ne $null) ; # loop-E 
@@ -4843,3 +4820,29 @@ Function Wait-AADSync {
 
 Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,get-MsolUserLastSync,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,Initialize-AADSignErrorsHash,profile-AAD-Signons,Write-Log,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,Wait-AADSync -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU5tKhujDL4qG9QsaaXq6Zbw6r
+# zcqgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQ/GDnD
+# 4QJTX2Zhu9yUb0KXQqAuHjANBgkqhkiG9w0BAQEFAASBgEXxeTBTs6sZltEoYQQG
+# RBCDguf6YbGUIh2tzNICftFaSWr6D80JNXqOUqLdPMtvRkMbIW3PZ8PmUTQGDxUj
+# cVL35z6FCmkl+S6n6bUmhmmMlvtww8sPcRdczLj74oVEjtKurIAGE1mw0XnGDjvM
+# lS+BeqMzcJEnILzpgKzL3+HM
+# SIG # End signature block

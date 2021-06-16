@@ -10,7 +10,8 @@ Function profile-AAD-Signons {
     Additional Credits: REFERENCE
     Website:	URL
     Twitter:	URL
-    REVISIONS   :
+    REVISIONS   : 
+    * 3:04 PM 6/16/2021, shifted to standard start-log mod support, conditioned helper funcs, added test for events in target file, echo on gap
     * 11:11 AM 6/15/2021 Ren'd Build-AADSignErrorsHash() -> Initialize-AADSignErrorsHash (compliant verb) ; sync'd copy & set it to defer to the verb-AAD mod version
     # 10:46 AM 6/2/2021 sub'd verb-logging for v-trans
     * 9:19 AM 8/29/2019 fixed $filterdesc's, alot didn't match the actual filters, added device.displayname (workstation name, blank on a lot of browsers too), also added correlid, requsestidto fail dumps, as some error recommend a ticket with those values and the errornumber

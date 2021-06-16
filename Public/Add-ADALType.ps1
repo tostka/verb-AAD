@@ -14,19 +14,14 @@ function Add-ADALType {
     Copyright   : (non asserted)
     Github      : https://github.com/tostka/verb-aad
     REVISIONS
+    * 1:53 PM 6/16/2021 flip fr static rev to latest rev of azuread mod
     * 12:21 PM 8/8/2020 init
     .DESCRIPTION
     Add-ADALType - Path & Load the AzureAD 'Microsoft.IdentityModel.Clients.ActiveDirectory.dll'
     Lifted from [PowerShell Gallery | CloudConnect.psm1 1.0.0](https://www.powershellgallery.com/packages/CloudConnect/1.0.0/Content/CloudConnect.psm1)
     .EXAMPLE
-    $token = Add-ADALType ; 
-    if( ($null -eq $token) -OR ($token.count -eq 0)){
-        # not connected/authenticated
-        Connect-AzureAD ; 
-    } else { 
-        write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
-    } ; 
-    Retrieve and evaluate status of AzureSession token
+    Add-ADALType ; 
+    Ensure our ADAL types are loaded and available
     .LINK
     https://github.com/tostka/verb-aad
     #>
@@ -34,9 +29,11 @@ function Add-ADALType {
     Param([Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID) ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
-        $path = join-path (split-path (Get-Module azuread -ListAvailable | Where-Object { $_.Version -eq '2.0.2.16' }).Path -parent) 'Microsoft.IdentityModel.Clients.ActiveDirectory.dll' ; 
+        #$path = join-path (split-path (Get-Module azuread -ListAvailable | Where-Object { $_.Version -eq '2.0.2.16' }).Path -parent) 'Microsoft.IdentityModel.Clients.ActiveDirectory.dll' ; 
+        # hardcode fails, if vers not present; flip to latest of list
+        $path = join-path (split-path (Get-Module azuread -ListAvailable | sort Version | select -last 1).Path -parent) 'Microsoft.IdentityModel.Clients.ActiveDirectory.dll' ; 
         Add-Type -Path $path ; 
     } ; 
     END{} ;
-} ; 
+} ;
 #*------^ Add-ADALType.ps1 ^------

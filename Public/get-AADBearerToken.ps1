@@ -1,4 +1,4 @@
-#*------v Function get-AADBearerToken v------
+#*------v get-AADBearerToken.ps1 v------
 function get-AADBearerToken {
     <#
     .SYNOPSIS
@@ -38,6 +38,7 @@ function get-AADBearerToken {
     }
     #-=-=-=-=-=-=-=-=
     REVISIONS   :
+    * 1:45 PM 6/16/2021 added logging (although borked, maybe they'll restore function later)
     5:41 PM 1/30/2020 BROKEN - whole concept of Bearer token pull: ADAL Azure mod dll no longer has an 'AcquireToken' method (revised away)
     .PARAMETER tenantId
     AAD TenantID (defaulted TOR) [-TenantID (guid)]]
@@ -88,8 +89,12 @@ At C:\usr\work\o365\scripts\Pull-AADSignInReports.ps1:434 char:8
     $token = $authResult.AccessToken
     write-verbose "`$token:`n$(($token|out-string).trim())" ;
     if ($token -eq $null) {
-        Write-Output "ERROR: Failed to get an Access Token" ;
-        exit
+        $smsg = "ERROR: Failed to get an Access Token" ; ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN} #Error|Warn|Debug 
+        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        break ;
     }
     else { $token | write-output }
-} ; #*------^ END Function get-AADBearerToken ^------
+}
+
+#*------^ get-AADBearerToken.ps1 ^------
