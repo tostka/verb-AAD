@@ -5,21 +5,28 @@ function Get-DsRegStatus {
     Get-DsRegStatus - Returns the output of dsregcmd /status as a PSObject. 
     .NOTES
     Version     : 0.1.17
+    .NOTES
+    Version     : 0.0.
     Author      : Todd Kadrie
-    Website     :	http://www.toddomation.com
-    Twitter     :	@tostka / http://twitter.com/tostka
+    Website     : http://www.toddomation.com
+    Twitter     : @tostka / ttps://github.com/tostka/verb-aad
     CreatedDate : 2021-06-23
     FileName    : Get-DsRegStatus
-    License     : (non asserted)
-    Copyright   : (non asserted)
-    Github      : https://github.com/tostka/verb-aad
+    License     : (none asserted)
+    Copyright   : (c) 2019 Thomas Kurth. All rights reserved.
+    Github      : https://github.com/tostka/verb-XXX
+    Tags        : Powershell
+    AddedCredit : Thomas Kurth
+    AddedWebsite: https://www.powershellgallery.com/packages/ModernWorkplaceClientCenter/0.1.17/Content/Functions/Get-DsRegStatus.ps1
+    AddedTwitter: 
     REVISIONS
+    * 9:15 AM 6/28/2021 updated CBH
     * 9:54 AM 6/23/2021 added to verb-aad
-    * 12:21 PM 8/8/2020 init
+    * 12:21 PM 8/8/2020 init; added CBH
     .DESCRIPTION
     Get-DsRegStatus - Returns the output of dsregcmd /status as a PSObject. 
     Returns the output of dsregcmd /status as a PSObject. All returned values are accessible by their property name.
-    Lifted from [PowerShell Gallery | Functions/Get-DsRegStatus.ps1 0.1.3 - www.powershellgallery.com/](https://www.powershellgallery.com/packages/ModernWorkplaceClientCenter/0.1.3/Content/Functions%5CGet-DsRegStatus.ps1)
+    Lifted from [PowerShell Gallery | Functions/Get-DsRegStatus.ps1 0.1.3 - www.powershellgallery.com/](https://www.powershellgallery.com/packages/ModernWorkplaceClientCenter/0.1.17/Content/Functions%5CGet-DsRegStatus.ps1)
     Alt to manual cmdline parsing:
     ```powershell
     $results = dsregcmd /status;
@@ -35,7 +42,7 @@ function Get-DsRegStatus {
     Get-DsRegStatus 
     Displays a full output of dsregcmd / status.
     .LINK
-    https://github.com/Canthv0/CloudAuthModule 
+    https://www.powershellgallery.com/packages/ModernWorkplaceClientCenter/0.1.17/Content/Functions%5CGet-DsRegStatus.ps1
     .LINK
     https://github.com/tostka/verb-aad
     #>
