@@ -18,6 +18,7 @@ Function Disconnect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 3:28 PM 7/26/2021 pstitlebar update
     * 10:58 AM 3/16/2021 updated cbh & new try-catch to accomodate non-existing 
     * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:03 PM 8/8/2020 rewrote to leverage AzureSession checks, without need to qry Get-AzureADTenantDetail (trying to avoid sporadic VEN AAD 'Forbidden' errors)
@@ -49,7 +50,7 @@ Function Disconnect-AAD {
         #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         write-verbose "get-command disconnect-AzureAD" ; 
         if(get-command disconnect-AzureAD){
-            $sTitleBarTag="AAD" ;
+            $sTitleBarTag = @("AAD") ;
             $error.clear() ;
             TRY {
                 <# old code
@@ -65,6 +66,7 @@ Function Disconnect-AAD {
                 try{
                     Disconnect-AzureAD -EA SilentlyContinue -ErrorVariable AADError ;
                     Write-Host -ForegroundColor green ("Azure Active Directory - Disconnected") ;
+                    remove-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");
                 }
                 catch  {
                     $ErrTrpd = $Error[0] ; 
@@ -92,7 +94,38 @@ Function Disconnect-AAD {
                     write-host "(disconnect-AzureAD from:$($TokenTag))" ;
                     disconnect-AzureAD ; 
                     write-verbose "Remove-PSTitleBar -Tag $($sTitleBarTag)" ; 
-                    Remove-PSTitleBar -Tag $sTitleBarTag ; 
+                    Remove-PSTitlebar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue") 
+                    # should pull TenOrg if no other mounted 
+                    <#$sXopDesig = 'xp' ;
+                    $sXoDesig = 'xo' ;
+                    #>
+                    #$xxxMeta.rgxOrgSvcs - $ExchangeServer = (Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server|get-random ;
+                    # normally would be org specific, but we don't have a cred or a TenOrg ref to resolve, so just check xx's version
+                    # -replace 'EMS','' -replace '\(\|','(' -replace '\|\)',')'
+                    #if($host.ui.RawUI.WindowTitle -notmatch ((Get-Variable  -name "TorMeta").value.rgxOrgSvcs-replace 'EMS','' -replace '\(\|','(' -replace '\|\)',')' )){
+                    # drop the current tag being removed from the rgx...
+                    [regex]$rgxsvcs = ('(' + (((Get-Variable  -name "TorMeta").value.OrgSvcs |?{$_ -ne 'AAD'} |%{[regex]::escape($_)}) -join '|') + ')') ;
+                    if($host.ui.RawUI.WindowTitle -notmatch $rgxsvcs){
+                        write-verbose "(removing TenOrg reference from PSTitlebar)" ; 
+                        # in this case as we need to remove all Orgs, have to build a full list from $xxxmeta
+                        #Remove-PSTitlebar $TenOrg ;
+                        if(!$TokenTag){
+                            # if don't have TenOrg known, full remove:
+                            # split the rgx into an array of tags
+                            #sTitleBarTag = (((Get-Variable  -name "TorMeta").value.rgxOrgSvcs) -replace '(\\s\(|\)\\s)','').split('|') ; 
+                            # no remove all meta tenorg tags , if no other services(??)
+                            $Metas=(get-variable *meta|?{$_.name -match '^\w{3}Meta$'}) ; 
+                            $sTitleBarTag = $metas.name.substring(0,3) ; 
+                            $sTitleBarTag += 'AAD' ; 
+                        } else { 
+                            # TokenTag already resolved the 3-letter TenOrg, use it
+                            $sTitleBarTag = $TokenTag
+                            $sTitleBarTag += 'AAD' ; 
+                        } ; 
+                        Remove-PSTitlebar $sTitleBarTag ;
+                    } else {
+                        write-verbose "(detected matching OrgSvcs in PSTitlebar: *not* removing TenOrg reference)" ; 
+                    } ; 
                     #[console]::ResetColor()  # reset console colorscheme
                 } ; 
             

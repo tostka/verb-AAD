@@ -18,6 +18,8 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    # 3:23 PM 7/26/2021 ADD PSTITLEBAR TAG
+    # 1:45 PM 7/21/2021 enforce PSTitlebar tag Tenorg, no exceptions
     * 12:16 PM 4/5/2021 updated w 7pswlt support ;replaced hard-coded cred with proper $Credential.username ref
     * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
     * 2:44 PM 3/2/2021 added console TenOrg color support
@@ -80,16 +82,15 @@ Function Connect-MSOL {
         # 12:10 PM 3/15/2017 disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
         #if(!$CommandPrefix){ $CommandPrefix='aad' ; } ;
 
-        $sTitleBarTag = "MSOL" ;
-        $TentantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
-        if($TentantTag -ne 'TOR'){
-            # explicitly leave this tenant (default) untagged
-            $sTitleBarTag += $TentantTag ;
-        } ; 
+        $TenantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
+        $sTitleBarTag = @("MSOL") ;
+        $sTitleBarTag += $TenOrg ;
 
         try { Get-MsolAccountSku -ErrorAction Stop | out-null }
         catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
             $smsg = "Not connected to MSOnline. Now connecting." ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             if (!$Credential) {
                 if(get-command -Name get-admincred) {
                     Get-AdminCred ;
@@ -117,14 +118,20 @@ Function Connect-MSOL {
             $error.clear() ;
             if (!$MFA) {
                 $smsg = "EXEC:Connect-MsolService -Credential $($Credential.username) (no MFA, full credential)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 if($Credential.username){
                     $pltCMSOL.add('Credential',$Credential) ; 
                     $smsg = "(using cred:$($credential.username))" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ;
                 #Connect-MsolService -Credential $Credential -ErrorAction Stop ;
             }
             else {
                 $smsg = "EXEC:Connect-MsolService -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #if($Credential.username){$pltCMSOL.add('AccountId',$Credential.username)} ;
                 #Connect-MsolService -ErrorAction Stop ;
             } ;
@@ -141,7 +148,7 @@ Function Connect-MSOL {
 
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
             if ($?) { 
-                Add-PSTitleBar $sTitleBarTag ; 
+                add-PSTitlebar 'MSOL' -verbose:$($VerbosePreference -eq "Continue") ; 
                 $smsg = "(Connected to MSOL)" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -151,6 +158,8 @@ Function Connect-MSOL {
     } ;
     END {
         $smsg = "EXEC:Get-MsolDomain" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         TRY {
             $MSOLDoms = Get-MsolDomain ; # err indicates no authenticated connection ; 
             $MsolCoInf = Get-MsolCompanyInformation ; 
@@ -173,6 +182,12 @@ Function Connect-MSOL {
             } ;
             #>
             $smsg = "(Authenticated to MSOL:$($MsolCoInf.DisplayName))" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            $sTitleBarTag = @("MSOL") ;
+            $sTitleBarTag +=  $TenantTag ; 
+            Add-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");
         } else { 
             #$smsg = "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
             #Disconnect-AzureAD ; 

@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.57
+Version     : 1.0.58
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -142,6 +142,8 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    # 3:20 PM 7/26/2021 updated add-pstitlebar
+    # 1:45 PM 7/21/2021 enforce PSTitlebar tag Tenorg, no exceptions
     * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
     * 12:16 PM 4/5/2021 updated w 7pswlt support ; added #Requires -Modules AzureAD
     * 2:44 PM 3/2/2021 added console TenOrg color support
@@ -189,15 +191,12 @@ Function Connect-AAD {
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $MFA = get-TenantMFARequirement -Credential $Credential ;
-        $sTitleBarTag="AAD" ;
         $smsg = "EXEC:get-TenantTag -Credential $($Credential.username)" ; 
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        $TentantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
-        if($TentantTag -ne 'TOR'){
-            # explicitly leave this tenant (default) untagged
-            $sTitleBarTag += $TentantTag ;
-        } ; 
+        $TenantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
+        $sTitleBarTag = @("AAD") ;
+        $sTitleBarTag += $TenantTag ;
         $TenantID = get-TenantID -Credential $Credential ;
     } ;
     PROCESS {
@@ -342,7 +341,7 @@ Function Connect-AAD {
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
             if ($?) { 
                 #write-verbose -verbose:$true  "(connected to AzureAD ver2)" ; 
-                Add-PSTitleBar $sTitleBarTag ; 
+                Remove-PSTitlebar 'AAD' -verbose:$($VerbosePreference -eq "Continue") 
                 # work with the current AzureSession $token instead - shift into END{}
             } ;
             
@@ -370,6 +369,11 @@ Function Connect-AAD {
                 $smsg = "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ $smsg = "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                $TenOrg=get-TenantTag -Credential $Credential ; 
+                $sTitleBarTag = @("AAD") ;
+                $sTitleBarTag +=  $TokenTag ;# $TenOrg ;
+                Add-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");
             } else { 
                 $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).TenantID  -verbose:$($verbose) ; 
                 $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
@@ -523,6 +527,8 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    # 3:23 PM 7/26/2021 ADD PSTITLEBAR TAG
+    # 1:45 PM 7/21/2021 enforce PSTitlebar tag Tenorg, no exceptions
     * 12:16 PM 4/5/2021 updated w 7pswlt support ;replaced hard-coded cred with proper $Credential.username ref
     * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
     * 2:44 PM 3/2/2021 added console TenOrg color support
@@ -585,16 +591,15 @@ Function Connect-MSOL {
         # 12:10 PM 3/15/2017 disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
         #if(!$CommandPrefix){ $CommandPrefix='aad' ; } ;
 
-        $sTitleBarTag = "MSOL" ;
-        $TentantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
-        if($TentantTag -ne 'TOR'){
-            # explicitly leave this tenant (default) untagged
-            $sTitleBarTag += $TentantTag ;
-        } ; 
+        $TenantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
+        $sTitleBarTag = @("MSOL") ;
+        $sTitleBarTag += $TenOrg ;
 
         try { Get-MsolAccountSku -ErrorAction Stop | out-null }
         catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
             $smsg = "Not connected to MSOnline. Now connecting." ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             if (!$Credential) {
                 if(get-command -Name get-admincred) {
                     Get-AdminCred ;
@@ -622,14 +627,20 @@ Function Connect-MSOL {
             $error.clear() ;
             if (!$MFA) {
                 $smsg = "EXEC:Connect-MsolService -Credential $($Credential.username) (no MFA, full credential)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 if($Credential.username){
                     $pltCMSOL.add('Credential',$Credential) ; 
                     $smsg = "(using cred:$($credential.username))" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ;
                 #Connect-MsolService -Credential $Credential -ErrorAction Stop ;
             }
             else {
                 $smsg = "EXEC:Connect-MsolService -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #if($Credential.username){$pltCMSOL.add('AccountId',$Credential.username)} ;
                 #Connect-MsolService -ErrorAction Stop ;
             } ;
@@ -646,7 +657,7 @@ Function Connect-MSOL {
 
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
             if ($?) { 
-                Add-PSTitleBar $sTitleBarTag ; 
+                add-PSTitlebar 'MSOL' -verbose:$($VerbosePreference -eq "Continue") ; 
                 $smsg = "(Connected to MSOL)" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -656,6 +667,8 @@ Function Connect-MSOL {
     } ;
     END {
         $smsg = "EXEC:Get-MsolDomain" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         TRY {
             $MSOLDoms = Get-MsolDomain ; # err indicates no authenticated connection ; 
             $MsolCoInf = Get-MsolCompanyInformation ; 
@@ -678,6 +691,12 @@ Function Connect-MSOL {
             } ;
             #>
             $smsg = "(Authenticated to MSOL:$($MsolCoInf.DisplayName))" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            $sTitleBarTag = @("MSOL") ;
+            $sTitleBarTag +=  $TenantTag ; 
+            Add-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");
         } else { 
             #$smsg = "(Disconnecting from $(AADTenDtl.displayname) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
             #Disconnect-AzureAD ; 
@@ -708,6 +727,7 @@ Function Disconnect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 3:28 PM 7/26/2021 pstitlebar update
     * 10:58 AM 3/16/2021 updated cbh & new try-catch to accomodate non-existing 
     * 2:44 PM 3/2/2021 added console TenOrg color support
     * 3:03 PM 8/8/2020 rewrote to leverage AzureSession checks, without need to qry Get-AzureADTenantDetail (trying to avoid sporadic VEN AAD 'Forbidden' errors)
@@ -739,7 +759,7 @@ Function Disconnect-AAD {
         #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         write-verbose "get-command disconnect-AzureAD" ; 
         if(get-command disconnect-AzureAD){
-            $sTitleBarTag="AAD" ;
+            $sTitleBarTag = @("AAD") ;
             $error.clear() ;
             TRY {
                 <# old code
@@ -755,6 +775,7 @@ Function Disconnect-AAD {
                 try{
                     Disconnect-AzureAD -EA SilentlyContinue -ErrorVariable AADError ;
                     Write-Host -ForegroundColor green ("Azure Active Directory - Disconnected") ;
+                    remove-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");
                 }
                 catch  {
                     $ErrTrpd = $Error[0] ; 
@@ -782,7 +803,38 @@ Function Disconnect-AAD {
                     write-host "(disconnect-AzureAD from:$($TokenTag))" ;
                     disconnect-AzureAD ; 
                     write-verbose "Remove-PSTitleBar -Tag $($sTitleBarTag)" ; 
-                    Remove-PSTitleBar -Tag $sTitleBarTag ; 
+                    Remove-PSTitlebar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue") 
+                    # should pull TenOrg if no other mounted 
+                    <#$sXopDesig = 'xp' ;
+                    $sXoDesig = 'xo' ;
+                    #>
+                    #$xxxMeta.rgxOrgSvcs - $ExchangeServer = (Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server|get-random ;
+                    # normally would be org specific, but we don't have a cred or a TenOrg ref to resolve, so just check xx's version
+                    # -replace 'EMS','' -replace '\(\|','(' -replace '\|\)',')'
+                    #if($host.ui.RawUI.WindowTitle -notmatch ((Get-Variable  -name "TorMeta").value.rgxOrgSvcs-replace 'EMS','' -replace '\(\|','(' -replace '\|\)',')' )){
+                    # drop the current tag being removed from the rgx...
+                    [regex]$rgxsvcs = ('(' + (((Get-Variable  -name "TorMeta").value.OrgSvcs |?{$_ -ne 'AAD'} |%{[regex]::escape($_)}) -join '|') + ')') ;
+                    if($host.ui.RawUI.WindowTitle -notmatch $rgxsvcs){
+                        write-verbose "(removing TenOrg reference from PSTitlebar)" ; 
+                        # in this case as we need to remove all Orgs, have to build a full list from $xxxmeta
+                        #Remove-PSTitlebar $TenOrg ;
+                        if(!$TokenTag){
+                            # if don't have TenOrg known, full remove:
+                            # split the rgx into an array of tags
+                            #sTitleBarTag = (((Get-Variable  -name "TorMeta").value.rgxOrgSvcs) -replace '(\\s\(|\)\\s)','').split('|') ; 
+                            # no remove all meta tenorg tags , if no other services(??)
+                            $Metas=(get-variable *meta|?{$_.name -match '^\w{3}Meta$'}) ; 
+                            $sTitleBarTag = $metas.name.substring(0,3) ; 
+                            $sTitleBarTag += 'AAD' ; 
+                        } else { 
+                            # TokenTag already resolved the 3-letter TenOrg, use it
+                            $sTitleBarTag = $TokenTag
+                            $sTitleBarTag += 'AAD' ; 
+                        } ; 
+                        Remove-PSTitlebar $sTitleBarTag ;
+                    } else {
+                        write-verbose "(detected matching OrgSvcs in PSTitlebar: *not* removing TenOrg reference)" ; 
+                    } ; 
                     #[console]::ResetColor()  # reset console colorscheme
                 } ; 
             
@@ -1643,6 +1695,79 @@ Function get-AADTokenHeaders {
 }
 
 #*------^ get-AADTokenHeaders.ps1 ^------
+
+#*------v Get-DsRegStatus .ps1 v------
+function Get-DsRegStatus {
+    <#
+    .SYNOPSIS
+    Get-DsRegStatus - Returns the output of dsregcmd /status as a PSObject. 
+    .NOTES
+    Version     : 0.1.17
+    .NOTES
+    Version     : 0.0.
+    Author      : Todd Kadrie
+    Website     : http://www.toddomation.com
+    Twitter     : @tostka / ttps://github.com/tostka/verb-aad
+    CreatedDate : 2021-06-23
+    FileName    : Get-DsRegStatus
+    License     : (none asserted)
+    Copyright   : (c) 2019 Thomas Kurth. All rights reserved.
+    Github      : https://github.com/tostka/verb-XXX
+    Tags        : Powershell
+    AddedCredit : Thomas Kurth
+    AddedWebsite: https://www.powershellgallery.com/packages/ModernWorkplaceClientCenter/0.1.17/Content/Functions/Get-DsRegStatus.ps1
+    AddedTwitter: 
+    REVISIONS
+    * 9:15 AM 6/28/2021 updated CBH
+    * 9:54 AM 6/23/2021 added to verb-aad
+    * 12:21 PM 8/8/2020 init; added CBH
+    .DESCRIPTION
+    Get-DsRegStatus - Returns the output of dsregcmd /status as a PSObject. 
+    Returns the output of dsregcmd /status as a PSObject. All returned values are accessible by their property name.
+    Lifted from [PowerShell Gallery | Functions/Get-DsRegStatus.ps1 0.1.3 - www.powershellgallery.com/](https://www.powershellgallery.com/packages/ModernWorkplaceClientCenter/0.1.17/Content/Functions%5CGet-DsRegStatus.ps1)
+    Alt to manual cmdline parsing:
+    ```powershell
+    $results = dsregcmd /status;
+    $results|sls azureadjoined ; $results | sls domainjoined ; $results | sls workplacejoined ;
+    ```
+    Or remote exec: 
+    ```powershell
+     Invoke-Command -ComputerName MyComputerName -ScriptBlock {dsregcmd /status}
+    ```
+    .OUTPUTS
+    List of the information in the token cache. 
+    .Example
+    Get-DsRegStatus 
+    Displays a full output of dsregcmd / status.
+    .LINK
+    https://www.powershellgallery.com/packages/ModernWorkplaceClientCenter/0.1.17/Content/Functions%5CGet-DsRegStatus.ps1
+    .LINK
+    https://github.com/tostka/verb-aad
+    #>
+    [CmdletBinding()] 
+    Param() ;
+    PROCESS {
+        $dsregcmd = dsregcmd /status
+        $o = New-Object -TypeName PSObject
+        foreach($line in $dsregcmd){
+            if($line -like "| *"){
+                 if(-not [String]::IsNullOrWhiteSpace($currentSection) -and $null -ne $so){
+                      Add-Member -InputObject $o -MemberType NoteProperty -Name $currentSection -Value $so -ErrorAction SilentlyContinue
+                 }
+                 $currentSection = $line.Replace("|","").Replace(" ","").Trim()
+                 $so = New-Object -TypeName PSObject
+            } elseif($line -match " *[A-z]+ : [A-z0-9\{\}]+ *"){
+                 Add-Member -InputObject $so -MemberType NoteProperty -Name (([String]$line).Trim() -split " : ")[0] -Value (([String]$line).Trim() -split " : ")[1] -ErrorAction SilentlyContinue
+            }
+        }
+        if(-not [String]::IsNullOrWhiteSpace($currentSection) -and $null -ne $so){
+            Add-Member -InputObject $o -MemberType NoteProperty -Name $currentSection -Value $so -ErrorAction SilentlyContinue
+        }
+        return $o
+    } ; 
+}
+
+#*------^ Get-DsRegStatus .ps1 ^------
 
 #*------v Get-MsolDisabledPlansForSKU.ps1 v------
 Function Get-MsolDisabledPlansForSKU {
@@ -4841,5 +4966,5 @@ Function Wait-AADSync {
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,get-MsolUserLastSync,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,Initialize-AADSignErrorsHash,profile-AAD-Signons,Write-Log,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,Wait-AADSync -Alias *
+Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,Get-DsRegStatus,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,get-MsolUserLastSync,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,Initialize-AADSignErrorsHash,profile-AAD-Signons,Write-Log,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,Wait-AADSync -Alias *
 

@@ -18,6 +18,8 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    # 3:20 PM 7/26/2021 updated add-pstitlebar
+    # 1:45 PM 7/21/2021 enforce PSTitlebar tag Tenorg, no exceptions
     * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
     * 12:16 PM 4/5/2021 updated w 7pswlt support ; added #Requires -Modules AzureAD
     * 2:44 PM 3/2/2021 added console TenOrg color support
@@ -65,15 +67,12 @@ Function Connect-AAD {
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $MFA = get-TenantMFARequirement -Credential $Credential ;
-        $sTitleBarTag="AAD" ;
         $smsg = "EXEC:get-TenantTag -Credential $($Credential.username)" ; 
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        $TentantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
-        if($TentantTag -ne 'TOR'){
-            # explicitly leave this tenant (default) untagged
-            $sTitleBarTag += $TentantTag ;
-        } ; 
+        $TenantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
+        $sTitleBarTag = @("AAD") ;
+        $sTitleBarTag += $TenantTag ;
         $TenantID = get-TenantID -Credential $Credential ;
     } ;
     PROCESS {
@@ -218,7 +217,7 @@ Function Connect-AAD {
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
             if ($?) { 
                 #write-verbose -verbose:$true  "(connected to AzureAD ver2)" ; 
-                Add-PSTitleBar $sTitleBarTag ; 
+                Remove-PSTitlebar 'AAD' -verbose:$($VerbosePreference -eq "Continue") 
                 # work with the current AzureSession $token instead - shift into END{}
             } ;
             
@@ -246,6 +245,11 @@ Function Connect-AAD {
                 $smsg = "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ $smsg = "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                $TenOrg=get-TenantTag -Credential $Credential ; 
+                $sTitleBarTag = @("AAD") ;
+                $sTitleBarTag +=  $TokenTag ;# $TenOrg ;
+                Add-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");
             } else { 
                 $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).TenantID  -verbose:$($verbose) ; 
                 $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
