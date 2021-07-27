@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.59
+Version     : 1.0.60
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -126,7 +126,7 @@ function cmsolVEN {Connect-MSOL -cred $credO365VENCSID -Verbose:($VerbosePrefere
 Function Connect-AAD {
     <#
     .SYNOPSIS
-    Connect-AAD - Establish authenticated session to AzureAD Graph Module (AzureAD), also works as reConnect-AAD, there is no disConnect-AAD (have to close Powershell to clear it).
+    Connect-AAD - Establish authenticated session to AzureAD Graph Module (AzureAD), also works as reConnect-AAD, .
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
@@ -4972,8 +4972,8 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUwHZlCd3g0vOJ8LEHFOVfwLFR
-# sUOgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU60tqQmJRpYB6rNdHlofNZp0j
+# 6degggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -4988,9 +4988,9 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSI1kQ2
-# EZjRMYst3+qmI3XIG3+P8zANBgkqhkiG9w0BAQEFAASBgLHDxLUyzvx9A6Rjxd+v
-# NEFrPlsQySCizk+WrjyV7hQZUU0nAsi40R46gSiG1gPJLOjZtSTSDapKrdXE6TVo
-# j8O09AgKlVQ2kPVRKSDkiXZGFvJYtkQKQxOW7oc7o3aEoZJCr9NJFW9ifA9dfK9x
-# rsCNopa2yhbWe/nssVys5oG9
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSZUa6C
+# IQVnsy9ZDqBD+RMp/6NWKDANBgkqhkiG9w0BAQEFAASBgBaMov/HJtr7oPBMd78s
+# pkyeEmuPqwXEWdcJT22/CEfKEwzZRTOCdS064fPT6Ud7ifZRwZzj0/wfar1LAxy/
+# 5jJLvbN8h/fUwUcUj5TYW8rX67oeI3SzeXxEb2kZ2Uaqs4iBYugQe3GH/350lgHf
+# ILeOcZu+UCCEeepW9v0AEAWp
 # SIG # End signature block

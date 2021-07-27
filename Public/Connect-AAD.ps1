@@ -2,7 +2,7 @@
 Function Connect-AAD {
     <#
     .SYNOPSIS
-    Connect-AAD - Establish authenticated session to AzureAD Graph Module (AzureAD), also works as reConnect-AAD, there is no disConnect-AAD (have to close Powershell to clear it).
+    Connect-AAD - Establish authenticated session to AzureAD Graph Module (AzureAD), also works as reConnect-AAD, .
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
