@@ -18,6 +18,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 1:17 PM 8/17/2021 added -silent param
     # 3:23 PM 7/26/2021 ADD PSTITLEBAR TAG
     # 1:45 PM 7/21/2021 enforce PSTitlebar tag Tenorg, no exceptions
     * 12:16 PM 4/5/2021 updated w 7pswlt support ;replaced hard-coded cred with proper $Credential.username ref
@@ -65,7 +66,9 @@ Function Connect-MSOL {
     Param(
         [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()][string]$CommandPrefix,
-        [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID
+        [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+        [switch] $silent
     ) ;
     BEGIN { 
         $verbose = ($VerbosePreference -eq "Continue") ;
@@ -149,9 +152,11 @@ Function Connect-MSOL {
             # can still detect status of last command with $? ($true = success, $false = $failed), and use the $error[0] to examine any errors
             if ($?) { 
                 add-PSTitlebar 'MSOL' -verbose:$($VerbosePreference -eq "Continue") ; 
-                $smsg = "(Connected to MSOL)" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                if($silent){} else { 
+                    $smsg = "(Connected to MSOL)" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ; 
             } ;
         } ;
         
@@ -181,10 +186,11 @@ Function Connect-MSOL {
                 $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
             } ;
             #>
-            $smsg = "(Authenticated to MSOL:$($MsolCoInf.DisplayName))" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-
+            if($silent){} else { 
+                $smsg = "(Authenticated to MSOL:$($MsolCoInf.DisplayName))" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ; 
             $sTitleBarTag = @("MSOL") ;
             $sTitleBarTag +=  $TenantTag ; 
             Add-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");
