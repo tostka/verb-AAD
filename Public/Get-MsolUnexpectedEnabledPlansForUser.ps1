@@ -29,6 +29,7 @@ Function Get-MsolUnexpectedEnabledPlansForUser {
     .OUTPUTS
     System.Boolean
     .EXAMPLE
+    $extraPlans = Get-MsolUnexpectedEnabledPlansForUser $user $skuId $expectedDisabledPlans ; 
     .LINK
     https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     .LINK

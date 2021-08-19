@@ -17,6 +17,7 @@ Function Get-MsolDisabledPlansForSKU {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
+    * 8:17 AM 8/18/2021 populated example
     * 9:23 AM 4/27/2021 renamed 'GetDisabledPlansForSKU()' -> Get-MsolDisabledPlansForSKU; put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
@@ -28,6 +29,7 @@ Function Get-MsolDisabledPlansForSKU {
     .OUTPUTS
     System.object
     .EXAMPLE
+    $disabledplans = Get-MsolDisabledPlansForSKU -skuid $skuid -enabledplans $enabledplans ; 
     .LINK
     https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     .LINK

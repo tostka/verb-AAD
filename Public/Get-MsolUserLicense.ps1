@@ -17,6 +17,7 @@ Function Get-MsolUserLicense {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
+    * 8:14 AM 8/18/2021 cbh: populated example
     * 9:23 AM 4/27/2021 renamed 'GetUserLicense()' -> Get-MsolUserLicense(); put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
@@ -28,6 +29,7 @@ Function Get-MsolUserLicense {
     .OUTPUTS
     System.object
     .EXAMPLE
+    $license = Get-MsolUserLicense $user $skuId ;
     .LINK
     https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     .LINK

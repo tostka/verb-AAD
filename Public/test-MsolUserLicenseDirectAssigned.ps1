@@ -17,6 +17,7 @@ Function test-MsolUserLicenseDirectAssigned {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
+    * 8:09 AM 8/18/2021 clean strings for public
     * 10:52 AM 4/27/2021 expanded CBH, added simpler example ; renamed 'UserHasLicenseAssignedDirectly()' -> test-MsolUserLicenseDirectAssigned(); put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
@@ -30,11 +31,11 @@ Function test-MsolUserLicenseDirectAssigned {
     .OUTPUTS
     System.Boolean
     .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
+    $msolu = get-msoluser -UserPrincipalName Some.User@toro.com ; 
     $msolu.licenses.accountskuid |%{ "==$($_):" ; test-MsolUserLicenseDirectAssigned -user $msolu -skuId $_ } ;
     Evaluate all licenses on a target MSOLUser for Direct Assignement
     .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
+    $msolu = get-msoluser -UserPrincipalName Some.User@toro.com ; 
     $msolu.licenses.accountskuid |%{ if(test-MsolUserLicenseDirectAssigned -user $msolu -skuId $_ ){$_}} ;
     Output just the Direct-Assigned licenses
     .EXAMPLE
