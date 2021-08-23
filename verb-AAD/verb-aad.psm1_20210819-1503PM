@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.62
+Version     : 1.0.61
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -1805,7 +1805,6 @@ Function Get-MsolDisabledPlansForSKU {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
-    * 8:17 AM 8/18/2021 populated example
     * 9:23 AM 4/27/2021 renamed 'GetDisabledPlansForSKU()' -> Get-MsolDisabledPlansForSKU; put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
@@ -1817,7 +1816,6 @@ Function Get-MsolDisabledPlansForSKU {
     .OUTPUTS
     System.object
     .EXAMPLE
-    $disabledplans = Get-MsolDisabledPlansForSKU -skuid $skuid -enabledplans $enabledplans ; 
     .LINK
     https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     .LINK
@@ -1873,7 +1871,6 @@ Function Get-MsolUnexpectedEnabledPlansForUser {
     .OUTPUTS
     System.Boolean
     .EXAMPLE
-    $extraPlans = Get-MsolUnexpectedEnabledPlansForUser $user $skuId $expectedDisabledPlans ; 
     .LINK
     https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     .LINK
@@ -1968,7 +1965,6 @@ Function Get-MsolUserLicense {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
-    * 8:14 AM 8/18/2021 cbh: populated example
     * 9:23 AM 4/27/2021 renamed 'GetUserLicense()' -> Get-MsolUserLicense(); put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
@@ -1980,7 +1976,6 @@ Function Get-MsolUserLicense {
     .OUTPUTS
     System.object
     .EXAMPLE
-    $license = Get-MsolUserLicense $user $skuId ;
     .LINK
     https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     .LINK
@@ -4785,7 +4780,6 @@ Function test-MsolUserLicenseDirectAssigned {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
-    * 8:09 AM 8/18/2021 clean strings for public
     * 10:52 AM 4/27/2021 expanded CBH, added simpler example ; renamed 'UserHasLicenseAssignedDirectly()' -> test-MsolUserLicenseDirectAssigned(); put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
@@ -4799,11 +4793,11 @@ Function test-MsolUserLicenseDirectAssigned {
     .OUTPUTS
     System.Boolean
     .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Some.User@toro.com ; 
+    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
     $msolu.licenses.accountskuid |%{ "==$($_):" ; test-MsolUserLicenseDirectAssigned -user $msolu -skuId $_ } ;
     Evaluate all licenses on a target MSOLUser for Direct Assignement
     .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Some.User@toro.com ; 
+    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
     $msolu.licenses.accountskuid |%{ if(test-MsolUserLicenseDirectAssigned -user $msolu -skuId $_ ){$_}} ;
     Output just the Direct-Assigned licenses
     .EXAMPLE
@@ -4870,7 +4864,6 @@ Function test-MsolUserLicenseGroupAssigned {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
-    * 8:08 AM 8/18/2021 cleaned strings for public
     * 10:52 AM 4/27/2021 expanded CBH, added simpler example ; renamed 'UserHasLicenseAssignedDirectly()' -> test-MsolUserLicenseGroupAssigned(); put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
@@ -4884,11 +4877,11 @@ Function test-MsolUserLicenseGroupAssigned {
     .OUTPUTS
     System.Boolean
     .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Some.User@toro.com ; 
+    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
     $msolu.licenses.accountskuid |%{ "==$($_):" ; test-MsolUserLicenseGroupAssigned -user $msolu -skuId $_ } ;
     Evaluate all licenses on a target MSOLUser for Group Assignement
         .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Some.User@toro.com ; 
+    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
     $msolu.licenses.accountskuid |%{ if(test-MsolUserLicensegroupAssigned -user $msolu -skuId $_ ){$_}} ;
     Output just the Group-Assigned licenses
     .EXAMPLE
@@ -4996,8 +4989,8 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUd+VhLDYkc1fJXODg0inwWNwW
-# J82gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUc4A0xOiI5wLTPL3EOgFsqpXc
+# AOKgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -5012,9 +5005,9 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT+XfPk
-# SrCvb6IuuA20iFWxluY+dzANBgkqhkiG9w0BAQEFAASBgK0ENwPwuyW1Fs7MrijU
-# CcGBmyl4Ih8Hmrps2OSnUa4N1xtiIl/MLjSj4eBFfgD21gGkIzMeSf5aH5o1FjTS
-# M6tJQZTWdtZK90ABgLFML5SX3tNO47V4Gdvp85iZIsjmHc8FtaDsOnx8QCH9fsZT
-# U0C57Ykd0XXQFyhuReTSHnnq
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBStU2j2
+# gd75vHns9x3lL/Qs292MIzANBgkqhkiG9w0BAQEFAASBgLV+Zc2Xw1kCvb+kKWPb
+# DiJgWLyxkXn+0CVC0XlpiCgoDfrLej8HiX5Oj2+XRQ/SA5PYQZZaHbQhO1jbA04Z
+# oJu/pJAQvuozu8yB28qnKfnCznuFQtXuntTPu3t+dodZ7qdNq7dmVj1vcotZGKfT
+# nD756Q9KJ2h0qBbJnkXkPCHG
 # SIG # End signature block

@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.60
+Version     : 1.0.61
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -1805,6 +1805,7 @@ Function Get-MsolDisabledPlansForSKU {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
+    * 8:17 AM 8/18/2021 populated example
     * 9:23 AM 4/27/2021 renamed 'GetDisabledPlansForSKU()' -> Get-MsolDisabledPlansForSKU; put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
@@ -1816,6 +1817,7 @@ Function Get-MsolDisabledPlansForSKU {
     .OUTPUTS
     System.object
     .EXAMPLE
+    $disabledplans = Get-MsolDisabledPlansForSKU -skuid $skuid -enabledplans $enabledplans ; 
     .LINK
     https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     .LINK
@@ -1871,6 +1873,7 @@ Function Get-MsolUnexpectedEnabledPlansForUser {
     .OUTPUTS
     System.Boolean
     .EXAMPLE
+    $extraPlans = Get-MsolUnexpectedEnabledPlansForUser $user $skuId $expectedDisabledPlans ; 
     .LINK
     https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     .LINK
@@ -1965,6 +1968,7 @@ Function Get-MsolUserLicense {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
+    * 8:14 AM 8/18/2021 cbh: populated example
     * 9:23 AM 4/27/2021 renamed 'GetUserLicense()' -> Get-MsolUserLicense(); put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
@@ -1976,6 +1980,7 @@ Function Get-MsolUserLicense {
     .OUTPUTS
     System.object
     .EXAMPLE
+    $license = Get-MsolUserLicense $user $skuId ;
     .LINK
     https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     .LINK
@@ -4780,6 +4785,7 @@ Function test-MsolUserLicenseDirectAssigned {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
+    * 8:09 AM 8/18/2021 clean strings for public
     * 10:52 AM 4/27/2021 expanded CBH, added simpler example ; renamed 'UserHasLicenseAssignedDirectly()' -> test-MsolUserLicenseDirectAssigned(); put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
@@ -4793,11 +4799,11 @@ Function test-MsolUserLicenseDirectAssigned {
     .OUTPUTS
     System.Boolean
     .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
+    $msolu = get-msoluser -UserPrincipalName Some.User@toro.com ; 
     $msolu.licenses.accountskuid |%{ "==$($_):" ; test-MsolUserLicenseDirectAssigned -user $msolu -skuId $_ } ;
     Evaluate all licenses on a target MSOLUser for Direct Assignement
     .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
+    $msolu = get-msoluser -UserPrincipalName Some.User@toro.com ; 
     $msolu.licenses.accountskuid |%{ if(test-MsolUserLicenseDirectAssigned -user $msolu -skuId $_ ){$_}} ;
     Output just the Direct-Assigned licenses
     .EXAMPLE
@@ -4864,6 +4870,7 @@ Function test-MsolUserLicenseGroupAssigned {
     AddedCredit : Alex Buck (alexbuckgit)
     AddedWebsite:	https://github.com/MicrosoftDocs/azure-docs/blob/master/articles/active-directory/enterprise-users/licensing-ps-examples.md
     REVISIONS   :
+    * 8:08 AM 8/18/2021 cleaned strings for public
     * 10:52 AM 4/27/2021 expanded CBH, added simpler example ; renamed 'UserHasLicenseAssignedDirectly()' -> test-MsolUserLicenseGroupAssigned(); put into OTB format
     * 12/16/2020 AB git-posted rev
     .DESCRIPTION
@@ -4877,11 +4884,11 @@ Function test-MsolUserLicenseGroupAssigned {
     .OUTPUTS
     System.Boolean
     .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
+    $msolu = get-msoluser -UserPrincipalName Some.User@toro.com ; 
     $msolu.licenses.accountskuid |%{ "==$($_):" ; test-MsolUserLicenseGroupAssigned -user $msolu -skuId $_ } ;
     Evaluate all licenses on a target MSOLUser for Group Assignement
         .EXAMPLE
-    $msolu = get-msoluser -UserPrincipalName Dennis.Cain@toro.com ; 
+    $msolu = get-msoluser -UserPrincipalName Some.User@toro.com ; 
     $msolu.licenses.accountskuid |%{ if(test-MsolUserLicensegroupAssigned -user $msolu -skuId $_ ){$_}} ;
     Output just the Group-Assigned licenses
     .EXAMPLE
