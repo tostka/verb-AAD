@@ -1,11 +1,11 @@
-# verb-aad.psm1
+﻿# verb-aad.psm1
 
 
 <#
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.64
+Version     : 1.0.63
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -870,6 +870,15 @@ Function Disconnect-AAD {
 }
 
 #*------^ Disconnect-AAD.ps1 ^------
+
+#*------v find-ADCConflicting.ps1 v------
+END {
+    write-host -foregroundcolor green "returning $(($Report|measure).count) objects to the pipeline..." ; 
+    $Report | write-output
+    write-host -foregroundcolor green ":$($sBnr.replace('=v','=^').replace('v=','^='))`n" ;
+}
+
+#*------^ find-ADCConflicting.ps1 ^------
 
 #*------v get-AADBearerToken.ps1 v------
 function get-AADBearerToken {
@@ -4988,5 +4997,31 @@ Function Wait-AADSync {
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,Get-DsRegStatus,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,get-MsolUserLastSync,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,Initialize-AADSignErrorsHash,profile-AAD-Signons,Write-Log,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,Wait-AADSync -Alias *
+Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,Get-DsRegStatus,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,get-MsolUserLastSync,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,Initialize-AADSignErrorsHash,profile-AAD-Signons,Write-Log,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,Wait-AADSync -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQURKrZKCjrs0mPU3Lfa4AfiXYj
+# clqgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTNBYpj
+# HUpwmSZuwJsmh1XxH9KqPzANBgkqhkiG9w0BAQEFAASBgIDFE/GWNn1Dz1+kVMfV
+# bXHogr4PVGRuF0LpkQBLU+Wl2Lr1LMUT2S1j59JyllKuBoAu69UGjvZbxTxBkPdQ
+# wAUwuVdxTR9Ocnk+ptnEB3ARA8JlmTiRPLQyHK4E2gfNgeD+VXmr9LoA/wfo+I+m
+# Steav/TAfPWoXL+5g7rmRdBo
+# SIG # End signature block

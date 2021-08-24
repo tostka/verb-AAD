@@ -1,11 +1,11 @@
-# verb-aad.psm1
+﻿# verb-aad.psm1
 
 
 <#
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.64
+Version     : 1.0.62
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -538,7 +538,6 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
-    * 1:17 PM 8/24/2021 remove unused ProxyEnabled param (causing arg transf errs
     * 1:17 PM 8/17/2021 added -silent param
     # 3:23 PM 7/26/2021 ADD PSTITLEBAR TAG
     # 1:45 PM 7/21/2021 enforce PSTitlebar tag Tenorg, no exceptions
@@ -567,6 +566,8 @@ Function Connect-MSOL {
     No need for separate reConnect-MSOL - this self tests for connection, and reconnects if it's missing.
     No support for disConnect-MSOL, because MSOL has no command to do it, but closing powershell.
     Also an msol connectoin doesn't yield the same token - (([Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens).AccessToken) | fl * ;  - AAD does, though an AAD token can be used to authenticate (through -MsGraphAccessToken or -AdGraphAccessToken?)
+    .PARAMETER  ProxyEnabled
+    Proxyied connection support
     .PARAMETER CommandPrefix
     Prefix to be appended to commands (not implemented with MSOL/AAD)
     .PARAMETER Credential
@@ -583,6 +584,7 @@ Function Connect-MSOL {
     [CmdletBinding()]
     [Alias('cmsol','rmsol','Reconnect-MSOL')]
     Param(
+        [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()][string]$CommandPrefix,
         [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
@@ -4990,3 +4992,29 @@ Function Wait-AADSync {
 
 Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,Disconnect-AAD,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,Get-DsRegStatus,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,get-MsolUserLastSync,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,Initialize-AADSignErrorsHash,profile-AAD-Signons,Write-Log,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,Wait-AADSync -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUd+VhLDYkc1fJXODg0inwWNwW
+# J82gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT+XfPk
+# SrCvb6IuuA20iFWxluY+dzANBgkqhkiG9w0BAQEFAASBgK0ENwPwuyW1Fs7MrijU
+# CcGBmyl4Ih8Hmrps2OSnUa4N1xtiIl/MLjSj4eBFfgD21gGkIzMeSf5aH5o1FjTS
+# M6tJQZTWdtZK90ABgLFML5SX3tNO47V4Gdvp85iZIsjmHc8FtaDsOnx8QCH9fsZT
+# U0C57Ykd0XXQFyhuReTSHnnq
+# SIG # End signature block

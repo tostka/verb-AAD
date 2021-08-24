@@ -18,6 +18,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 1:17 PM 8/24/2021 remove unused ProxyEnabled param (causing arg transf errs
     * 1:17 PM 8/17/2021 added -silent param
     # 3:23 PM 7/26/2021 ADD PSTITLEBAR TAG
     # 1:45 PM 7/21/2021 enforce PSTitlebar tag Tenorg, no exceptions
@@ -46,8 +47,6 @@ Function Connect-MSOL {
     No need for separate reConnect-MSOL - this self tests for connection, and reconnects if it's missing.
     No support for disConnect-MSOL, because MSOL has no command to do it, but closing powershell.
     Also an msol connectoin doesn't yield the same token - (([Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens).AccessToken) | fl * ;  - AAD does, though an AAD token can be used to authenticate (through -MsGraphAccessToken or -AdGraphAccessToken?)
-    .PARAMETER  ProxyEnabled
-    Proxyied connection support
     .PARAMETER CommandPrefix
     Prefix to be appended to commands (not implemented with MSOL/AAD)
     .PARAMETER Credential
@@ -64,7 +63,6 @@ Function Connect-MSOL {
     [CmdletBinding()]
     [Alias('cmsol','rmsol','Reconnect-MSOL')]
     Param(
-        [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()][string]$CommandPrefix,
         [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]

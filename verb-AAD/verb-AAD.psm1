@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.62
+Version     : 1.0.66
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -538,6 +538,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 1:17 PM 8/24/2021 remove unused ProxyEnabled param (causing arg transf errs
     * 1:17 PM 8/17/2021 added -silent param
     # 3:23 PM 7/26/2021 ADD PSTITLEBAR TAG
     # 1:45 PM 7/21/2021 enforce PSTitlebar tag Tenorg, no exceptions
@@ -566,8 +567,6 @@ Function Connect-MSOL {
     No need for separate reConnect-MSOL - this self tests for connection, and reconnects if it's missing.
     No support for disConnect-MSOL, because MSOL has no command to do it, but closing powershell.
     Also an msol connectoin doesn't yield the same token - (([Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens).AccessToken) | fl * ;  - AAD does, though an AAD token can be used to authenticate (through -MsGraphAccessToken or -AdGraphAccessToken?)
-    .PARAMETER  ProxyEnabled
-    Proxyied connection support
     .PARAMETER CommandPrefix
     Prefix to be appended to commands (not implemented with MSOL/AAD)
     .PARAMETER Credential
@@ -584,7 +583,6 @@ Function Connect-MSOL {
     [CmdletBinding()]
     [Alias('cmsol','rmsol','Reconnect-MSOL')]
     Param(
-        [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()][string]$CommandPrefix,
         [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
@@ -4996,8 +4994,8 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUd+VhLDYkc1fJXODg0inwWNwW
-# J82gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUJWVRZ5ewCQqdM/7K7GoIJR9g
+# 9sigggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -5012,9 +5010,9 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT+XfPk
-# SrCvb6IuuA20iFWxluY+dzANBgkqhkiG9w0BAQEFAASBgK0ENwPwuyW1Fs7MrijU
-# CcGBmyl4Ih8Hmrps2OSnUa4N1xtiIl/MLjSj4eBFfgD21gGkIzMeSf5aH5o1FjTS
-# M6tJQZTWdtZK90ABgLFML5SX3tNO47V4Gdvp85iZIsjmHc8FtaDsOnx8QCH9fsZT
-# U0C57Ykd0XXQFyhuReTSHnnq
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT3k8Rj
+# cLKGQKEAzOIzRuzW8EkgXjANBgkqhkiG9w0BAQEFAASBgLe+vNgALtwArf47L1US
+# Mn83pdpnvyuFWy50OkNUxJItTCR/9jWGawawVLZOl/3MB8dxFT4S2cEH4V0uvUOW
+# wC2YX8ZqavFi+at3fuLNKBoWyJvyjthn52UR7y0GhHQNe8xjLl/wYp1Sr/LwqP1e
+# /pQhP35ry7HCgF4+hnHLAMOH
 # SIG # End signature block
