@@ -10,6 +10,7 @@ Function get-MsolUserLicenseDetails {
     Based on work by :Brad Wyatt
     Website: https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     REVISIONS   :
+    * 11:01 AM 9/16/2021 cleaned up stings
     * 1:24 PM 8/20/2020 added a raft from the guest work, including collab-related items fr https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference
     * 5:17 PM 8/5/2020 strong-typed Credential
     * 4:22 PM 7/24/2020 added verbose
@@ -36,7 +37,7 @@ Function get-MsolUserLicenseDetails {
     .OUTPUTS
     Returns an object with LastDirSyncTime, expressed as TimeGMT & TimeLocal
     .EXAMPLE
-    get-MsolUserLicenseDetails -UPNs todd.kadrie@toro.com ;
+    get-MsolUserLicenseDetails -UPNs fname.lname@domain.com ;
     Retrieve MSOL License details on specified UPN
     .EXAMPLE
     $EXOLicDetails = get-MsolUserLicenseDetails -UPNs $exombx.userprincipalname -showdebug:$($showdebug)

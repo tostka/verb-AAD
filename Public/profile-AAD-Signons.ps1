@@ -11,6 +11,7 @@ Function profile-AAD-Signons {
     Website:	URL
     Twitter:	URL
     REVISIONS   : 
+    * 11:18 AM 9/16/2021 string cleaning
     * 3:04 PM 6/16/2021, shifted to standard start-log mod support, conditioned helper funcs, added test for events in target file, echo on gap
     * 11:11 AM 6/15/2021 Ren'd Build-AADSignErrorsHash() -> Initialize-AADSignErrorsHash (compliant verb) ; sync'd copy & set it to defer to the verb-AAD mod version
     # 10:46 AM 6/2/2021 sub'd verb-logging for v-trans
@@ -30,10 +31,10 @@ Function profile-AAD-Signons {
     .OUTPUTS
     None. Returns no objects or output.
     .EXAMPLE
-    .\profile-AAD-Signons.ps1 -Files "c:\usr\work\incid\9999-todd.kadrie@toro.com-SignIns__2019-07-21__2019-08-20.json";
+    .\profile-AAD-Signons.ps1 -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json";
     Process a single json AAD signon log
     .EXAMPLE
-    .\profile-AAD-Signons.ps1 -Files "c:\usr\work\incid\9999-todd.kadrie@toro.com-SignIns__2019-07-21__2019-08-20.json","c:\usr\work\incid\todd.kadrie@toro.com-SignIns__2019-07-07__2019-08-06b.csv.json" ;
+    .\profile-AAD-Signons.ps1 -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json","c:\usr\work\incid\todd.USER-SignIns__2019-07-07__2019-08-06b.csv.json" ;
     Process an array of json AAD signon logs
     .LINK
     #>
@@ -657,7 +658,7 @@ Function profile-AAD-Signons {
 
         # build outfile on the $file fullname
         $ofileobj=gci $File ;
-        # $ofileobj=gci "c:\usr\work\incid\9999-todd.kadrie@toro.com-SignIns__2019-07-21__2019-08-20.json" ;
+        # $ofileobj=gci "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json" ;
         $logfile = $ofileobj.fullname.replace(".json","-parsed-json-rpt.txt") ;
 
         $sBnr="#*======v `$File:($($Procd)/$($ttl)):$($File) v======" ;
@@ -673,7 +674,7 @@ Function profile-AAD-Signons {
 
         if($bConfirmDo){
 
-            #$jFile="c:\usr\work\incid\9999-todd.kadrie@toro.com-SignIns__2019-07-21__2019-08-20.json" ;
+            #$jFile="c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json" ;
             if ($EVTS = gc $File | Convertfrom-json) {
 
                 # oddity, get-host in ISE returns -1,-1 for fg & bg colors, but the color names in any other host
