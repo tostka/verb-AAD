@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.66
+Version     : 1.0.67
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -142,6 +142,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 9:57 AM 9/17/2021 added silent to CBH
     * 5:38 PM 8/17/2021 added -silent param
     # 3:20 PM 7/26/2021 updated add-pstitlebar
     # 1:45 PM 7/21/2021 enforce PSTitlebar tag Tenorg, no exceptions
@@ -169,6 +170,8 @@ Function Connect-AAD {
     Proxyied connection support
     .PARAMETER Credential
     Credential to be used for connection
+    .PARAMETER silent
+    Switch to suppress all non-error echos
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
@@ -191,12 +194,16 @@ Function Connect-AAD {
     BEGIN {
         $verbose = ($VerbosePreference -eq "Continue") ;
         $smsg = "EXEC:get-TenantMFARequirement -Credential $($Credential.username)" ; 
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        if($silent){} else { 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ; 
         $MFA = get-TenantMFARequirement -Credential $Credential ;
         $smsg = "EXEC:get-TenantTag -Credential $($Credential.username)" ; 
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        if($silent){} else { 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ;         
         $TenantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
         $sTitleBarTag = @("AAD") ;
         $sTitleBarTag += $TenantTag ;
@@ -204,13 +211,16 @@ Function Connect-AAD {
     } ;
     PROCESS {
         $smsg = "(Check for/install AzureAD module)" ; 
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
+        if($silent){} else { 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ;         Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
         $smsg = "Import-Module -Name AzureAD -MinimumVersion '2.0.0.131'" ; 
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
+        if($silent){} else { 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ;  
+       Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
         #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         # with multitenants and changes between, instead we need ot test 'what tenant' we're connected to
         TRY { 
@@ -224,28 +234,33 @@ Function Connect-AAD {
             }elseif($token.count -gt 1){
                 write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MULTIPLE TOKENS RETURNED!`n$(( ($token.AccessToken) | ft -a  TenantId,UserId,LoginType |out-string).trim())" ; 
                 # want to see if this winds up with a stack of parallel tokens
-            } else { 
+            } else {
+                $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ;  
                 if($silent){} else { 
-                    $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    #if connected,verify cred-specified Tenant
-                    #if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
-                    if(($token.AccessToken).userid -eq $Credential.username){
-                        $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid ;                    
-                        #$smsg = "(Authenticated to AAD:$($AADTenDtl.displayname))"
-                        $smsg = "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    } else { 
-                        $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid -verbose:$($verbose) ; 
-                        $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                        Disconnect-AzureAD ; 
-                        throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
-                    } ; 
                 } ;
+                #if connected,verify cred-specified Tenant
+                #if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
+                if(($token.AccessToken).userid -eq $Credential.username){
+                    $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid ;                    
+                    #$smsg = "(Authenticated to AAD:$($AADTenDtl.displayname))"
+                    $smsg = "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
+                    if($silent){} else { 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ;                    
+                } else { 
+                    $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid -verbose:$($verbose) ; 
+                    $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                    if($silent){} else { 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ;                    
+                    Disconnect-AzureAD ; 
+                    throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
+                } ; 
+                
             } ; 
 
         }   
@@ -281,34 +296,49 @@ Function Connect-AAD {
                 }  ;
             } ; 
 
-            Write-Host "Authenticating to AAD:$($Credential.username.split('@')[1].tostring()), w $($Credential.username)..."  ;
+            $smsg = "Authenticating to AAD:$($Credential.username.split('@')[1].tostring()), w $($Credential.username)..."  ;
+            if($silent){} else { 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ; 
             $pltCAAD=[ordered]@{
                     ErrorAction='Stop';
             }; 
             if($TenantID){
                 $smsg = "Forcing TenantID:$($TenantID)" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                if($silent){} else { 
+                    $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ;                
                 $pltCAAD.add('TenantID',$TenantID) ;
             } 
             if(!$MFA){
                 #Connect-AzureAD -Credential $Credential -ErrorAction Stop ;
                 $smsg = "EXEC:Connect-AzureAD -Credential $($Credential.username) (no MFA, full credential)" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                if($silent){} else { 
+                    $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ;                
                 if($Credential.username){$pltCAAD.add('Credential',$Credential)} ;
             } else {
                 #Connect-AzureAD -AccountID $Credential.userName ;
                 $smsg = "EXEC:Connect-AzureAD -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                if($silent){} else { 
+                    $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ;                
 
                 if($Credential.username){$pltCAAD.add('AccountId',$Credential.username)} ;
             } ;
 
             $smsg = "Connect-AzureAD w`n$(($pltCAAD|out-string).trim())" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            if($silent){} else { 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ;             
 
             TRY {
                 $AADConnection = Connect-AzureAD @pltCAAD ; 
@@ -321,8 +351,11 @@ Function Connect-AAD {
                 } else {
                     if($silent){} else { 
                         $smsg = "(single Tenant connection returned)" 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                        else{ $smsg = "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        if($silent){} else { 
+                            $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        } ;
                     } ; 
                 } ; 
             } CATCH {
@@ -538,6 +571,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 9:40 AM 9/17/2021 had missed an echo past -silent
     * 1:17 PM 8/24/2021 remove unused ProxyEnabled param (causing arg transf errs
     * 1:17 PM 8/17/2021 added -silent param
     # 3:23 PM 7/26/2021 ADD PSTITLEBAR TAG
@@ -571,6 +605,8 @@ Function Connect-MSOL {
     Prefix to be appended to commands (not implemented with MSOL/AAD)
     .PARAMETER Credential
     Credential to be used for connection
+    .PARAMETER silent
+    Switch to suppress all non-error echos
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
@@ -614,7 +650,7 @@ Function Connect-MSOL {
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             if (!$Credential) {
                 if(get-command -Name get-admincred) {
-                    Get-AdminCred ;
+                    Get-AdminCred -Verbose:($VerbosePreference -eq 'Continue') -silent ; 
                 } else {
                     # resolve suitable creds based on $credential domain specified
                     $credDom = ($Credential.username.split("@"))[1] ;
@@ -681,8 +717,10 @@ Function Connect-MSOL {
     } ;
     END {
         $smsg = "EXEC:Get-MsolDomain" ; 
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        if(!$silent){
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ; 
         TRY {
             $MSOLDoms = Get-MsolDomain ; # err indicates no authenticated connection ; 
             $MsolCoInf = Get-MsolCompanyInformation ; 
@@ -1472,6 +1510,7 @@ function get-AADlicensePlanList {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/
     REVISIONS
+    * 11:05 AM 9/16/2021 fixed Examples to functional 
     * 2:06 PM 10/12/2020 ported to verb-AAD
     * 9:03 AM 8/10/2020 init
     .DESCRIPTION
@@ -1487,7 +1526,43 @@ function get-AADlicensePlanList {
     .OUTPUTS
     [| get-member the output to see what .NET obj TypeName is returned, to use here]
     .EXAMPLE
-    Prep-AADGroups -Credential $credobj
+    PS> $pltGLPList=[ordered]@{
+        TenOrg= $TenOrg;
+        verbose=$($verbose) ;
+        credential=(Get-Variable -name cred$($tenorg) ).value ;
+    } ;
+    $smsg = "$($tenorg):get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ;
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    $objRet = $null ;
+    $objRet = get-AADlicensePlanList @pltGLPList ;
+    switch ($objRet.GetType().FullName){
+        "System.Collections.Hashtable" {
+            if( ($objRet|Measure-Object).count ){
+                $smsg = "get-AADlicensePlanList:$($tenorg):returned populated LicensePlanList" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $licensePlanListHash = $objRet ; 
+            } else {
+                $smsg = "get-AADlicensePlanList:$($tenorg):FAILED TO RETURN populated LicensePlanList" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } #Error|Warn|Debug
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ;
+        } 
+        default {
+            $smsg = "get-AADlicensePlanList:$($tenorg):RETURNED UNDEFINED OBJECT TYPE!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } #Error|Warn|Debug
+            else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            Exit ; 
+        } ; 
+    } ;  # SWITCH-E    
+    $aadu = get-azureaduser -obj someuser@domain.com ; 
+    $userList = $aadu | Select -ExpandProperty AssignedLicenses | Select SkuID  ;
+    $userLicenses=@() ;
+    $userList | ForEach {
+        $sku=$_.SkuId ;
+        $userLicenses+=$licensePlanListHash[$sku].SkuPartNumber ;
+    } ;
     .LINK
     https://github.com/tostka
     #>
@@ -2017,6 +2092,7 @@ Function get-MsolUserLicenseDetails {
     Based on work by :Brad Wyatt
     Website: https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     REVISIONS   :
+    * 11:01 AM 9/16/2021 cleaned up stings
     * 1:24 PM 8/20/2020 added a raft from the guest work, including collab-related items fr https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference
     * 5:17 PM 8/5/2020 strong-typed Credential
     * 4:22 PM 7/24/2020 added verbose
@@ -2043,7 +2119,7 @@ Function get-MsolUserLicenseDetails {
     .OUTPUTS
     Returns an object with LastDirSyncTime, expressed as TimeGMT & TimeLocal
     .EXAMPLE
-    get-MsolUserLicenseDetails -UPNs todd.kadrie@toro.com ;
+    get-MsolUserLicenseDetails -UPNs fname.lname@domain.com ;
     Retrieve MSOL License details on specified UPN
     .EXAMPLE
     $EXOLicDetails = get-MsolUserLicenseDetails -UPNs $exombx.userprincipalname -showdebug:$($showdebug)
@@ -2662,6 +2738,7 @@ Function profile-AAD-Signons {
     Website:	URL
     Twitter:	URL
     REVISIONS   : 
+    * 11:18 AM 9/16/2021 string cleaning
     * 3:04 PM 6/16/2021, shifted to standard start-log mod support, conditioned helper funcs, added test for events in target file, echo on gap
     * 11:11 AM 6/15/2021 Ren'd Build-AADSignErrorsHash() -> Initialize-AADSignErrorsHash (compliant verb) ; sync'd copy & set it to defer to the verb-AAD mod version
     # 10:46 AM 6/2/2021 sub'd verb-logging for v-trans
@@ -2681,10 +2758,10 @@ Function profile-AAD-Signons {
     .OUTPUTS
     None. Returns no objects or output.
     .EXAMPLE
-    .\profile-AAD-Signons.ps1 -Files "c:\usr\work\incid\9999-todd.kadrie@toro.com-SignIns__2019-07-21__2019-08-20.json";
+    .\profile-AAD-Signons.ps1 -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json";
     Process a single json AAD signon log
     .EXAMPLE
-    .\profile-AAD-Signons.ps1 -Files "c:\usr\work\incid\9999-todd.kadrie@toro.com-SignIns__2019-07-21__2019-08-20.json","c:\usr\work\incid\todd.kadrie@toro.com-SignIns__2019-07-07__2019-08-06b.csv.json" ;
+    .\profile-AAD-Signons.ps1 -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json","c:\usr\work\incid\todd.USER-SignIns__2019-07-07__2019-08-06b.csv.json" ;
     Process an array of json AAD signon logs
     .LINK
     #>
@@ -3308,7 +3385,7 @@ Function profile-AAD-Signons {
 
         # build outfile on the $file fullname
         $ofileobj=gci $File ;
-        # $ofileobj=gci "c:\usr\work\incid\9999-todd.kadrie@toro.com-SignIns__2019-07-21__2019-08-20.json" ;
+        # $ofileobj=gci "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json" ;
         $logfile = $ofileobj.fullname.replace(".json","-parsed-json-rpt.txt") ;
 
         $sBnr="#*======v `$File:($($Procd)/$($ttl)):$($File) v======" ;
@@ -3324,7 +3401,7 @@ Function profile-AAD-Signons {
 
         if($bConfirmDo){
 
-            #$jFile="c:\usr\work\incid\9999-todd.kadrie@toro.com-SignIns__2019-07-21__2019-08-20.json" ;
+            #$jFile="c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json" ;
             if ($EVTS = gc $File | Convertfrom-json) {
 
                 # oddity, get-host in ISE returns -1,-1 for fg & bg colors, but the color names in any other host
@@ -4994,8 +5071,8 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUJWVRZ5ewCQqdM/7K7GoIJR9g
-# 9sigggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKVvGrNBHyHUnf+t+EhE/5/bz
+# CZygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -5010,9 +5087,9 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT3k8Rj
-# cLKGQKEAzOIzRuzW8EkgXjANBgkqhkiG9w0BAQEFAASBgLe+vNgALtwArf47L1US
-# Mn83pdpnvyuFWy50OkNUxJItTCR/9jWGawawVLZOl/3MB8dxFT4S2cEH4V0uvUOW
-# wC2YX8ZqavFi+at3fuLNKBoWyJvyjthn52UR7y0GhHQNe8xjLl/wYp1Sr/LwqP1e
-# /pQhP35ry7HCgF4+hnHLAMOH
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRR2vN9
+# y9373uQsPqjKwOfRzQ458TANBgkqhkiG9w0BAQEFAASBgAhF0nXTaIafmIGMgaXA
+# t9pBuJ7xEROg15bW94Il4cILWIaHEEwNdFotUlEB8l80UNpPDI7HuW7F9PzOuyLt
+# yjot65EpFZIIKKnl0oO/HX1TS2VRqRw+8RwX4N2hvtuuRM/3OINcaSVDT5dASgnk
+# lGK6MdlIOfn5OR0sOTpspzfk
 # SIG # End signature block

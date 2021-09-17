@@ -18,6 +18,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 9:40 AM 9/17/2021 had missed an echo past -silent
     * 1:17 PM 8/24/2021 remove unused ProxyEnabled param (causing arg transf errs
     * 1:17 PM 8/17/2021 added -silent param
     # 3:23 PM 7/26/2021 ADD PSTITLEBAR TAG
@@ -51,6 +52,8 @@ Function Connect-MSOL {
     Prefix to be appended to commands (not implemented with MSOL/AAD)
     .PARAMETER Credential
     Credential to be used for connection
+    .PARAMETER silent
+    Switch to suppress all non-error echos
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
@@ -94,7 +97,7 @@ Function Connect-MSOL {
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             if (!$Credential) {
                 if(get-command -Name get-admincred) {
-                    Get-AdminCred ;
+                    Get-AdminCred -Verbose:($VerbosePreference -eq 'Continue') -silent ; 
                 } else {
                     # resolve suitable creds based on $credential domain specified
                     $credDom = ($Credential.username.split("@"))[1] ;
@@ -161,8 +164,10 @@ Function Connect-MSOL {
     } ;
     END {
         $smsg = "EXEC:Get-MsolDomain" ; 
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        if(!$silent){
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ; 
         TRY {
             $MSOLDoms = Get-MsolDomain ; # err indicates no authenticated connection ; 
             $MsolCoInf = Get-MsolCompanyInformation ; 
