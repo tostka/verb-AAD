@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.0.68
+Version     : 1.0.67
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -928,9 +928,9 @@ function get-AADBearerToken {
     AddedCredit : 
     AddedWebsite: 
     AddedTwitter: 
-    # [does not contain a method named 'AcquireToken' Â· Issue #29108 Â· MicrosoftDocs/azure-docs](https://github.com/MicrosoftDocs/azure-docs/issues/29108)
+    # [does not contain a method named 'AcquireToken' · Issue #29108 · MicrosoftDocs/azure-docs](https://github.com/MicrosoftDocs/azure-docs/issues/29108)
     reports a fix:(untested, moved to native auth via certs)
-    TomBertie commented Apr 13, 2019 â€¢
+    TomBertie commented Apr 13, 2019 •
     I think I've got it working with AcquireTokenAsync by changing RESTAPI-Auth to:
     #-=-=-=-=-=-=-=-=
     Function RESTAPI-Auth {
@@ -5071,8 +5071,8 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUGlJeW5C6X+JIhg5E4QYugWT1
-# iQigggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKVvGrNBHyHUnf+t+EhE/5/bz
+# CZygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -5087,9 +5087,9 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTCWv+g
-# 8ekuv7QA9U5MyvCaZiWpdjANBgkqhkiG9w0BAQEFAASBgFJ4LUsua/7JWtH2TDO7
-# fh658pPniKnmc1HvciYQAFYv4HYwNaVoqv/iOKX0gqvUVmT033nrPkATtLbawFRL
-# guQyq+CkS9KHYTP2WLAXBu7T9kb6j062LccLAivOmelv/2D5nd4UZgZDpwUfo33D
-# FBCb4X7eSN2GUJ0OS6fWyFcU
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRR2vN9
+# y9373uQsPqjKwOfRzQ458TANBgkqhkiG9w0BAQEFAASBgAhF0nXTaIafmIGMgaXA
+# t9pBuJ7xEROg15bW94Il4cILWIaHEEwNdFotUlEB8l80UNpPDI7HuW7F9PzOuyLt
+# yjot65EpFZIIKKnl0oO/HX1TS2VRqRw+8RwX4N2hvtuuRM/3OINcaSVDT5dASgnk
+# lGK6MdlIOfn5OR0sOTpspzfk
 # SIG # End signature block
