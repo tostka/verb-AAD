@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.2.1
+Version     : 1.2.0
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -1101,7 +1101,7 @@ function get-AADBearerToken {
     .SYNOPSIS
     get-AADBearerToken.ps1 - generates a header from a Bearer token.
     .NOTES
-    Version     : 1.1.0
+    Version     : 1.2.0
     Author      : Todd Kadrie
     Website     : http://www.toddomation.com
     Twitter     : @tostka / http://twitter.com/tostka
@@ -1202,7 +1202,7 @@ Function get-AADBearerTokenHeaders {
     .SYNOPSIS
     get-AADBearerTokenHeaders.ps1 - generates a header from a Bearer token.
     .NOTES
-    Version     : 1.1.0
+    Version     : 1.2.0
     Author      : Todd Kadrie
     Website     : http://www.toddomation.com
     Twitter     : @tostka / http://twitter.com/tostka
@@ -4438,7 +4438,7 @@ Function search-AADSignInReports {
     .SYNOPSIS
     search-AADSignInReports.ps1 - Runs GraphAPI RestAPI queries, leveraging certificate-authenticated Tockens
     .NOTES
-    Version     : 1.1.0
+    Version     : 1.2.0
     Author      : Todd Kadrie
     Website     : http://www.toddomation.com
     Twitter     : @tostka / http://twitter.com/tostka
@@ -5451,8 +5451,8 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUPL/Ge/9EkKPAE2CeFuZv+/8l
-# hLKgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUFxBKeJnz0itrpFvX0uAFhVxA
+# 9tygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -5467,9 +5467,9 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBS5Rzuu
-# qYea2G6lbq8HIYc+5fW/RzANBgkqhkiG9w0BAQEFAASBgBvYgPJPLMJAwJOAikQY
-# uxazsL4XxgQDKpLF2YS9gtH36ZTEnOtv+fjB83eFbFGfbA5FYz3fCDVpoEqZYf7l
-# /426rqF1lNxgYl1oi7wQcf2iBI0qhkS5KaPxkwZbO3H3vkcqZoYr7f6KfrG5SmfU
-# Mw9jvtWZXwzfOsu9ZX2ClUqt
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQlrymF
+# vNr1kimKWZ+Klof9IQoQUTANBgkqhkiG9w0BAQEFAASBgFCs+MelhDkQaeb5ihCT
+# UUVNYGJCmjnAVWDS6oZX/eArtCDbhvIFZdyvG5socA3df2kapViD8eRRXkMymjsd
+# w5qzD8Cgus8EJWLb2Hxk/dppuG+A8eapMeR+lrUU8dIGkxYZZiRfd5kcdA6Lycwp
+# MWEO2eCf76gr2rd7ah+AKCJS
 # SIG # End signature block
