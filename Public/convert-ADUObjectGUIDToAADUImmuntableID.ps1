@@ -18,6 +18,7 @@ Function convert-ADUObjectGUIDToAADUImmuntableID {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 8:26 AM 2/4/2022 hardtyped guid (string doesn't support the getbytearray method)
     * 11:20 AM 12/6/2021 init
     .DESCRIPTION
     convert-ADUObjectGUIDToAADUImmuntableID - Convert an ADUser.objectGuid to the equivelent AzureADUser.ImmuntableID (via Base64 conversion).
@@ -46,7 +47,8 @@ Function convert-ADUObjectGUIDToAADUImmuntableID {
     Param(
          [Parameter(Position=0,Mandatory=$false,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Guid to be converted[-guid '24bf3cb0-65b6-4ab7-ba2f-7d60f2a7a76a']")]
         [Alias('objectGuid')]
-        [String]$Guid,
+        #[String]
+        [guid]$Guid,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
         [switch] $silent
     ) ;
@@ -90,4 +92,5 @@ Function convert-ADUObjectGUIDToAADUImmuntableID {
         
     } ; # END-E
 }
+
 #*------^ convert-ADUObjectGUIDToAADUImmuntableID.ps1 ^------
