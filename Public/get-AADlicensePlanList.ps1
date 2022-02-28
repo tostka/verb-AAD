@@ -1,4 +1,4 @@
-#*------v get-AADlicensePlanList v------
+#*------v get-AADlicensePlanList.ps1 v------
 function get-AADlicensePlanList {
     <#
     .SYNOPSIS
@@ -14,6 +14,7 @@ function get-AADlicensePlanList {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/
     REVISIONS
+    * 8:34 AM 2/28/2022 updated CBH example1, added conditional ordered to hash, defaulted Cred to a global varia
     * 11:05 AM 9/16/2021 fixed Examples to functional 
     * 2:06 PM 10/12/2020 ported to verb-AAD
     * 9:03 AM 8/10/2020 init
@@ -31,42 +32,45 @@ function get-AADlicensePlanList {
     [| get-member the output to see what .NET obj TypeName is returned, to use here]
     .EXAMPLE
     PS> $pltGLPList=[ordered]@{
-        TenOrg= $TenOrg;
-        verbose=$($verbose) ;
-        credential=(Get-Variable -name cred$($tenorg) ).value ;
-    } ;
-    $smsg = "$($tenorg):get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ;
-    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    $objRet = $null ;
-    $objRet = get-AADlicensePlanList @pltGLPList ;
-    switch ($objRet.GetType().FullName){
-        "System.Collections.Hashtable" {
-            if( ($objRet|Measure-Object).count ){
-                $smsg = "get-AADlicensePlanList:$($tenorg):returned populated LicensePlanList" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            TenOrg= $TenOrg;
+            verbose=$($VerbosePreference -eq "Continue") ;
+            credential= $pltRXO.credential ;
+            #(Get-Variable -name cred$($tenorg) ).value ;
+        } ;
+    PS> $smsg = "$($tenorg):get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ;
+    PS> if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS> $objRet = $null ;
+    PS> $objRet = get-AADlicensePlanList @pltGLPList ;
+    PS> switch -regex ($objRet.GetType().FullName){
+            "(System.Collections.Hashtable|System.Collections.Specialized.OrderedDictionary)" {
+                if( ($objRet|Measure-Object).count ){
+                    $smsg = "get-AADlicensePlanList:$($tenorg):returned populated LicensePlanList" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $licensePlanListHash = $objRet ;
+                } else {
+                    $smsg = "get-AADlicensePlanList:$($tenorg):FAILED TO RETURN populated LicensePlanList" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    THROW $SMSG ; 
+                    break ; 
+                } ;
+            }
+            default {
+                $smsg = "get-AADlicensePlanList:$($tenorg):RETURNED UNDEFINED OBJECT TYPE!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
                 else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                $licensePlanListHash = $objRet ; 
-            } else {
-                $smsg = "get-AADlicensePlanList:$($tenorg):FAILED TO RETURN populated LicensePlanList" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } #Error|Warn|Debug
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Exit ;
             } ;
-        } 
-        default {
-            $smsg = "get-AADlicensePlanList:$($tenorg):RETURNED UNDEFINED OBJECT TYPE!" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } #Error|Warn|Debug
-            else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            Exit ; 
-        } ; 
-    } ;  # SWITCH-E    
-    $aadu = get-azureaduser -obj someuser@domain.com ; 
-    $userList = $aadu | Select -ExpandProperty AssignedLicenses | Select SkuID  ;
-    $userLicenses=@() ;
-    $userList | ForEach {
-        $sku=$_.SkuId ;
-        $userLicenses+=$licensePlanListHash[$sku].SkuPartNumber ;
-    } ;
+        } ;   
+    PS> $aadu = get-azureaduser -obj someuser@domain.com ; 
+    PS> $userList = $aadu | Select -ExpandProperty AssignedLicenses | Select SkuID  ;
+    PS> $userLicenses=@() ;
+    PS> $userList | ForEach {
+            $sku=$_.SkuId ;
+            $userLicenses+=$licensePlanListHash[$sku].SkuPartNumber ;
+        } ;
     .LINK
     https://github.com/tostka
     #>
@@ -81,8 +85,8 @@ function get-AADlicensePlanList {
         [Parameter(Mandatory=$True,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
         [ValidateNotNullOrEmpty()]
         [string]$TenOrg,
-        [Parameter(Mandatory=$True,HelpMessage="Credentials [-Credentials [credential object]]")]
-        [System.Management.Automation.PSCredential]$Credential,
+        [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
+        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage="The ManagedBy parameter specifies an owner for the group [-ManagedBy alias]")]
         $ManagedBy,
         [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
@@ -135,7 +139,8 @@ function get-AADlicensePlanList {
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         # can't use convert-ObjectToIndexedHash as the key/index is a split version of a property, rather than the entire property
         $swMstr = [Diagnostics.Stopwatch]::StartNew();
-        $licensePlanListHash = @{} ;
+        if($host.version.major -gt 2){$licensePlanListHash = [ordered]@{} } 
+        else { $licensePlanListHash = @{} };
         foreach($lic in $licensePlanList) {
             # target SKUid is the 2nd half of the SubscribedSKU.objectid, split at the _
             $licensePlanListHash[$lic.objectid.split('_')[1]] = $lic ;
@@ -153,5 +158,6 @@ function get-AADlicensePlanList {
     END{
         $licensePlanListHash | write-output ; 
     } ;
-} ; 
-#*------^ get-AADlicensePlanList ^------
+}
+
+#*------^ get-AADlicensePlanList.ps1 ^------
