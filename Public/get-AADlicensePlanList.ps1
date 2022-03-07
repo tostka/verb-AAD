@@ -14,6 +14,7 @@ function get-AADlicensePlanList {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/
     REVISIONS
+    * 2:27 PM 3/1/2022 updated CBH
     * 8:34 AM 2/28/2022 updated CBH example1, added conditional ordered to hash, defaulted Cred to a global varia
     * 11:05 AM 9/16/2021 fixed Examples to functional 
     * 2:06 PM 10/12/2020 ported to verb-AAD
@@ -31,46 +32,36 @@ function get-AADlicensePlanList {
     .OUTPUTS
     [| get-member the output to see what .NET obj TypeName is returned, to use here]
     .EXAMPLE
-    PS> $pltGLPList=[ordered]@{
-            TenOrg= $TenOrg;
-            verbose=$($VerbosePreference -eq "Continue") ;
-            credential= $pltRXO.credential ;
-            #(Get-Variable -name cred$($tenorg) ).value ;
-        } ;
-    PS> $smsg = "$($tenorg):get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ;
-    PS> if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    PS> $objRet = $null ;
-    PS> $objRet = get-AADlicensePlanList @pltGLPList ;
-    PS> switch -regex ($objRet.GetType().FullName){
-            "(System.Collections.Hashtable|System.Collections.Specialized.OrderedDictionary)" {
-                if( ($objRet|Measure-Object).count ){
-                    $smsg = "get-AADlicensePlanList:$($tenorg):returned populated LicensePlanList" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    $licensePlanListHash = $objRet ;
-                } else {
-                    $smsg = "get-AADlicensePlanList:$($tenorg):FAILED TO RETURN populated LicensePlanList" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
-                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    THROW $SMSG ; 
-                    break ; 
-                } ;
-            }
-            default {
-                $smsg = "get-AADlicensePlanList:$($tenorg):RETURNED UNDEFINED OBJECT TYPE!" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                Exit ;
-            } ;
-        } ;   
-    PS> $aadu = get-azureaduser -obj someuser@domain.com ; 
-    PS> $userList = $aadu | Select -ExpandProperty AssignedLicenses | Select SkuID  ;
-    PS> $userLicenses=@() ;
-    PS> $userList | ForEach {
-            $sku=$_.SkuId ;
-            $userLicenses+=$licensePlanListHash[$sku].SkuPartNumber ;
-        } ;
+    PS>  $pltGLPList=[ordered]@{
+    PS>      TenOrg= $TenOrg;
+    PS>      verbose=$($VerbosePreference -eq "Continue") ;
+    PS>      credential= $pltRXO.credential ;
+    PS>      #(Get-Variable -name cred$($tenorg) ).value ;
+    PS>  } ;
+    PS>  $smsg = "$($tenorg):get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ;
+    PS>  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>  else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>  $objRet = $null ;
+    PS>  $objRet = get-AADlicensePlanList @pltGLPList ;
+    PS>  if( ($objRet|Measure-Object).count -AND $objRet.GetType().FullName -match $rgxHashTableTypeName ){
+    PS>      $smsg = "get-AADlicensePlanList:$($tenorg):returned populated LicensePlanList" ;
+    PS>      if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>      else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>      $licensePlanListHash = $objRet ;
+    PS>  } else {
+    PS>      $smsg = "get-AADlicensePlanList:$($tenorg)FAILED TO RETURN populated [hashtable] LicensePlanList" ;
+    PS>      if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
+    PS>      else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>      THROW $SMSG ; 
+    PS>      break ; 
+    PS>  } ;
+    PS>  $aadu = get-azureaduser -obj someuser@domain.com ; 
+    PS>  $userList = $aadu | Select -ExpandProperty AssignedLicenses | Select SkuID  ;
+    PS>  $userLicenses=@() ;
+    PS>  $userList | ForEach {
+    PS>     $sku=$_.SkuId ;
+    PS>     $userLicenses+=$licensePlanListHash[$sku].SkuPartNumber ;
+    PS>  } ;
     .LINK
     https://github.com/tostka
     #>
