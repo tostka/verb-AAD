@@ -14,6 +14,10 @@ function get-AADlicensePlanList {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/
     REVISIONS
+    * 9:31 AM 3/22/2022 add: 
+        -raw (returns raw property outputs, vs default which is now a summarized table closer to *useful* get-MsolAccountSku output:
+        -indexonName indexed-hash keyed on 'Name' (SkuPartNumber), vs default hash-keyed on SkuID values (for sku->name/details lookups, vs name->Sku lookups)
+        - updated CBH with examples on above
     * 2:27 PM 3/1/2022 updated CBH
     * 8:34 AM 2/28/2022 updated CBH example1, added conditional ordered to hash, defaulted Cred to a global varia
     * 11:05 AM 9/16/2021 fixed Examples to functional 
@@ -21,6 +25,10 @@ function get-AADlicensePlanList {
     * 9:03 AM 8/10/2020 init
     .DESCRIPTION
     get-AADlicensePlanList - Resolve Get-AzureADSubscribedSku into an indexed hash of Tenant License detailed specs
+    .PARAMETER Raw
+    Switch specifies to return the raw get-AADlicensePlanList properties, indexed on SkuID
+    .PARAMETER IndexOnName
+    Switch specifies to return the raw get-AADlicensePlanList properties, indexed on Name (for name -> details/skuid lookups; default is indexed on SkuID for sku->details/name lookups)
     .PARAMETER Credential
     Credential to be used for connection
     .PARAMETER ShowDebug
@@ -62,6 +70,31 @@ function get-AADlicensePlanList {
     PS>     $sku=$_.SkuId ;
     PS>     $userLicenses+=$licensePlanListHash[$sku].SkuPartNumber ;
     PS>  } ;
+    .EXAMPLE
+    PS> PS> $lplist =  get-AADlicensePlanList ;
+    PS> $lplist['18181a46-0d4e-45cd-891e-60aabd171b4e']
+        SkuId         : 18181a46-0d4e-45cd-891e-60aabd171b4e
+        SkuPartNumber : STANDARDPACK
+        Enabled       : 418
+        Consumed      : 284
+        Available     : 134
+        Warning       : 0
+        Suspended     : 0
+    Demo indexed hash lookup of SkuID (to details) under default behavior (summary output table, and indexed on SKUID)
+    .EXAMPLE
+    PS> $lplist =  get-AADlicensePlanList -raw ;
+    PS> $lplist['18181a46-0d4e-45cd-891e-60aabd171b4e']
+        ObjectId                                                                  SkuPartNumber PrepaidUnits                                               
+        --------                                                                  ------------- ------------                                               
+        549366ae-e80a-44b9-8adc-52d0c29ba08b_18181a46-0d4e-45cd-891e-60aabd171b4e STANDARDPACK  class LicenseUnitsDetail {...
+    Demo indexed hash lookup of SkuID (to details) under -Raw behavior (raw object output, and indexed on SKUID)
+    .EXAMPLE
+    PS> $lplist =  get-AADlicensePlanList -verbose -IndexOnName ;
+    PS> $lplist['EXCHANGESTANDARD'] | ft -auto 
+        SkuId                                SkuPartNumber    Enabled Consumed Available Warning Suspended
+        -----                                -------------    ------- -------- --------- ------- ---------
+        4b9405b0-7788-4568-add1-99614e613b69 EXCHANGESTANDARD      58       53         5       0         0
+    Demo use of -IndexOnName, and indexed hash lookup of Name (to details) under Default behavior (summary output table, and indexed on SkuPartNumber)
     .LINK
     https://github.com/tostka
     #>
@@ -73,9 +106,11 @@ function get-AADlicensePlanList {
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM(
-        [Parameter(Mandatory=$True,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
+        [switch]$Raw,
+        [switch]$IndexOnName,
+        [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
         [ValidateNotNullOrEmpty()]
-        [string]$TenOrg,
+        [string]$TenOrg = $global:o365_TenOrgDefault,
         [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
         [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage="The ManagedBy parameter specifies an owner for the group [-ManagedBy alias]")]
@@ -92,6 +127,10 @@ function get-AADlicensePlanList {
         $Verbose = ($VerbosePreference -eq 'Continue') ;
         #$script:PassStatus = $null ;
         #if(!$GroupSpecifications ){$GroupSpecifications = "ENT-SEC-Guest-TargetUsers;AzureAD Guest User Population","ENT-SEC-Guest-BlockedUsers;AzureAD Guest Blocked Users","ENT-SEC-Guest-AlwaysUsers;AzureAD Guest Force-include Users" ; } ;
+        # more useful summary table output (Better matches the *useful* get-MsolAccountSku output!)
+        $propsAADL = 'SkuId',  'SkuPartNumber',  @{name='Enabled';Expression={$_.PrepaidUnits.enabled }},  
+            @{name='Consumed';Expression={$_.ConsumedUnits} }, @{name='Available';Expression={$_.PrepaidUnits.enabled - $_.ConsumedUnits} }, 
+            @{name='Warning';Expression={$_.PrepaidUnits.warning} }, @{name='Suspended';Expression={$_.PrepaidUnits.suspended} } ;
     } ;
     PROCESS {
         $Error.Clear() ;
@@ -110,7 +149,17 @@ function get-AADlicensePlanList {
 
         $error.clear() ;
         TRY {
-            $licensePlanList = Get-AzureADSubscribedSku ;
+            if($Raw){
+                $smsg = "(-raw: returning indexed-hash of raw Get-AzureADSubscribedSku properties)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $licensePlanList = Get-AzureADSubscribedSku ;
+            } else {
+                $smsg = "(default: returning indexed-hash of summarized Get-AzureADSubscribedSku properties)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $licensePlanList = Get-AzureADSubscribedSku | select-object $propsAADL ;
+            } ; 
         } CATCH {
             $ErrTrapd=$Error[0] ;
             Start-Sleep -Seconds $RetrySleep ;
@@ -132,9 +181,22 @@ function get-AADlicensePlanList {
         $swMstr = [Diagnostics.Stopwatch]::StartNew();
         if($host.version.major -gt 2){$licensePlanListHash = [ordered]@{} } 
         else { $licensePlanListHash = @{} };
+        if($IndexOnName){
+            $smsg = "(IndexOnName indexing: returning indexed-hash keyed on 'Name' (SkuPartNumber))" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } else { 
+            $smsg = "(default indexing: returning indexed-hash keyed on SkuID)" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } ; 
         foreach($lic in $licensePlanList) {
             # target SKUid is the 2nd half of the SubscribedSKU.objectid, split at the _
-            $licensePlanListHash[$lic.objectid.split('_')[1]] = $lic ;
+            if($IndexOnName){
+                $licensePlanListHash[$lic.SkuPartNumber] = $lic ;
+            } else { 
+                $licensePlanListHash[$lic.skuid] = $lic ;               
+            } ; 
         } ;
     
         $swMstr.Stop() ;
