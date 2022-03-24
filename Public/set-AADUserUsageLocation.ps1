@@ -16,10 +16,11 @@ function set-AADUserUsageLocation {
     Copyright   : (c) 2022 Todd Kadrie
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell
-    AddedCredit : Jaap de Koning (jaap.adm)
-    AddedWebsite:	https://alwaysautomate.it/2018/08/05/hello-world/
+    AddedCredit : 
+    AddedWebsite:	
     AddedTwitter:	URL
     REVISIONS
+    * 10:30 AM 3/24/2022 add pipeline support
     2:31 PM 3/22/2022 init, simple subset port of set-aaduserLicense() ; 
     .DESCRIPTION
     set-AADUserUsageLocation.ps1 - Set AzureADUser.UsageLocation on an array of AzureADUsers[-users 'upn@domain.com','upn2@domain.com']
@@ -44,7 +45,8 @@ function set-AADUserUsageLocation {
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM (
-        [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
+        # ValueFromPipeline: will cause params to match on matching type, [array] input -> [array]$param
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true)]
         [ValidateNotNullOrEmpty()]
         [string[]]$Users, 
         [string]$UsageLocation = 'US',
@@ -59,15 +61,23 @@ function set-AADUserUsageLocation {
     BEGIN {
         ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
-        Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
+       
+       $pltRXO = [ordered]@{
+            Credential = $Credential 
+            verbose = $($VerbosePreference -eq 'Continue') ;
+            silent = $true ; # always silent, echo only warn/errors
+        } ; 
+        #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
+        Connect-AAD @pltRXO ;         
         
         # check if using Pipeline input or explicit params:
         if ($PSCmdlet.MyInvocation.ExpectingInput) {
             write-verbose "Data received from pipeline input: '$($InputObject)'" ;
         } else {
             # doesn't actually return an obj in the echo
-            #write-verbose "Data received from parameter input: '$($InputObject)'" ;
+            #write-verbose "Data received from parameter input: " # '$($InputObject)'" ;
         } ;
+        
     } 
     PROCESS {
         $Error.Clear() ;
@@ -88,24 +98,30 @@ function set-AADUserUsageLocation {
             $error.clear() ;
             TRY {
 
+                <# rem out search string option - if we're mandating UPN/guids, it's always going to fail the initial attempt, skip it, odds of feeding it a dname etc is low
                 $pltGAADU=[ordered]@{ SearchString = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
                 $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
                 $AADUser = Get-AzureADUser @pltGAADU ; 
                 if (-not $AADUser) {
+                
                     $smsg = "Failed: Get-AzureADUser -SearchString $($pltGAADU.searchstring)" ; 
                     $smsg += "`nretrying as -objectid..." ; 
                     if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
                     $pltGAADU.remove('SearchString') ; 
                     $pltGAADU.Add("ObjectID",$user) ; 
-                    $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
                     if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
-                
-                    $AADUser = Get-AzureADUser @pltGAADU ;                 
+                    $AADUser = Get-AzureADUser @pltGAADU ;         
                 } ; 
+                #>
+                $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
+                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
+                $AADUser = Get-AzureADUser @pltGAADU ;   
             
                 if ($AADUser) {
                     $report.AzureADUser = $AADUser ; 

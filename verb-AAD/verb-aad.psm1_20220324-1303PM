@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 1.2.1
+Version     : 2.0.2
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -871,6 +871,7 @@ Function convert-ADUObjectGUIDToAADUImmuntableID {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 8:26 AM 2/4/2022 hardtyped guid (string doesn't support the getbytearray method)
     * 11:20 AM 12/6/2021 init
     .DESCRIPTION
     convert-ADUObjectGUIDToAADUImmuntableID - Convert an ADUser.objectGuid to the equivelent AzureADUser.ImmuntableID (via Base64 conversion).
@@ -899,7 +900,8 @@ Function convert-ADUObjectGUIDToAADUImmuntableID {
     Param(
          [Parameter(Position=0,Mandatory=$false,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Guid to be converted[-guid '24bf3cb0-65b6-4ab7-ba2f-7d60f2a7a76a']")]
         [Alias('objectGuid')]
-        [String]$Guid,
+        #[String]
+        [guid]$Guid,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
         [switch] $silent
     ) ;
@@ -1696,6 +1698,8 @@ function get-AADlicensePlanList {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/
     REVISIONS
+    * 2:27 PM 3/1/2022 updated CBH
+    * 8:34 AM 2/28/2022 updated CBH example1, added conditional ordered to hash, defaulted Cred to a global varia
     * 11:05 AM 9/16/2021 fixed Examples to functional 
     * 2:06 PM 10/12/2020 ported to verb-AAD
     * 9:03 AM 8/10/2020 init
@@ -1712,43 +1716,36 @@ function get-AADlicensePlanList {
     .OUTPUTS
     [| get-member the output to see what .NET obj TypeName is returned, to use here]
     .EXAMPLE
-    PS> $pltGLPList=[ordered]@{
-        TenOrg= $TenOrg;
-        verbose=$($verbose) ;
-        credential=(Get-Variable -name cred$($tenorg) ).value ;
-    } ;
-    $smsg = "$($tenorg):get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ;
-    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    $objRet = $null ;
-    $objRet = get-AADlicensePlanList @pltGLPList ;
-    switch ($objRet.GetType().FullName){
-        "System.Collections.Hashtable" {
-            if( ($objRet|Measure-Object).count ){
-                $smsg = "get-AADlicensePlanList:$($tenorg):returned populated LicensePlanList" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                $licensePlanListHash = $objRet ; 
-            } else {
-                $smsg = "get-AADlicensePlanList:$($tenorg):FAILED TO RETURN populated LicensePlanList" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } #Error|Warn|Debug
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            } ;
-        } 
-        default {
-            $smsg = "get-AADlicensePlanList:$($tenorg):RETURNED UNDEFINED OBJECT TYPE!" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } #Error|Warn|Debug
-            else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            Exit ; 
-        } ; 
-    } ;  # SWITCH-E    
-    $aadu = get-azureaduser -obj someuser@domain.com ; 
-    $userList = $aadu | Select -ExpandProperty AssignedLicenses | Select SkuID  ;
-    $userLicenses=@() ;
-    $userList | ForEach {
-        $sku=$_.SkuId ;
-        $userLicenses+=$licensePlanListHash[$sku].SkuPartNumber ;
-    } ;
+    PS>  $pltGLPList=[ordered]@{
+    PS>      TenOrg= $TenOrg;
+    PS>      verbose=$($VerbosePreference -eq "Continue") ;
+    PS>      credential= $pltRXO.credential ;
+    PS>      #(Get-Variable -name cred$($tenorg) ).value ;
+    PS>  } ;
+    PS>  $smsg = "$($tenorg):get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ;
+    PS>  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>  else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>  $objRet = $null ;
+    PS>  $objRet = get-AADlicensePlanList @pltGLPList ;
+    PS>  if( ($objRet|Measure-Object).count -AND $objRet.GetType().FullName -match $rgxHashTableTypeName ){
+    PS>      $smsg = "get-AADlicensePlanList:$($tenorg):returned populated LicensePlanList" ;
+    PS>      if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>      else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>      $licensePlanListHash = $objRet ;
+    PS>  } else {
+    PS>      $smsg = "get-AADlicensePlanList:$($tenorg)FAILED TO RETURN populated [hashtable] LicensePlanList" ;
+    PS>      if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
+    PS>      else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>      THROW $SMSG ; 
+    PS>      break ; 
+    PS>  } ;
+    PS>  $aadu = get-azureaduser -obj someuser@domain.com ; 
+    PS>  $userList = $aadu | Select -ExpandProperty AssignedLicenses | Select SkuID  ;
+    PS>  $userLicenses=@() ;
+    PS>  $userList | ForEach {
+    PS>     $sku=$_.SkuId ;
+    PS>     $userLicenses+=$licensePlanListHash[$sku].SkuPartNumber ;
+    PS>  } ;
     .LINK
     https://github.com/tostka
     #>
@@ -1757,14 +1754,14 @@ function get-AADlicensePlanList {
     ##requires -PSEdition Desktop
     #Requires -Modules AzureAD, verb-Text
     #Requires -RunasAdministrator
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM(
         [Parameter(Mandatory=$True,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
         [ValidateNotNullOrEmpty()]
         [string]$TenOrg,
-        [Parameter(Mandatory=$True,HelpMessage="Credentials [-Credentials [credential object]]")]
-        [System.Management.Automation.PSCredential]$Credential,
+        [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
+        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage="The ManagedBy parameter specifies an owner for the group [-ManagedBy alias]")]
         $ManagedBy,
         [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
@@ -1817,7 +1814,8 @@ function get-AADlicensePlanList {
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         # can't use convert-ObjectToIndexedHash as the key/index is a split version of a property, rather than the entire property
         $swMstr = [Diagnostics.Stopwatch]::StartNew();
-        $licensePlanListHash = @{} ;
+        if($host.version.major -gt 2){$licensePlanListHash = [ordered]@{} } 
+        else { $licensePlanListHash = @{} };
         foreach($lic in $licensePlanList) {
             # target SKUid is the 2nd half of the SubscribedSKU.objectid, split at the _
             $licensePlanListHash[$lic.objectid.split('_')[1]] = $lic ;
@@ -2033,7 +2031,7 @@ function get-aaduser {
     ###Requires -Version 5
     #Requires -Modules MSOnline, AzureAD, verb-Text, verb-IO
     #Requires -RunasAdministrator
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
     ##[Alias('somealias')]
@@ -2238,6 +2236,151 @@ function Get-DsRegStatus {
 }
 
 #*------^ Get-DsRegStatus .ps1 ^------
+
+#*------v Get-JWTDetails.ps1 v------
+function Get-JWTDetails {
+    <#
+    .SYNOPSIS
+    Get-JWTDetails - Decode a JWT Access Token and convert to a PowerShell Object.
+JWT Access Token updated to include the JWT Signature (sig), JWT Token Expiry (expiryDateTime) and JWT Token time to expiry (timeToExpiry).
+    .NOTES
+    Version     : 1.0.2
+    Author      : Darren J Robinson
+    Website     :	https://blog.darrenjrobinson.com/
+    Website     :	https://github.com/darrenjrobinson
+    Twitter     :	@darrenjrobinson / https://twitter.com/darrenjrobinson
+    CreatedDate : 2020-06-14
+    FileName    : Get-JWTDetails
+    License     : https://github.com/darrenjrobinson/JWTDetails/blob/master/LICENSE
+    Copyright   : (none asserted)
+    Github      : https://github.com/tostka/verb-aad
+    REVISIONS
+    * 10:54 AM 3/8/2022 TK: updated CBH; added to verb-aad
+    * 6/14/2020, v1.0.2 posted version
+    .DESCRIPTION
+    Get-JWTDetails - Decode a JWT Access Token and convert to a PowerShell Object.
+JWT Access Token updated to include the JWT Signature (sig), JWT Token Expiry (expiryDateTime) and JWT Token time to expiry (timeToExpiry).
+    Extends work in place with the MSAL.PS module (MSAL = Microsoft Authentication Libraries)
+    .PARAMETER token
+    The JWT Access Token to decode and udpate with expiry time and time to expiry
+    .INPUTS
+    Token from Pipeline 
+    .OUTPUTS
+    PowerShell Object
+    .SYNTAX
+    Get-JWTDetails(accesstoken)
+    .EXAMPLE
+    PS> Get-JWTDetails('eyJ0eXAiOi........XmN4GnWQAw7OwMA')
+    or
+    PS> 'eyJ0eXAiOi........XmN4GnWQAw7OwMA' | Get-JWTDetails
+    aud             : https://graph.microsoft.com
+    iss             : https://sts.windows.net/74ea519d-1234-4aa9-86d9-b7cab8204aaa/
+    iat             : 1564472277
+    nbf             : 1564472277
+    exp             : 1564476177
+    acct            : 0
+    acr             : 1
+    aio             : AVQAq/8MAAAAAzB0vSr6FzZdn+4Rl0mv/akAo4CoJGUOzDRebOAz2s8IgJyRK7IONYU/57PHkLZYUswizziQS7QQ5l9w0DrqH4urxrexTpLbagQHvJlEaD6c=
+    amr             : {pwd, mfa}
+    app_displayname : Reporting
+    appid           : 2c29e80e-ec64-43f7-b07a-137ae9c1d70c
+    appidacr        : 1
+    ipaddr          : 1.129.1.112
+    name            : Darren J Robinson
+    oid             : 5fddc979-ef08-4947-abcd-2430bc1234e0
+    platf           : 3
+    puid            : C1373BFDAE1A48F6
+    scp             : AuditLog.Read.All Directory.Read.All Reports.Read.All
+                      User.Read User.Read.All
+    sub             : _31PG9C137LXuAkWDB93YM_eoRl9auP21qHOn5hO-s9w
+    tid             : 74ea519d-9792-4aa9-c137-b7cab8204aaa
+    unique_name     : darren@mytenant.onmicrosoft.com
+    upn             : darren@mytenant.onmicrosoft.com
+    uti             : eoWKGl9uZ0Gnc13715Qdff
+    ver             : 1.0
+    wids            : {4a5d8f65-41da-4de4-c137-f035b65339ca, c4e39bd9-c137-46d3-8c65-fb160df0071a, 5d6b6bb7-c137-4623-bafa-96380f352509}
+    xms_tcdt        : 1341026666
+    sig             : PUpl4F61Ql12nfxkLDeTA2Tucb7KfzrfbmI1+gNDPFfbe8WD3wlfr0EK2M89JNPJ1Z8H7Z8/JVU9Jbat2u+657D8IM81+NhnCpMvEWyC5565ZmIgE3vQKlBK3wD24kSzEFj6J2yL 
+                      Zou1u/NrBvEakiiZdCJRKOB9nf4/euHHfYJNSKtPhLiPImyc137JxbPUG/MPjAQBkBPuUCyYtmFoBynGvsoSVvzZ6JQS5O2nxZPAqOFUzj5q3fjhh/oqPpu/6Qw1bdt3O37HgMLn 
+                      UrBK3psjwUfP/X6//L6S1FwomenNoFVeKcUNcM5Ne6loDwRSW1Ig8XHXmN4GnWQAw7OwMA==
+    expiryDateTime  : 30/07/2019 6:42:57 PM
+    timeToExpiry    : -00:32:56.1103767
+    .EXAMPLE
+    PS> Get-JWTDetails($myAccessToken)
+    or 
+    PS> $myAccessToken | Get-JWTDetails
+    tenant_id             : cd988f3c-710c-43eb-9e25-123456789
+    internal              : False
+    pod                   : uswest2
+    org                   : myOrd
+    identity_id           : 1c818084624f8babcdefgh9a4
+    user_name             : adminDude
+    strong_auth_supported : True
+    user_id               : 100666
+    scope                 : {read, write}
+    exp                   : 1564474732
+    jti                   : 1282411c-ffff-1111-a9d0-f9314a123c7a
+    sig                   : SWPhCswizzleQWdM4K8A8HotX5fP/PT8kBWnaaAf2g6k=
+    expiryDateTime        : 30/07/2019 6:18:52 PM
+    timeToExpiry          : -00:57:37.4457299
+    .LINK
+    https://blog.darrenjrobinson.com
+    .LINK
+    https://blog.darrenjrobinson.com/jwtdetails-powershell-module-for-decoding-jwt-access-tokens-with-readable-token-expiry-time/ 
+    .LINK
+    https://github.com/tostka/verb-AAD
+    #>
+    [CmdletBinding()]
+    PARAM(
+        [Parameter(Mandatory = $true, ValueFromPipeline = $true, Position = 0)]
+        [string]$token
+    ) ;
+    if (!$token.Contains(".") -or !$token.StartsWith("eyJ")) { Write-Error "Invalid token" -ErrorAction Stop } ; 
+
+    # Token
+    foreach ($i in 0..1) {
+        $data = $token.Split('.')[$i].Replace('-', '+').Replace('_', '/')
+        switch ($data.Length % 4) {
+            0 { break }
+            2 { $data += '==' }
+            3 { $data += '=' }
+        } ; 
+    } ; 
+
+    $decodedToken = [System.Text.Encoding]::UTF8.GetString([convert]::FromBase64String($data)) | ConvertFrom-Json 
+    Write-Verbose "JWT Token:" ; 
+    Write-Verbose $decodedToken ; 
+
+    # Signature
+    foreach ($i in 0..2) {
+        $sig = $token.Split('.')[$i].Replace('-', '+').Replace('_', '/') ; 
+        switch ($sig.Length % 4) {
+            0 { break }
+            2 { $sig += '==' }
+            3 { $sig += '=' }
+        } ; 
+    } ; 
+    Write-Verbose "JWT Signature:" ; 
+    Write-Verbose $sig ; 
+    $decodedToken | Add-Member -Type NoteProperty -Name "sig" -Value $sig ; 
+
+    # Convert Expiry time to PowerShell DateTime
+    $orig = (Get-Date -Year 1970 -Month 1 -Day 1 -hour 0 -Minute 0 -Second 0 -Millisecond 0) ; 
+    $timeZone = Get-TimeZone ; 
+    $utcTime = $orig.AddSeconds($decodedToken.exp) ; 
+    $offset = $timeZone.GetUtcOffset($(Get-Date)).TotalMinutes #Daylight saving needs to be calculated ; 
+    $localTime = $utcTime.AddMinutes($offset)     # Return local time,
+    
+    $decodedToken | Add-Member -Type NoteProperty -Name "expiryDateTime" -Value $localTime ; 
+    
+    # Time to Expiry
+    $timeToExpiry = ($localTime - (get-date)) ; 
+    $decodedToken | Add-Member -Type NoteProperty -Name "timeToExpiry" -Value $timeToExpiry ; 
+
+    return $decodedToken ; 
+}
+
+#*------^ Get-JWTDetails.ps1 ^------
 
 #*------v Get-MsolDisabledPlansForSKU.ps1 v------
 Function Get-MsolDisabledPlansForSKU {
@@ -4382,7 +4525,7 @@ Function resolve-GuestExternalAddr2UPN {
     #>
     #Requires -Version 3
     #Requires -Modules AzureAD
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     # SMTP rgx: "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$"
     Param(
         [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="External SMTP Email Address to be resolved to Guest UPN [-ExternalEmailAddress email@gmail.com]")]
@@ -5445,14 +5588,14 @@ Function Wait-AADSync {
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,convert-AADUImmuntableIDToADUObjectGUID,convert-ADUObjectGUIDToAADUImmuntableID,Disconnect-AAD,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,get-aaduser,Get-DsRegStatus,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,get-MsolUserLastSync,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,Initialize-AADSignErrorsHash,profile-AAD-Signons,Write-Log,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,Wait-AADSync -Alias *
+Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,convert-AADUImmuntableIDToADUObjectGUID,convert-ADUObjectGUIDToAADUImmuntableID,Disconnect-AAD,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,get-aaduser,Get-DsRegStatus,Get-JWTDetails,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,get-MsolUserLastSync,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,Initialize-AADSignErrorsHash,profile-AAD-Signons,Write-Log,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,Wait-AADSync -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUPL/Ge/9EkKPAE2CeFuZv+/8l
-# hLKgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUzUpcnH0sbhxynrgx0eO+9tpM
+# M1WgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -5467,9 +5610,9 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBS5Rzuu
-# qYea2G6lbq8HIYc+5fW/RzANBgkqhkiG9w0BAQEFAASBgBvYgPJPLMJAwJOAikQY
-# uxazsL4XxgQDKpLF2YS9gtH36ZTEnOtv+fjB83eFbFGfbA5FYz3fCDVpoEqZYf7l
-# /426rqF1lNxgYl1oi7wQcf2iBI0qhkS5KaPxkwZbO3H3vkcqZoYr7f6KfrG5SmfU
-# Mw9jvtWZXwzfOsu9ZX2ClUqt
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQQL/8n
+# G7YRppyNBdct11DTUGZHIDANBgkqhkiG9w0BAQEFAASBgGredSaIHFlnMWUsc/h1
+# hX1KJf/vDq0xtG+2Ch41e4zJsyUjZQvEz/hXj4EaoqE69x0o7VFqbZ7x6LTcAXb4
+# z/NIQK7spVT5EDdBWt2B/MB+iiYW3y17YhVy5FfLIwbtazt27Gax/LEoKKuQ4IR8
+# aQztn/Y8veJnFGHr+9C5SLOA
 # SIG # End signature block

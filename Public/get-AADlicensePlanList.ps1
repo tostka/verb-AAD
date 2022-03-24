@@ -14,6 +14,8 @@ function get-AADlicensePlanList {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/
     REVISIONS
+    * 12:54 PM 3/24/2022 added addition of resolved 'friendlyname' (via verb-aad:get-AADLicenseFullName), to the datatable returned, when in NON-Raw mode
+    * 4:37 PM 3/23/2022 rem'd spurious managedby param
     * 9:31 AM 3/22/2022 add: 
         -raw (returns raw property outputs, vs default which is now a summarized table closer to *useful* get-MsolAccountSku output:
         -indexonName indexed-hash keyed on 'Name' (SkuPartNumber), vs default hash-keyed on SkuID values (for sku->name/details lookups, vs name->Sku lookups)
@@ -113,8 +115,6 @@ function get-AADlicensePlanList {
         [string]$TenOrg = $global:o365_TenOrgDefault,
         [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
         [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
-        [Parameter(HelpMessage="The ManagedBy parameter specifies an owner for the group [-ManagedBy alias]")]
-        $ManagedBy,
         [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
         [switch] $showDebug,
         [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
@@ -145,7 +145,7 @@ function get-AADlicensePlanList {
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $licensePlanList = $null ; 
 
-        Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
+        Connect-AAD -Credential:$Credential -verbose:$($verbose) -silent ;
 
         $error.clear() ;
         TRY {
@@ -191,11 +191,29 @@ function get-AADlicensePlanList {
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         } ; 
         foreach($lic in $licensePlanList) {
-            # target SKUid is the 2nd half of the SubscribedSKU.objectid, split at the _
+            # update the content with the friendly name
+            $data=[ordered]@{
+                SkuId = $lic.SkuId
+                SkuPartNumber = $lic.SkuPartNumber
+                SkuDesc = get-AADLicenseFullName -name $lic.SkuPartNumber ; 
+                Enabled = $lic.Enabled ; 
+                Consumed = $lic.Consumed ; 
+                Available = $lic.Available ; 
+                Warning = $lic.Warning ; 
+                Suspended = $lic.Suspended ; 
+            } ;
             if($IndexOnName){
-                $licensePlanListHash[$lic.SkuPartNumber] = $lic ;
+                if($raw){
+                    $licensePlanListHash[$lic.SkuPartNumber] = $lic ;
+                } else { 
+                    $licensePlanListHash[$lic.SkuPartNumber] = New-Object PSObject -Property $data ;
+                } ; 
             } else { 
-                $licensePlanListHash[$lic.skuid] = $lic ;               
+                if($raw){
+                    $licensePlanListHash[$lic.skuid] = $lic ;    
+                } else { 
+                    $licensePlanListHash[$lic.skuid] = New-Object PSObject -Property $data ;
+                } ;            
             } ; 
         } ;
     

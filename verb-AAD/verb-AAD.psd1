@@ -12,7 +12,7 @@
 RootModule = 'verb-AAD.psm1'
 
 # Version number of this module.
-ModuleVersion = '2.0.2'
+ModuleVersion = '2.1.0'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -69,7 +69,7 @@ Description = 'Azure AD-related generic functions'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('Add-ADALType','caadCMW','caadtol','caadTOR','caadVEN','cmsolcmw','cmsolTOL','cmsolTOR','cmsolVEN','Connect-AAD','connect-AzureRM','Connect-MSOL','convert-AADUImmuntableIDToADUObjectGUID','convert-ADUObjectGUIDToAADUImmuntableID','Disconnect-AAD','get-AADBearerToken','get-AADBearerTokenHeaders','get-AADCertToken','get-AADLastSync','get-AADlicensePlanList','get-AADToken','get-AADTokenHeaders','get-aaduser','Get-DsRegStatus','Get-JWTDetails','Get-MsolDisabledPlansForSKU','Get-MsolUnexpectedEnabledPlansForUser','get-MsolUserLastSync','Get-MsolUserLicense','get-MsolUserLicenseDetails','Get-ServiceToken','Get-TokenCache','Initialize-AADSignErrorsHash','profile-AAD-Signons','Write-Log','get-colorcombo','Initialize-AADSignErrorsHash','Cleanup','Remove-MsolUserDirectLicenses','resolve-GuestExternalAddr2UPN','search-AADSignInReports','search-GraphApiAAD','test-MsolUserLicenseDirectAssigned','test-MsolUserLicenseGroupAssigned','Wait-AADSync')
+FunctionsToExport = @('add-AADUserLicense','Add-ADALType','caadCMW','caadtol','caadTOR','caadVEN','cmsolcmw','cmsolTOL','cmsolTOR','cmsolVEN','Connect-AAD','connect-AzureRM','Connect-MSOL','convert-AADUImmuntableIDToADUObjectGUID','convert-ADUObjectGUIDToAADUImmuntableID','Disconnect-AAD','get-AADBearerToken','get-AADBearerTokenHeaders','get-AADCertToken','get-AADLastSync','get-AADLicenseFullName','get-AADlicensePlanList','get-AADToken','get-AADTokenHeaders','get-aaduser','get-AADUserLicenseDetails','Get-DsRegStatus','Get-JWTDetails','Get-MsolDisabledPlansForSKU','Get-MsolUnexpectedEnabledPlansForUser','get-MsolUserLastSync','Get-MsolUserLicense','get-MsolUserLicenseDetails','Get-ServiceToken','Get-TokenCache','Initialize-AADSignErrorsHash','profile-AAD-Signons','Write-Log','get-colorcombo','Initialize-AADSignErrorsHash','Cleanup','remove-AADUserLicense','Remove-MsolUserDirectLicenses','resolve-GuestExternalAddr2UPN','search-AADSignInReports','search-GraphApiAAD','set-AADUserUsageLocation','test-AADUserIsLicensed','test-MsolUserLicenseDirectAssigned','test-MsolUserLicenseGroupAssigned','toggle-AADLicense','Wait-AADSync')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = '*'
@@ -126,8 +126,8 @@ PrivateData = @{
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjRsrm8VocH93uyRVInsbhVFT
-# Hs+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUxs5x21mW1Ywj2kjFMYK/2son
+# 01ugggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -142,9 +142,9 @@ PrivateData = @{
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBROF/W+
-# pxIiNMJQGVx7faAzA16TXDANBgkqhkiG9w0BAQEFAASBgDYmsiEl2Y6vk6O3ZwOK
-# yjhvuYYaFB8pJONhnDIx73RIGwADfwOHCxayHKNGHz2Q6DkK/gGPFkfuoIvU0UP9
-# H7QkErGAOI6z+bThDpPY585B3IWMkyhLXcEQOPoZLG3tRqR1FIQh89oiglISGbBz
-# 7P/Vif1gdw2+YXi3n2BqNs7h
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQy/MAS
+# g+I8ikT6ic9w36T/9SAeUTANBgkqhkiG9w0BAQEFAASBgDDk4TtXk0qUGVqtTX9W
+# nxjzlzc0f71uVKId+Y76++WO9QisQUR1JkwXl0I53b2nP87l3kgos5P04VpzvizU
+# 4rtE6DbO3m0R1i/cjLYA1cTIOYP6b3CCozFn3BfGjmJbWax0tnH0CVGFKVbi8VrG
+# I6Cg5bHZ0uxDwoCIiq1tQ6wQ
 # SIG # End signature block

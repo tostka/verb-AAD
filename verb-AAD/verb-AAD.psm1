@@ -1,11 +1,11 @@
-﻿# verb-AAD.psm1
+﻿# verb-aad.psm1
 
 
 <#
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 2.0.2
+Version     : 2.1.0
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -40,6 +40,297 @@ $script:ModuleVersion = (Import-PowerShellDataFile -Path (get-childitem $script:
 #*======v FUNCTIONS v======
 
 
+
+#*------v add-AADUserLicense.ps1 v------
+function add-AADUserLicense {
+    <#
+    .SYNOPSIS
+    add-AADUserLicense.ps1 - Add a single license to an array of AzureADUsers
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2022-03-22
+    FileName    : add-AADUserLicense.ps1
+    License     : MIT License
+    Copyright   : (c) 2022 Todd Kadrie
+    Github      : https://github.com/tostka/verb-XXX
+    Tags        : Powershell
+    AddedCredit : 
+    AddedWebsite:	
+    AddedTwitter:	
+    REVISIONS
+    * 10:30 AM 3/24/2022 add pipeline support
+    2:28 PM 3/22/2022 init; confirmed functional
+    .DESCRIPTION
+    add-AADUserLicense.ps1 - Add a single license to an array of AzureADUsers
+    .PARAMETER  Users
+    Array of User Userprincipal/Guids to have the specified license applied
+    .PARAMETER  skuid
+    Azure LicensePlan SkuID for the license to be applied to the users.
+    .PARAMETER Whatif
+    Parameter to run a Test no-change pass [-Whatif switch]
+    .PARAMETER Silent
+    Suppress all but error, warn or verbose outputs
+    .EXAMPLE
+    PS> $bRet = add-AADUserLicense -users 'upn@domain.com','upn2@domain.com' -skuid nnnnnnnn-nnnn-nnnn-nnnn-nnnnnnnnnnnn 
+    PS> $bRet | %{if($_.Success){write-host "$($_.AzureADUser.userprincipalname):Success"} else { write-warning "$($_.AzureADUser.userprincipalname):FAILURE" } ; 
+    Add license with skuid specified, to the array of user UPNs specified in -users
+    .EXAMPLE
+    PS> $bRet = $AADUser.userprincipalname | add-AADUserLicense -skuid $skuid -verbose -whatif ; 
+    PS> $bRet | %{if($_.Success){write-host "$($_.AzureADUser.userprincipalname):Success"} else { write-warning "$($_.AzureADUser.userprincipalname):FAILURE" } ; 
+    Pipeline example
+    .LINK
+    https://github.com/tostka/verb-AAD
+    #>
+    #Requires -Version 3
+    #Requires -Modules AzureAD, verb-Text
+    #Requires -RunasAdministrator
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    [CmdletBinding()]
+    PARAM (
+        # ValueFromPipeline: will cause params to match on matching type, [array] input -> [array]$param
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true)]
+        [ValidateNotNullOrEmpty()]
+        [string[]]$Users, 
+        [string]$skuid,
+        [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
+        [ValidateNotNullOrEmpty()]
+        [string]$TenOrg = $global:o365_TenOrgDefault,
+        [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
+        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [switch]$whatif,
+        [switch]$silent
+    ) ;
+    BEGIN {
+        ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+        $Verbose = ($VerbosePreference -eq 'Continue') ;
+        
+        $pltRXO = [ordered]@{
+            Credential = $Credential 
+            verbose = $($VerbosePreference -eq 'Continue') ;
+            silent = $true ; # always silent, echo only warn/errors
+        } ; 
+        #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
+        Connect-AAD @pltRXO ;         
+        
+        # check if using Pipeline input or explicit params:
+        if ($PSCmdlet.MyInvocation.ExpectingInput) {
+            write-verbose "Data received from pipeline input: '$($InputObject)'" ;
+        } else {
+            # doesn't actually return an obj in the echo
+            #write-verbose "Data received from parameter input: '$($InputObject)'" ;
+        } ;
+    } 
+    PROCESS {
+        $Error.Clear() ;
+        $ttl = ($users|  measure ).count ;  
+        $procd = 0 ; 
+        foreach ($user in $users) {
+            $procd ++ ; 
+            $sBnrS="`n#*------v $(${CmdletName}): PROCESSING ($($procd)/$($ttl)): $($user):$($skuid) v------" ; 
+            $smsg = $sBnrS ; 
+            if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            $Report = @{
+                AzureADUser = $null ; 
+                AddedLicenses = @(); 
+                RemovedLicenses = @(); 
+                FixedUsageLocation = $false ; 
+                Success = $false ; 
+            } ; 
+            $error.clear() ;
+            TRY {
+                <# rem out search string option - if we're mandating UPN/guids, it's always going to fail the initial attempt, skip it, odds of feeding it a dname etc is low
+                $pltGAADU=[ordered]@{ SearchString = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
+                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
+                $AADUser = Get-AzureADUser @pltGAADU ; 
+                if (-not $AADUser) {
+                
+                    $smsg = "Failed: Get-AzureADUser -SearchString $($pltGAADU.searchstring)" ; 
+                    $smsg += "`nretrying as -objectid..." ; 
+                    if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
+                    $pltGAADU.remove('SearchString') ; 
+                    $pltGAADU.Add("ObjectID",$user) ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
+                    $AADUser = Get-AzureADUser @pltGAADU ;         
+                } ; 
+                #>
+                $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
+                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
+                $AADUser = Get-AzureADUser @pltGAADU ;   
+            
+                if ($AADUser) {
+                    $report.AzureADUser = $AADUser ; 
+                    if (-not $AADUser.UsageLocation) {
+                        $smsg = "AADUser: MISSING USAGELOCATION, FORCING" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                        $spltSAADUUL = [ordered]@{ 
+                            ObjectID = $AADUser.UserPrincipalName ;
+                            UsageLocation = "US" ;
+                            whatif = $($whatif) ;
+                            verbose = ($VerbosePreference -eq "Continue") ;
+                        } ;
+                        $smsg = "set-AADUserUsageLocationw`n$(($spltSAADUUL|out-string).trim())" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        $bRet = set-AADUserUsageLocation @spltSAADUUL ; 
+                        if($bRet.Success){
+                            $smsg = "set-AADUserUsageLocation updated UsageLocation:$($bRet.AzureADuser.UsageLocation)" ; 
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                            # update the local AADUser to reflect the updated AADU returned
+                            $AADUser = $bRet.AzureADuser ; 
+                            $Report.FixedUsageLocation = $true ; 
+                        } else { 
+                            $smsg = "set-AADUserUsageLocation: FAILED TO UPDATE USAGELOCATION!" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            $Report.FixedUsageLocation = $false ; 
+                            if(-not $whatif){
+                                BREAK; 
+                            } 
+                        } ; 
+                    } ;        
+                    
+                    # check lic avail
+                    $pltGLPList=[ordered]@{ 
+                        TenOrg= $TenOrg; 
+                        verbose=$($VerbosePreference -eq "Continue") ; 
+                        credential= $Credential ;
+                        #$pltRXO.credential ; 
+                        erroraction = 'STOP' ;
+                    } ;
+                    $smsg = "get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    $skus = get-AADlicensePlanList @pltGLPList ;
+                    
+                    if($tsku = $skus[$skuid]){
+                        $smsg = "($($skuid):$($tsku.SkuPartNumber) is present in Tenant SKUs)" ;
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;    
+                        if($tsku.Available -gt 0){
+                            $smsg = "($($tsku.SkuPartNumber) has available units in Tenant $($tsku.Consumed)/$($tsku.Enabled))"
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                            
+                            $license = New-Object -TypeName Microsoft.Open.AzureAD.Model.AssignedLicense
+                            $AssignedLicenses = New-Object -TypeName Microsoft.Open.AzureAD.Model.AssignedLicenses
+                            $license.SkuId = $skuid ;
+                            $AssignedLicenses.AddLicenses = $license ;
+
+                            # confirm that the user doesn't have the lic in question:
+                            if($AADUser.Assignedlicenses.skuid -notcontains $license.SkuId){
+                                
+                                $smsg = "Adding license SKUID ($($skuid)) to user:$($user)" ; 
+                                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                                $pltSAADUL=[ordered]@{
+                                    ObjectId = $AADUser.ObjectID ;
+                                    AssignedLicenses = $AssignedLicenses ;
+                                    erroraction = 'STOP' ;
+                                    verbose = $($VerbosePreference -eq "Continue") ;
+                                } ;
+                                $smsg = "Set-AzureADUserLicense w`n$(($pltSAADUL|out-string).trim())" ; 
+                                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+
+                                if (-not $whatif) {
+                                    Set-AzureADUserLicense @pltSAADUL ;
+                                
+                                    $Report.AddedLicenses += "$($tsku.SkuPartNumber):$($license.SkuId)" ; 
+                                    #$Report.RemovedLicenses += "$($tsku.SkuPartNumber):$($license.SkuId)" ; 
+                                    $Report.Success = $true ; 
+                                } else {
+                                    #$Report.AddedLicenses += "$($tsku.SkuPartNumber):$($license.SkuId)" ; 
+                                    #$Report.RemovedLicenses += "$($tsku.SkuPartNumber):$($license.SkuId)" ; 
+                                    $Report.Success = $false ; 
+                                    $smsg = "(-whatif: skipping exec (set-AureADUser lacks proper -whatif support))" ; ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                }  ;
+
+                                $AADUser = Get-AzureADUser @pltGAADU ; 
+                                $report.AzureADUser = $AADUser ; 
+                                $usrPlans = $usrLics=@() ; 
+                                foreach($pLic in $AADUser.AssignedLicenses.skuid){
+                                    $usrLics += $skus[$plic].SkuPartNumber ; 
+                                } ; 
+                                foreach($pPlan in $AADUser.assignedplans){
+                                    $usrPlans += $_.service ; 
+                                } ; 
+                                $smsg = "POST:`n$(($AADUser|ft -a UserPrincipalName,DisplayName| out-string).trim())" ;
+                                $smsg += "`nLicenses: $(($usrLics -join ','|out-string).trim())" ;  
+                                $smsg += "`nPlans: $(( ($usrPlan | select -unique) -join ','|out-string).trim())" ; 
+                                if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                
+                                #[PSCustomObject]$Report | write-output ;
+                                New-Object PSObject -Property $Report | write-output ;
+
+                            } else {
+                                $smsg = "$($AADUser.userprincipalname) already has AssignedLicense:$($tsku.SkuPartNumber)" ; 
+                                if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                $report.Success = $true ; 
+                                
+                                #[PSCustomObject]$Report | write-output ;
+                                New-Object PSObject -Property $Report | write-output ;
+                            } ;
+                        } else {
+                            $smsg = "($($LicenseSkuId) has *NO* available units in Tenant $($tsku.consumedunits)/$($tsku.activeunits))"
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            $report.Success = $false ; 
+                            #[PSCustomObject]$Report | write-output ;
+                            New-Object PSObject -Property $Report | write-output ;
+                        } ;
+                    } else {
+                        $smsg = "($($skuid):$($tsku.SkuPartNumber) is NOT PRESENT in Tenant SKUs)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ;
+                } else {
+                    $smsg = "Unable to locate AzureADUser" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    $report.Success = $false ; 
+                    #[PSCustomObject]$Report | write-output ;
+                    New-Object PSObject -Property $Report | write-output ;
+                    Break ; 
+                } ;
+            } CATCH {
+                $ErrTrapd = $_ ; 
+                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Break ;
+            } ; 
+
+            $smsg = $sBnrS.replace('-v','-^').replace('v-','^-')
+            if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ; # loop-E
+    }  # PROC-E
+    END{
+        $smsg = "(processed $($procd) users)" ; 
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;         
+    } ;
+}
+
+#*------^ add-AADUserLicense.ps1 ^------
 
 #*------v Add-ADALType.ps1 v------
 function Add-ADALType {
@@ -1682,6 +1973,306 @@ Function get-AADLastSync {
 
 #*------^ get-AADLastSync.ps1 ^------
 
+#*------v get-AADLicenseFullName.ps1 v------
+function get-AADLicenseFullName {
+<#
+    .SYNOPSIS
+    get-AADLicenseFullName - Resolve an AzureAD License object's 'SkuPartNumber' to a friendly name ('Full Name')
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2022-
+    FileName    : 
+    License     : MIT License
+    Copyright   : (c) 2022 Todd Kadrie
+    Github      : https://github.com/tostka/verb-XXX
+    Tags        : Powershell
+    AddedCredit : Robert Prust (powershellpr0mpt)
+    AddedWebsite: https://powershellpr0mpt.com
+    AddedTwitter:
+    REVISIONS    
+    * 12:56 PM 3/24/2022 flipped unresolved items to notation in verbose - there's too many on a regular basis to throw visible errors in outputs ; 
+      spliced in some missing in our Tenant (where could document) ; init
+    .DESCRIPTION
+    get-AADLicenseFullName - Resolve an AzureAD License object's 'SkuPartNumber' to a friendly name ('Full Name')
+    Simple indexed hash of AzureAD 'SkuPartNumber's mapping to a more lengthy common description of the license purpose
+    .PARAMETER Name
+    'Name' or 'SkuPartNumber' of an AzureAD License object (as returned by AzureAD: Get-AzureADSubscribedSku cmdlet)[-Name EXCHANGESTANDARD]
+    .EXAMPLE
+    PS> get-AADLicenseFullName -Name 'VISIOCLIENT'
+    Resolve the SkuPartNumber 'VISIOCLIENT' to the equivelent descriptive name
+    .LINK
+    https://github.com/powershellpr0mpt/PSP-Office365/blob/master/PSP-Office365/public/Get-Office365License.ps1
+    https://github.com/tostka/verb-AAD
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true)]
+        [ValidateNotNullOrEmpty()]
+        [Alias('SkuPartNumber')]
+        [string[]]$Name
+    )
+    BEGIN{
+        ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+        $verbose = ($VerbosePreference -eq "Continue") ; 
+        
+        # https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference
+        # [Product names and service plan identifiers for licensing in Azure Active Directory | Microsoft Docs](https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference)
+
+        <# whatis an F1 lic: Office 365 F1 is designed to enable Firstline Workers to do their best work.
+        Office 365 F1 provides easy-to-use tools and services to help these workers
+        easily create, update, and manage schedules and tasks, communicate and work
+        together, train and onboard, and quickly receive company news and announcements.
+        #>
+
+        # updating sort via text: gc c:\tmp\list.txt | sort ;
+        $Skus = [ordered]@{
+            "AAD_BASIC"                          = "Azure Active Directory Basic"
+            "AAD_PREMIUM"                        = "Azure Active Directory Premium"
+            "ATA"                                = "Advanced Threat Analytics"
+            "ATP_ENTERPRISE"                     = "Exchange Online Advanced Threat Protection"
+            "BI_AZURE_P1"                        = "Power BI Reporting and Analytics"
+            "CRMIUR"                             = "CMRIUR"
+            "CRMPLAN2"                           = "MICROSOFT DYNAMICS CRM ONLINE BASIC"
+            "CRMSTANDARD"                        = "Microsoft Dynamics CRM Online Professional"
+            "DEFENDER_ENDPOINT_P1" =  ""
+            "DESKLESSPACK"                       = "Office 365 (Plan K1)"
+            "DESKLESSPACK_GOV"                   = "Microsoft Office 365 (Plan K1) for Government"
+            "DESKLESSWOFFPACK"                   = "Office 365 (Plan K2)"
+            "DEVELOPERPACK"                      = "OFFICE 365 ENTERPRISE E3 DEVELOPER"
+            "DYN365_CUSTOMER_INSIGHTS_ATTACH" =  ""
+            "DYN365_CUSTOMER_INSIGHTS_BASE" = ""
+            "DYN365_ENTERPRISE_CUSTOMER_SERVICE" = "DYNAMICS 365 FOR CUSTOMER SERVICE ENTERPRISE EDITION"
+            "DYN365_ENTERPRISE_P1_IW"            = "Dynamics 365 P1 Trial for Information Workers"
+            "DYN365_ENTERPRISE_PLAN1"            = "Dynamics 365 Customer Engagement Plan Enterprise Edition"
+            "DYN365_ENTERPRISE_SALES"            = "Dynamics Office 365 Enterprise Sales"
+            "DYN365_ENTERPRISE_SALES_CUSTOMERSERVICE" = "DYNAMICS 365 FOR SALES AND CUSTOMER SERVICE ENTERPRISE EDITION"
+            "DYN365_ENTERPRISE_TEAM_MEMBERS"     = "Dynamics 365 For Team Members Enterprise Edition"
+            "DYN365_FINANCIALS_BUSINESS_SKU"     = "Dynamics 365 for Financials Business Edition"
+            "DYN365_FINANCIALS_TEAM_MEMBERS_SKU" = "Dynamics 365 for Team Members Business Edition"
+            "DYNAMICS_365_FOR_OPERATIONS"        = "DYNAMICS 365 UNF OPS PLAN ENT EDITION"
+            "ECAL_SERVICES"                      = "ECAL"
+            "EMS"                                = "Enterprise Mobility Suite"
+            "EMSPREMIUM"                         = "ENTERPRISE MOBILITY + SECURITY E5"
+            "ENTERPRISEPACK"                     = "Enterprise Plan E3"
+            "ENTERPRISEPACK_B_PILOT"             = "Office 365 (Enterprise Preview)"
+            "ENTERPRISEPACK_FACULTY"             = "Office 365 (Plan A3) for Faculty"
+            "ENTERPRISEPACK_GOV"                 = "Microsoft Office 365 (Plan G3) for Government"
+            "ENTERPRISEPACK_STUDENT"             = "Office 365 (Plan A3) for Students"
+            "ENTERPRISEPACK_USGOV_DOD"           = "Office 365 E3_USGOV_DOD"
+            "ENTERPRISEPACK_USGOV_GCCHIGH"       = "Office 365 E3_USGOV_GCCHIGH"
+            "ENTERPRISEPACKLRG"                  = "Enterprise Plan E3"
+            "ENTERPRISEPREMIUM"                  = "Enterprise E5 (with Audio Conferencing)"
+            "ENTERPRISEPREMIUM_NOPSTNCONF"       = "Enterprise E5 (without Audio Conferencing)"
+            "ENTERPRISEWITHSCAL"                 = "Enterprise Plan E4"
+            "ENTERPRISEWITHSCAL_FACULTY"         = "Office 365 (Plan A4) for Faculty"
+            "ENTERPRISEWITHSCAL_GOV"             = "Microsoft Office 365 (Plan G4) for Government"
+            "ENTERPRISEWITHSCAL_STUDENT"         = "Office 365 (Plan A4) for Students"
+            "EOP_ENTERPRISE_FACULTY"             = "Exchange Online Protection for Faculty"
+            "EQUIVIO_ANALYTICS"                  = "Office 365 Advanced eDiscovery"
+            "ESKLESSWOFFPACK_GOV"                = "Microsoft Office 365 (Plan K2) for Government"
+            "EXCHANGE_L_STANDARD"                = "Exchange Online (Plan 1)"
+            "EXCHANGE_S_ARCHIVE_ADDON_GOV"       = "Exchange Online Archiving"
+            "EXCHANGE_S_DESKLESS"                = "Exchange Online Kiosk"
+            "EXCHANGE_S_DESKLESS_GOV"            = "Exchange Kiosk"
+            "EXCHANGE_S_ENTERPRISE_GOV"          = "Exchange Plan 2G"
+            "EXCHANGE_S_ESSENTIALS"              = "Exchange Online Essentials   "
+            "EXCHANGE_S_STANDARD_MIDMARKET"      = "Exchange Online (Plan 1)"
+            "EXCHANGEARCHIVE"                    = "EXCHANGE ONLINE ARCHIVING FOR EXCHANGE SERVER"
+            "EXCHANGEARCHIVE_ADDON"              = "Exchange Online Archiving For Exchange Online"
+            "EXCHANGEDESKLESS"                   = "Exchange Online Kiosk"
+            "EXCHANGEENTERPRISE"                 = "Exchange Online Plan 2"
+            "EXCHANGEENTERPRISE_GOV"             = "Microsoft Office 365 Exchange Online (Plan 2) only for Government"
+            "EXCHANGEESSENTIALS"                 = "Exchange Online Essentials"
+            "EXCHANGESTANDARD"                   = "Office 365 Exchange Online Only"
+            "EXCHANGESTANDARD_GOV"               = "Microsoft Office 365 Exchange Online (Plan 1) only for Government"
+            "EXCHANGESTANDARD_STUDENT"           = "Exchange Online (Plan 1) for Students"
+            "EXCHANGETELCO"                      = "EXCHANGE ONLINE POP"
+            "FLOW_FREE"                          = "Microsoft Flow Free"
+            "FLOW_P1"                            = "Microsoft Flow Plan 1"
+            "FLOW_P2"                            = "Microsoft Flow Plan 2"
+            "FLOW_PER_USER" = "Power Automate per user plan"
+            "FORMS_PRO" =  "Dynamics 365 Customer Voice Trial"
+            "Forms_Pro_USL" =  "Dynamics 365 Customer Voice USL"
+            "IDENTITY_THREAT_PROTECTION"           = "IDENTITY AND THREAT PROTECTION"
+            "INTUNE_A"                           = "Windows Intune Plan A"
+            "IT_ACADEMY_AD"                      = "MS IMAGINE ACADEMY"
+            "LITEPACK"                           = "Office 365 (Plan P1)"
+            "LITEPACK_P2"                        = "Office 365 Small Business Premium"
+            "M365_F1"                            = "Microsoft 365 F1"
+            "MCOEV"                              = "Microsoft Phone System"
+            "MCOIMP"                             = "SKYPE FOR BUSINESS ONLINE (PLAN 1)"
+            "MCOLITE"                            = "Lync Online (Plan 1)"
+            "MCOMEETACPEA"                       = "Pay Per Minute Audio Conferencing"
+            "MCOMEETADD"                         = "Audio Conferencing"
+            "MCOMEETADV"                         = "PSTN conferencing"
+            "MCOPSTN1"                           = "Domestic Calling Plan (3000 min US / 1200 min EU plans)"
+            "MCOPSTN2"                           = "International Calling Plan"
+            "MCOPSTN5"                           = "Domestic Calling Plan (120 min calling plan)"
+            "MCOPSTN6"                           = "Domestic Calling Plan (240 min calling plan) Note: Limited Availability"
+            "MCOPSTNC"                           = "Communications Credits"
+            "MCOPSTNPP"                          = "Communications Credits"
+            "MCOSTANDARD"                        = "Skype for Business Online Standalone Plan 2"
+            "MCOSTANDARD_GOV"                    = "Lync Plan 2G"
+            "MCOSTANDARD_MIDMARKET"              = "Lync Online (Plan 1)"
+            "MEETING_ROOM" =  "Microsoft Teams Rooms Standard"
+            "MFA_PREMIUM"                        = "Azure Multi-Factor Authentication"
+            "MIDSIZEPACK"                        = "Office 365 Midsize Business"
+            "MS_TEAMS_IW"                        = "Microsoft Teams Trial"
+            "O365_BUSINESS"                      = "Office 365 Business"
+            "O365_BUSINESS_ESSENTIALS"           = "Office 365 Business Essentials"
+            "O365_BUSINESS_PREMIUM"              = "Office 365 Business Premium"
+            "OFFICE_PRO_PLUS_SUBSCRIPTION_SMBIZ" = "Office ProPlus"
+            "OFFICESUBSCRIPTION"                 = "Office ProPlus"
+            "OFFICESUBSCRIPTION_GOV"             = "Office ProPlus"
+            "OFFICESUBSCRIPTION_STUDENT"         = "Office ProPlus Student Benefit"
+            "PBI_PREMIUM_P1_ADDON" =  "Power BI Premium P1"
+            "PLANNERSTANDALONE"                  = "Planner Standalone"
+            "POWER_BI_ADDON"                     = "Office 365 Power BI Addon"
+            "POWER_BI_INDIVIDUAL_USE"            = "Power BI Individual User"
+            "POWER_BI_PRO"                       = "Power BI Pro"
+            "POWER_BI_STANDALONE"                = "Power BI Stand Alone"
+            "POWER_BI_STANDARD"                  = "Power-BI Standard"
+            "POWERAPPS_DEV" =  "Microsoft Power Apps for Developer"
+            "POWERAPPS_INDIVIDUAL_USER" = "POWERAPPS AND LOGIC FLOWS"
+            "POWERAPPS_PER_APP" =  "PowerApps per app baseline access"
+            "POWERAPPS_PER_APP_IW" =  "PowerApps per app baseline access"
+            "POWERAPPS_VIRAL"                    = "Microsoft Power Apps & Flow"
+            "PROJECT_MADEIRA_PREVIEW_IW_SKU"     = "Dynamics 365 for Financials for IWs"
+            "PROJECTCLIENT"                      = "Project Professional"
+            "PROJECTESSENTIALS"                  = "Project Lite"
+            "PROJECTONLINE_PLAN_1"               = "Project Online"
+            "PROJECTONLINE_PLAN_2"               = "Project Online and PRO"
+            "PROJECTPREMIUM"                     = "Project Online Premium"
+            "PROJECTPROFESSIONAL"                = "Project Professional"
+            "PROJECTWORKMANAGEMENT"              = "Office 365 Planner Preview"
+            "RIGHTSMANAGEMENT"                   = "Rights Management"
+            "RIGHTSMANAGEMENT_ADHOC"             = "Windows Azure Rights Management"
+            "RMS_S_ENTERPRISE"                   = "Azure Active Directory Rights Management"
+            "RMS_S_ENTERPRISE_GOV"               = "Windows Azure Active Directory Rights Management"
+            "RMSBASIC"                           = "RMS BASIC"
+            "SHAREPOINTDESKLESS"                 = "SharePoint Online Kiosk"
+            "SHAREPOINTDESKLESS_GOV"             = "SharePoint Online Kiosk"
+            "SHAREPOINTENTERPRISE"               = "Sharepoint Online (Plan 2)"
+            "SHAREPOINTENTERPRISE_GOV"           = "SharePoint Plan 2G"
+            "SHAREPOINTENTERPRISE_MIDMARKET"     = "SharePoint Online (Plan 1)"
+            "SHAREPOINTLITE"                     = "SharePoint Online (Plan 1)"
+            "SHAREPOINTSTANDARD"                 = "Sharepoint Online (Plan 1)"
+            "SHAREPOINTSTORAGE"                  = "SharePoint storage"
+            "SHAREPOINTWAC"                      = "Office Online"
+            "SHAREPOINTWAC_GOV"                  = "Office Online for Government"
+            "SMB_APPS" =  "Business Apps (free)"
+            "SMB_BUSINESS"                       = "Microsoft 365 Apps For Business"
+            "SMB_BUSINESS_ESSENTIALS"            = "Microsoft 365 Business Basic       "
+            "SMB_BUSINESS_PREMIUM"               = "Microsoft 365 Business Standard"
+            "SPB"                                = "Microsoft 365 Business Premium"
+            "SPE_E3"                             = "Microsoft 365 E3"
+            "SPE_E3_USGOV_DOD"                   = "Microsoft 365 E3_USGOV_DOD"
+            "SPE_E3_USGOV_GCCHIGH"               = "Microsoft 365 E3_USGOV_GCCHIGH"
+            "SPE_E5"                             = "Microsoft 365 E5"
+            "SPE_F1"                             = "Office 365 F1"
+            "SPZA_IW"                            = "App Connect"
+            "STANDARD_B_PILOT"                   = "Office 365 (Small Business Preview)"
+            "STANDARDPACK"                       = "Enterprise Plan E1"
+            "STANDARDPACK_FACULTY"               = "Office 365 (Plan A1) for Faculty"
+            "STANDARDPACK_GOV"                   = "Microsoft Office 365 (Plan G1) for Government"
+            "STANDARDPACK_STUDENT"               = "Office 365 (Plan A1) for Students"
+            "STANDARDWOFFPACK"                   = "Office 365 (Plan E2)"
+            "STANDARDWOFFPACK_FACULTY"           = "Office 365 Education E1 for Faculty"
+            "STANDARDWOFFPACK_GOV"               = "Microsoft Office 365 (Plan G2) for Government"
+            "STANDARDWOFFPACK_IW_FACULTY"        = "Office 365 Education for Faculty"
+            "STANDARDWOFFPACK_IW_STUDENT"        = "Office 365 Education for Students"
+            "STANDARDWOFFPACK_STUDENT"           = "Microsoft Office 365 (Plan A2) for Students"
+            "STANDARDWOFFPACKPACK_FACULTY"       = "Office 365 (Plan A2) for Faculty"
+            "STANDARDWOFFPACKPACK_STUDENT"       = "Office 365 (Plan A2) for Students"
+            "STREAM"                             = "MICROSOFT STREAM"
+            "TEAMS_COMMERCIAL_TRIAL"             = "Teams Commercial Trial"
+            "TEAMS_EXPLORATORY"                  = "Teams Exploratory"
+            "VIDEO_INTEROP"                      = "Polycom Skype Meeting Video Interop for Skype for Business"
+            "VISIOCLIENT"                        = "Visio Pro Online"
+            "VISIOONLINE_PLAN1"                  = "Visio Online Plan 1"
+            "WACONEDRIVEENTERPRISE"              = "ONEDRIVE FOR BUSINESS (PLAN 2)"
+            "WACONEDRIVESTANDARD"                = "ONEDRIVE FOR BUSINESS (PLAN 1)"
+            "WIN10_PRO_ENT_SUB"                  = "WINDOWS 10 ENTERPRISE E3"
+            "WIN10_VDA_E5"                       = "Windows 10 Enterprise E5"
+            "WINDOWS_STORE"                      = "Windows Store for Business"
+            "YAMMER_ENTERPRISE"                  = "Yammer for the Starship Enterprise"
+            "YAMMER_MIDSIZE"                     = "Yammer"
+        } ;
+
+
+
+        <# 12:32 PM 3/24/2022 missing entries:
+WARNING: 12:31:24:Unable to resolve 'DYN365_CUSTOMER_INSIGHTS_BASE' to this function's static list of name mappings
+(function may require an update to accomodate this new(?) license)
+WARNING: 12:31:24:Unable to resolve 'POWERAPPS_INDIVIDUAL_USER' to this function's static list of name mappings
+(function may require an update to accomodate this new(?) license)
+WARNING: 12:31:24:Unable to resolve 'FLOW_PER_USER' to this function's static list of name mappings
+(function may require an update to accomodate this new(?) license)
+WARNING: 12:31:24:Unable to resolve 'Forms_Pro_USL' to this function's static list of name mappings
+(function may require an update to accomodate this new(?) license)
+WARNING: 12:31:24:Unable to resolve 'POWERAPPS_PER_APP_IW' to this function's static list of name mappings
+(function may require an update to accomodate this new(?) license)
+WARNING: 12:31:24:Unable to resolve 'DYN365_CUSTOMER_INSIGHTS_ATTACH' to this function's static list of name mappings
+(function may require an update to accomodate this new(?) license)
+WARNING: 12:31:24:Unable to resolve 'PBI_PREMIUM_P1_ADDON' to this function's static list of name mappings
+(function may require an update to accomodate this new(?) license)
+WARNING: 12:31:24:Unable to resolve 'FORMS_PRO' to this function's static list of name mappings
+(function may require an update to accomodate this new(?) license)
+WARNING: 12:31:24:Unable to resolve 'MEETING_ROOM' to this function's static list of name mappings
+(function may require an update to accomodate this new(?) license)
+WARNING: 12:31:24:Unable to resolve 'SMB_APPS' to this function's static list of name mappings
+(function may require an update to accomodate this new(?) license)
+WARNING: 12:31:24:Unable to resolve 'POWERAPPS_PER_APP' to this function's static list of name mappings
+(function may require an update to accomodate this new(?) license)
+WARNING: 12:31:24:Unable to resolve 'DEFENDER_ENDPOINT_P1' to this function's static list of name mappings
+(function may require an update to accomodate this new(?) license)
+WARNING: 12:31:24:Unable to resolve 'POWERAPPS_DEV' to this function's static list of name mappings
+(function may require an update to accomodate this new(?) license)
+#>
+    } ; 
+    PROCESS {
+        $Error.Clear() ;
+        $ttl = ($Name|  measure ).count ;  
+        $procd = 0 ; 
+        foreach ($SkuPartNumber in $Name) {
+            $procd ++ ; 
+            <#$sBnrS="`n#*------v $(${CmdletName}): PROCESSING ($($procd)/$($ttl)): $($SkuPartNumber) v------" ; 
+            $smsg = $sBnrS ; 
+            if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            $smsg = "" ; 
+            if($silent){} elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            #>
+            if($FullName = $Skus[$SkuPartNumber.toupper()]){
+                $smsg = "Resolved '$($Name)' => $($FullName)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $FullName  | write-output ; 
+            } else { 
+                $smsg = "Unable to resolve '$($Name)' to this function's static list of name mappings (function may require an update to accomodate this new(?) license)" ; 
+                #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                #else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } ; 
+            <#
+            $smsg = $sBnrS.replace('-v','-^').replace('v-','^-')
+            if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #>
+        } ; # loop-E
+    } 
+    END {
+    
+    } ; 
+}
+
+#*------^ get-AADLicenseFullName.ps1 ^------
+
 #*------v get-AADlicensePlanList.ps1 v------
 function get-AADlicensePlanList {
     <#
@@ -1698,6 +2289,12 @@ function get-AADlicensePlanList {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/
     REVISIONS
+    * 12:54 PM 3/24/2022 added addition of resolved 'friendlyname' (via verb-aad:get-AADLicenseFullName), to the datatable returned, when in NON-Raw mode
+    * 4:37 PM 3/23/2022 rem'd spurious managedby param
+    * 9:31 AM 3/22/2022 add: 
+        -raw (returns raw property outputs, vs default which is now a summarized table closer to *useful* get-MsolAccountSku output:
+        -indexonName indexed-hash keyed on 'Name' (SkuPartNumber), vs default hash-keyed on SkuID values (for sku->name/details lookups, vs name->Sku lookups)
+        - updated CBH with examples on above
     * 2:27 PM 3/1/2022 updated CBH
     * 8:34 AM 2/28/2022 updated CBH example1, added conditional ordered to hash, defaulted Cred to a global varia
     * 11:05 AM 9/16/2021 fixed Examples to functional 
@@ -1705,6 +2302,10 @@ function get-AADlicensePlanList {
     * 9:03 AM 8/10/2020 init
     .DESCRIPTION
     get-AADlicensePlanList - Resolve Get-AzureADSubscribedSku into an indexed hash of Tenant License detailed specs
+    .PARAMETER Raw
+    Switch specifies to return the raw get-AADlicensePlanList properties, indexed on SkuID
+    .PARAMETER IndexOnName
+    Switch specifies to return the raw get-AADlicensePlanList properties, indexed on Name (for name -> details/skuid lookups; default is indexed on SkuID for sku->details/name lookups)
     .PARAMETER Credential
     Credential to be used for connection
     .PARAMETER ShowDebug
@@ -1746,6 +2347,31 @@ function get-AADlicensePlanList {
     PS>     $sku=$_.SkuId ;
     PS>     $userLicenses+=$licensePlanListHash[$sku].SkuPartNumber ;
     PS>  } ;
+    .EXAMPLE
+    PS> PS> $lplist =  get-AADlicensePlanList ;
+    PS> $lplist['18181a46-0d4e-45cd-891e-60aabd171b4e']
+        SkuId         : 18181a46-0d4e-45cd-891e-60aabd171b4e
+        SkuPartNumber : STANDARDPACK
+        Enabled       : 418
+        Consumed      : 284
+        Available     : 134
+        Warning       : 0
+        Suspended     : 0
+    Demo indexed hash lookup of SkuID (to details) under default behavior (summary output table, and indexed on SKUID)
+    .EXAMPLE
+    PS> $lplist =  get-AADlicensePlanList -raw ;
+    PS> $lplist['18181a46-0d4e-45cd-891e-60aabd171b4e']
+        ObjectId                                                                  SkuPartNumber PrepaidUnits                                               
+        --------                                                                  ------------- ------------                                               
+        549366ae-e80a-44b9-8adc-52d0c29ba08b_18181a46-0d4e-45cd-891e-60aabd171b4e STANDARDPACK  class LicenseUnitsDetail {...
+    Demo indexed hash lookup of SkuID (to details) under -Raw behavior (raw object output, and indexed on SKUID)
+    .EXAMPLE
+    PS> $lplist =  get-AADlicensePlanList -verbose -IndexOnName ;
+    PS> $lplist['EXCHANGESTANDARD'] | ft -auto 
+        SkuId                                SkuPartNumber    Enabled Consumed Available Warning Suspended
+        -----                                -------------    ------- -------- --------- ------- ---------
+        4b9405b0-7788-4568-add1-99614e613b69 EXCHANGESTANDARD      58       53         5       0         0
+    Demo use of -IndexOnName, and indexed hash lookup of Name (to details) under Default behavior (summary output table, and indexed on SkuPartNumber)
     .LINK
     https://github.com/tostka
     #>
@@ -1757,13 +2383,13 @@ function get-AADlicensePlanList {
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM(
-        [Parameter(Mandatory=$True,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
+        [switch]$Raw,
+        [switch]$IndexOnName,
+        [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
         [ValidateNotNullOrEmpty()]
-        [string]$TenOrg,
+        [string]$TenOrg = $global:o365_TenOrgDefault,
         [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
         [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
-        [Parameter(HelpMessage="The ManagedBy parameter specifies an owner for the group [-ManagedBy alias]")]
-        $ManagedBy,
         [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
         [switch] $showDebug,
         [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
@@ -1776,6 +2402,10 @@ function get-AADlicensePlanList {
         $Verbose = ($VerbosePreference -eq 'Continue') ;
         #$script:PassStatus = $null ;
         #if(!$GroupSpecifications ){$GroupSpecifications = "ENT-SEC-Guest-TargetUsers;AzureAD Guest User Population","ENT-SEC-Guest-BlockedUsers;AzureAD Guest Blocked Users","ENT-SEC-Guest-AlwaysUsers;AzureAD Guest Force-include Users" ; } ;
+        # more useful summary table output (Better matches the *useful* get-MsolAccountSku output!)
+        $propsAADL = 'SkuId',  'SkuPartNumber',  @{name='Enabled';Expression={$_.PrepaidUnits.enabled }},  
+            @{name='Consumed';Expression={$_.ConsumedUnits} }, @{name='Available';Expression={$_.PrepaidUnits.enabled - $_.ConsumedUnits} }, 
+            @{name='Warning';Expression={$_.PrepaidUnits.warning} }, @{name='Suspended';Expression={$_.PrepaidUnits.suspended} } ;
     } ;
     PROCESS {
         $Error.Clear() ;
@@ -1790,11 +2420,21 @@ function get-AADlicensePlanList {
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $licensePlanList = $null ; 
 
-        Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
+        Connect-AAD -Credential:$Credential -verbose:$($verbose) -silent ;
 
         $error.clear() ;
         TRY {
-            $licensePlanList = Get-AzureADSubscribedSku ;
+            if($Raw){
+                $smsg = "(-raw: returning indexed-hash of raw Get-AzureADSubscribedSku properties)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $licensePlanList = Get-AzureADSubscribedSku ;
+            } else {
+                $smsg = "(default: returning indexed-hash of summarized Get-AzureADSubscribedSku properties)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $licensePlanList = Get-AzureADSubscribedSku | select-object $propsAADL ;
+            } ; 
         } CATCH {
             $ErrTrapd=$Error[0] ;
             Start-Sleep -Seconds $RetrySleep ;
@@ -1816,9 +2456,40 @@ function get-AADlicensePlanList {
         $swMstr = [Diagnostics.Stopwatch]::StartNew();
         if($host.version.major -gt 2){$licensePlanListHash = [ordered]@{} } 
         else { $licensePlanListHash = @{} };
+        if($IndexOnName){
+            $smsg = "(IndexOnName indexing: returning indexed-hash keyed on 'Name' (SkuPartNumber))" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } else { 
+            $smsg = "(default indexing: returning indexed-hash keyed on SkuID)" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } ; 
         foreach($lic in $licensePlanList) {
-            # target SKUid is the 2nd half of the SubscribedSKU.objectid, split at the _
-            $licensePlanListHash[$lic.objectid.split('_')[1]] = $lic ;
+            # update the content with the friendly name
+            $data=[ordered]@{
+                SkuId = $lic.SkuId
+                SkuPartNumber = $lic.SkuPartNumber
+                SkuDesc = get-AADLicenseFullName -name $lic.SkuPartNumber ; 
+                Enabled = $lic.Enabled ; 
+                Consumed = $lic.Consumed ; 
+                Available = $lic.Available ; 
+                Warning = $lic.Warning ; 
+                Suspended = $lic.Suspended ; 
+            } ;
+            if($IndexOnName){
+                if($raw){
+                    $licensePlanListHash[$lic.SkuPartNumber] = $lic ;
+                } else { 
+                    $licensePlanListHash[$lic.SkuPartNumber] = New-Object PSObject -Property $data ;
+                } ; 
+            } else { 
+                if($raw){
+                    $licensePlanListHash[$lic.skuid] = $lic ;    
+                } else { 
+                    $licensePlanListHash[$lic.skuid] = New-Object PSObject -Property $data ;
+                } ;            
+            } ; 
         } ;
     
         $swMstr.Stop() ;
@@ -2163,6 +2834,295 @@ function get-aaduser {
 }
 
 #*------^ get-AADUser.ps1 ^------
+
+#*------v get-AADUserLicenseDetails.ps1 v------
+Function get-AADUserLicenseDetails {
+    <#
+    .SYNOPSIS
+    get-AADUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD/MSOL)
+    .NOTES
+    Updated By: : Todd Kadrie
+    Website:	http://tinstoys.blogspot.com
+    Twitter:	http://twitter.com/tostka
+    Based on work by :Brad Wyatt
+    Website: https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
+    REVISIONS   :
+    * 2:02 PM 3/23/2022 convert verb-aad:get-MsolUserLicensedetails -> get-AADUserLicenseDetails (Msonline -> AzureAD module rewrite)
+    .DESCRIPTION
+    get-AADUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD)
+    Based on the core lic hash & lookup code in Brad's "Get Friendly License Name for all Users in Office 365 Using PowerShell" script
+    .PARAMETER UPNs
+    Array of Userprincipalnames to be looked up
+    .PARAMETER ShowDebug
+    Parameter to display Debugging messages [-ShowDebug switch]
+    .PARAMETER Credential
+    Credential to be used for connection
+    .INPUTS
+    None. Does not accepted piped input.
+    .OUTPUTS
+    Returns an object with LastDirSyncTime, expressed as TimeGMT & TimeLocal
+    .EXAMPLE
+    get-AADUserLicenseDetails -UPNs fname.lname@domain.com ;
+    Retrieve MSOL License details on specified UPN
+    .EXAMPLE
+    $EXOLicDetails = get-AADUserLicenseDetails -UPNs $exombx.userprincipalname -showdebug:$($showdebug)
+    Retrieve MSOL License details on specified UPN, with showdebug specified
+    .LINK
+    https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
+    #>
+    
+    Param(
+        [Parameter(Position = 0, Mandatory = $True, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true, HelpMessage = "An array of MSolUser objects")][ValidateNotNullOrEmpty()]
+        [alias('Userprincipalname')]
+        [string]$UPNs,
+        [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage = "Debugging Flag [-showDebug]")][switch] $showDebug
+    ) ;
+    ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+    $Verbose = ($VerbosePreference -eq 'Continue') ;
+    
+    $Retries = 4 ;
+    $RetrySleep = 5 ;
+    #Connect-AAD ;
+    #Connect-Msol ;
+    Connect-AAD -Credential:$Credential -verbose:$($verbose) -silent ;
+
+
+    # [Product names and service plan identifiers for licensing in Azure Active Directory | Microsoft Docs](https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference)
+
+    <# whatis an F1 lic: Office 365 F1 is designed to enable Firstline Workers to do their best work.
+    Office 365 F1 provides easy-to-use tools and services to help these workers
+    easily create, update, and manage schedules and tasks, communicate and work
+    together, train and onboard, and quickly receive company news and announcements.
+    #>
+
+    # updating sort via text: gc c:\tmp\list.txt | sort ;
+    $Sku = @{
+        "AAD_BASIC"                          = "Azure Active Directory Basic"
+        "AAD_PREMIUM"                        = "Azure Active Directory Premium"
+        "ATA"                                = "Advanced Threat Analytics"
+        "ATP_ENTERPRISE"                     = "Exchange Online Advanced Threat Protection"
+        "BI_AZURE_P1"                        = "Power BI Reporting and Analytics"
+        "CRMIUR"                             = "CMRIUR"
+        "CRMSTANDARD"                        = "Microsoft Dynamics CRM Online Professional"
+        "DESKLESSPACK"                       = "Office 365 (Plan K1)"
+        "DESKLESSPACK_GOV"                   = "Microsoft Office 365 (Plan K1) for Government"
+        "DESKLESSWOFFPACK"                   = "Office 365 (Plan K2)"
+        "DYN365_ENTERPRISE_P1_IW"            = "Dynamics 365 P1 Trial for Information Workers"
+        "DYN365_ENTERPRISE_PLAN1"            = "Dynamics 365 Customer Engagement Plan Enterprise Edition"
+        "DYN365_ENTERPRISE_SALES"            = "Dynamics Office 365 Enterprise Sales"
+        "DYN365_ENTERPRISE_TEAM_MEMBERS"     = "Dynamics 365 For Team Members Enterprise Edition"
+        "DYN365_FINANCIALS_BUSINESS_SKU"     = "Dynamics 365 for Financials Business Edition"
+        "DYN365_FINANCIALS_TEAM_MEMBERS_SKU" = "Dynamics 365 for Team Members Business Edition"
+        "ECAL_SERVICES"                      = "ECAL"
+        "EMS"                                = "Enterprise Mobility Suite"
+        "ENTERPRISEPACK"                     = "Enterprise Plan E3"
+        "ENTERPRISEPACK_B_PILOT"             = "Office 365 (Enterprise Preview)"
+        "ENTERPRISEPACK_FACULTY"             = "Office 365 (Plan A3) for Faculty"
+        "ENTERPRISEPACK_GOV"                 = "Microsoft Office 365 (Plan G3) for Government"
+        "ENTERPRISEPACK_STUDENT"             = "Office 365 (Plan A3) for Students"
+        "ENTERPRISEPACKLRG"                  = "Enterprise Plan E3"
+        "ENTERPRISEPREMIUM"                  = "Enterprise E5 (with Audio Conferencing)"
+        "ENTERPRISEPREMIUM_NOPSTNCONF"       = "Enterprise E5 (without Audio Conferencing)"
+        "ENTERPRISEWITHSCAL"                 = "Enterprise Plan E4"
+        "ENTERPRISEWITHSCAL_FACULTY"         = "Office 365 (Plan A4) for Faculty"
+        "ENTERPRISEWITHSCAL_GOV"             = "Microsoft Office 365 (Plan G4) for Government"
+        "ENTERPRISEWITHSCAL_STUDENT"         = "Office 365 (Plan A4) for Students"
+        "EOP_ENTERPRISE_FACULTY"             = "Exchange Online Protection for Faculty"
+        "EQUIVIO_ANALYTICS"                  = "Office 365 Advanced eDiscovery"
+        "ESKLESSWOFFPACK_GOV"                = "Microsoft Office 365 (Plan K2) for Government"
+        "EXCHANGE_L_STANDARD"                = "Exchange Online (Plan 1)"
+        "EXCHANGE_S_ARCHIVE_ADDON_GOV"       = "Exchange Online Archiving"
+        "EXCHANGE_S_DESKLESS"                = "Exchange Online Kiosk"
+        "EXCHANGE_S_DESKLESS_GOV"            = "Exchange Kiosk"
+        "EXCHANGE_S_ENTERPRISE_GOV"          = "Exchange Plan 2G"
+        "EXCHANGE_S_ESSENTIALS"              = "Exchange Online Essentials   "
+        "EXCHANGE_S_STANDARD_MIDMARKET"      = "Exchange Online (Plan 1)"
+        "EXCHANGEARCHIVE_ADDON"              = "Exchange Online Archiving For Exchange Online"
+        "EXCHANGEDESKLESS"                   = "Exchange Online Kiosk"
+        "EXCHANGEENTERPRISE"                 = "Exchange Online Plan 2"
+        "EXCHANGEENTERPRISE_GOV"             = "Microsoft Office 365 Exchange Online (Plan 2) only for Government"
+        "EXCHANGEESSENTIALS"                 = "Exchange Online Essentials"
+        "EXCHANGESTANDARD"                   = "Office 365 Exchange Online Only"
+        "EXCHANGESTANDARD_GOV"               = "Microsoft Office 365 Exchange Online (Plan 1) only for Government"
+        "EXCHANGESTANDARD_STUDENT"           = "Exchange Online (Plan 1) for Students"
+        "FLOW_FREE"                          = "Microsoft Flow Free"
+        "FLOW_P1"                            = "Microsoft Flow Plan 1"
+        "FLOW_P2"                            = "Microsoft Flow Plan 2"
+        "INTUNE_A"                           = "Windows Intune Plan A"
+        "LITEPACK"                           = "Office 365 (Plan P1)"
+        "LITEPACK_P2"                        = "Office 365 Small Business Premium"
+        "M365_F1"                            = "Microsoft 365 F1"
+        "MCOEV"                              = "Microsoft Phone System"
+        "MCOLITE"                            = "Lync Online (Plan 1)"
+        "MCOMEETACPEA"                       = "Pay Per Minute Audio Conferencing"
+        "MCOMEETADD"                         = "Audio Conferencing"
+        "MCOMEETADV"                         = "PSTN conferencing"
+        "MCOPSTN1"                           = "Domestic Calling Plan (3000 min US / 1200 min EU plans)"
+        "MCOPSTN2"                           = "International Calling Plan"
+        "MCOPSTN5"                           = "Domestic Calling Plan (120 min calling plan)"
+        "MCOPSTN6"                           = "Domestic Calling Plan (240 min calling plan) Note: Limited Availability"
+        "MCOPSTNC"                           = "Communications Credits"
+        "MCOPSTNPP"                          = "Communications Credits"
+        "MCOSTANDARD"                        = "Skype for Business Online Standalone Plan 2"
+        "MCOSTANDARD_GOV"                    = "Lync Plan 2G"
+        "MCOSTANDARD_MIDMARKET"              = "Lync Online (Plan 1)"
+        "MFA_PREMIUM"                        = "Azure Multi-Factor Authentication"
+        "MIDSIZEPACK"                        = "Office 365 Midsize Business"
+        "MS_TEAMS_IW"                        = "Microsoft Teams Trial"
+        "O365_BUSINESS"                      = "Office 365 Business"
+        "O365_BUSINESS_ESSENTIALS"           = "Office 365 Business Essentials"
+        "O365_BUSINESS_PREMIUM"              = "Office 365 Business Premium"
+        "OFFICE_PRO_PLUS_SUBSCRIPTION_SMBIZ" = "Office ProPlus"
+        "OFFICESUBSCRIPTION"                 = "Office ProPlus"
+        "OFFICESUBSCRIPTION_GOV"             = "Office ProPlus"
+        "OFFICESUBSCRIPTION_STUDENT"         = "Office ProPlus Student Benefit"
+        "PLANNERSTANDALONE"                  = "Planner Standalone"
+        "POWER_BI_ADDON"                     = "Office 365 Power BI Addon"
+        "POWER_BI_INDIVIDUAL_USE"            = "Power BI Individual User"
+        "POWER_BI_PRO"                       = "Power BI Pro"
+        "POWER_BI_STANDALONE"                = "Power BI Stand Alone"
+        "POWER_BI_STANDARD"                  = "Power-BI Standard"
+        "PROJECT_MADEIRA_PREVIEW_IW_SKU"     = "Dynamics 365 for Financials for IWs"
+        "PROJECTCLIENT"                      = "Project Professional"
+        "PROJECTESSENTIALS"                  = "Project Lite"
+        "PROJECTONLINE_PLAN_1"               = "Project Online"
+        "PROJECTONLINE_PLAN_2"               = "Project Online and PRO"
+        "ProjectPremium"                     = "Project Online Premium"
+        "PROJECTPROFESSIONAL"                = "Project Professional"
+        "PROJECTWORKMANAGEMENT"              = "Office 365 Planner Preview"
+        "RIGHTSMANAGEMENT"                   = "Rights Management"
+        "RIGHTSMANAGEMENT_ADHOC"             = "Windows Azure Rights Management"
+        "RMS_S_ENTERPRISE"                   = "Azure Active Directory Rights Management"
+        "RMS_S_ENTERPRISE_GOV"               = "Windows Azure Active Directory Rights Management"
+        "SHAREPOINTDESKLESS"                 = "SharePoint Online Kiosk"
+        "SHAREPOINTDESKLESS_GOV"             = "SharePoint Online Kiosk"
+        "SHAREPOINTENTERPRISE"               = "Sharepoint Online (Plan 2)"
+        "SHAREPOINTENTERPRISE_GOV"           = "SharePoint Plan 2G"
+        "SHAREPOINTENTERPRISE_MIDMARKET"     = "SharePoint Online (Plan 1)"
+        "SHAREPOINTLITE"                     = "SharePoint Online (Plan 1)"
+        "SHAREPOINTSTANDARD"                 = "Sharepoint Online (Plan 1)"
+        "SHAREPOINTSTORAGE"                  = "SharePoint storage"
+        "SHAREPOINTWAC"                      = "Office Online"
+        "SHAREPOINTWAC_GOV"                  = "Office Online for Government"
+        "SMB_BUSINESS"                       = "Microsoft 365 Apps For Business"
+        "SMB_BUSINESS_ESSENTIALS"            = "Microsoft 365 Business Basic       "
+        "SMB_BUSINESS_PREMIUM"               = "Microsoft 365 Business Standard"
+        "SPB"                                = "Microsoft 365 Business Premium"
+        "SPE_E3"                             = "Microsoft 365 E3"
+        "SPE_E5"                             = "Microsoft 365 E5"
+        "SPE_F1"                             = "Office 365 F1"
+        "SPZA_IW"                            = "App Connect"
+        "STANDARD_B_PILOT"                   = "Office 365 (Small Business Preview)"
+        "STANDARDPACK"                       = "Enterprise Plan E1"
+        "STANDARDPACK_FACULTY"               = "Office 365 (Plan A1) for Faculty"
+        "STANDARDPACK_GOV"                   = "Microsoft Office 365 (Plan G1) for Government"
+        "STANDARDPACK_STUDENT"               = "Office 365 (Plan A1) for Students"
+        "STANDARDWOFFPACK"                   = "Office 365 (Plan E2)"
+        "STANDARDWOFFPACK_FACULTY"           = "Office 365 Education E1 for Faculty"
+        "STANDARDWOFFPACK_GOV"               = "Microsoft Office 365 (Plan G2) for Government"
+        "STANDARDWOFFPACK_IW_FACULTY"        = "Office 365 Education for Faculty"
+        "STANDARDWOFFPACK_IW_STUDENT"        = "Office 365 Education for Students"
+        "STANDARDWOFFPACK_STUDENT"           = "Microsoft Office 365 (Plan A2) for Students"
+        "STANDARDWOFFPACKPACK_FACULTY"       = "Office 365 (Plan A2) for Faculty"
+        "STANDARDWOFFPACKPACK_STUDENT"       = "Office 365 (Plan A2) for Students"
+        "TEAMS_COMMERCIAL_TRIAL"             = "Teams Commercial Trial"
+        "TEAMS_EXPLORATORY"                  = "Teams Exploratory"
+        "VIDEO_INTEROP"                      = "Polycom Skype Meeting Video Interop for Skype for Business"
+        "VISIOCLIENT"                        = "Visio Pro Online"
+        "VISIOONLINE_PLAN1"                  = "Visio Online Plan 1"
+        "WINDOWS_STORE"                      = "Windows Store for Business"
+        "YAMMER_ENTERPRISE"                  = "Yammer for the Starship Enterprise"
+        "YAMMER_MIDSIZE"                     = "Yammer"
+    }
+
+    Foreach ($User in $UPNs) {
+        if ($showdebug) { write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Getting all licenses for $($User)..."  ; } ;
+
+        $Exit = 0 ;
+        Do {
+            Try {
+
+                $pltGLPList=[ordered]@{ 
+                    TenOrg= $TenOrg; 
+                    IndexOnName =$true ;
+                    verbose=$($VerbosePreference -eq "Continue") ; 
+                    credential= $Credential ;
+                    #$pltRXO.credential ; 
+                    erroraction = 'STOP' ;
+                } ;
+                $smsg = "get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $skus = get-AADlicensePlanList @pltGLPList ;
+                
+                #$MsolU = Get-MsolUser -UserPrincipalName $User ;
+
+                $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
+                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
+                $AADUser = Get-AzureADUser @pltGAADU ; 
+
+                #$Licenses = $MsolU.Licenses.AccountSkuID
+                # resolve sku to name (SkuPartNumber)
+                $Licenses = $AADUser.AssignedLicenses.skuid ; 
+                # come back as lic guids, not TENANT:guid
+                # have to be converted to suit
+                $Licenses = $Licenses |%{$skus[$_].SkuPartNumber ; } ; 
+
+                $Exit = $Retries ;
+            } Catch {
+                Start-Sleep -Seconds $RetrySleep ;
+                $Exit ++ ;
+                Write-Verbose "Failed to exec cmd because: $($Error[0])" ;
+                Write-Verbose "Try #: $Exit" ;
+                If ($Exit -eq $Retries) { Write-Warning "Unable to exec cmd!" } ;
+            }  ;
+        } Until ($Exit -eq $Retries) ;
+
+        $AggregLics = @() ;
+        
+        Foreach ($License in $Licenses) {
+            if ($showdebug) { Write-Host "Finding $License in the Hash Table..." -ForegroundColor White }
+            #$LicenseItem = $License -split ":" | Select-Object -Last 1
+            #$TextLic = $Sku.Item("$LicenseItem")
+            $TextLic = $sku[$License] ; 
+            If (!($TextLic)) {
+                $smsg = "Error: The Hash Table has no match for $($License) for $($AADUser.DisplayName)!"
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }
+                else { write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #$LicenseFallBackName = "$License.AccountSkuId:(($lplist.values | ?{$_.SkuPartNumber -eq 'exchangestandard'}).SkuPartNumber))"
+                $LicenseFallBackName = $license ; 
+
+                $LicSummary = New-Object PSObject -Property @{
+                    DisplayName         = $AADUser.DisplayName ; 
+                    UserPrincipalName   = $AADUser.Userprincipalname ; 
+                    LicAccountSkuID     = $License; 
+                    LicenseFriendlyName = $LicenseFallBackName
+                };
+                $AggregLics += $LicSummary ;
+
+            } Else {
+                $LicSummary = New-Object PSObject -Property @{
+                    #DisplayName         = $MsolU.DisplayName
+                    DisplayName         = $AADUser.DisplayName ; 
+                    #UserPrincipalName   = $MsolU.Userprincipalname ;
+                    UserPrincipalName   = $AADUser.Userprincipalname ; 
+                    LicAccountSkuID     = $License ; 
+                    LicenseFriendlyName = $TextLic ;
+                };
+                $AggregLics += $LicSummary ;
+            } # if-E
+        } # loop-E
+        
+    } # if-E
+
+
+    $AggregLics | write-output ; # 11:33 AM 1/9/2019 export the aggreg, NewObject02 was never more than a single lic
+}
+
+#*------^ get-AADUserLicenseDetails.ps1 ^------
 
 #*------v Get-DsRegStatus .ps1 v------
 function Get-DsRegStatus {
@@ -4379,6 +5339,290 @@ Function profile-AAD-Signons {
 
 #*------^ profile-AAD-Signons.ps1 ^------
 
+#*------v remove-AADUserLicense.ps1 v------
+function remove-AADUserLicense {
+    <#
+    .SYNOPSIS
+    remove-AADUserLicense.ps1 - remove a single license from an array of AzureADUsers
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2022-03-22
+    FileName    : remove-AADUserLicense.ps1
+    License     : MIT License
+    Copyright   : (c) 2022 Todd Kadrie
+    Github      : https://github.com/tostka/verb-aad
+    Tags        : Powershell
+    AddedCredit : 
+    AddedWebsite:	
+    AddedTwitter:	
+    REVISIONS
+    * 10:30 AM 3/24/2022 add pipeline support
+    * 4:08 PM 3/22/2022 init; simple conversion of add-AADUserLicense; verified functional
+    .DESCRIPTION
+    remove-AADUserLicense.ps1 - remove a single license from an array of AzureADUsers
+    .PARAMETER  Users
+    Array of User Userprincipal/Guids to have the specified license applied
+    .PARAMETER  skuid
+    Azure LicensePlan SkuID for the license to be applied to the users.
+    .PARAMETER Credential
+    Credentials [-Credentials [credential object]
+    .PARAMETER Whatif
+    Parameter to run a Test no-change pass [-Whatif switch]
+    .PARAMETER Silent
+    Suppress all but error, warn or verbose outputs
+    .EXAMPLE
+    PS> $lplistn = get-AADlicensePlanList -IndexOnName ; 
+    PS> $skuid = $lplistn['EXCHANGESTANDARD'].skuid ; 
+    PS> $bRet = remove-AADUserLicense -users 'upn@domain.com','upn2@domain.com' -skuid $skuid -verbose -whatif ; 
+    PS> $bRet | %{if($_.Success){write-host "$($_.AzureADUser.userprincipalname):Success"} else { write-warning "$($_.AzureADUser.userprincipalname):FAILURE" } ; 
+    Leverage verb-AAD:get-AADlicensplanList() to return an SkuPartNumber-indexed hash of current Tenant LicensePlans; 
+    Lookup the SKUId value for the ExchangeStandardLicense in the returned indexed hash; 
+    Then remove the specified license from the array of user UPNs specified in -users. 
+    .EXAMPLE
+    PS> $bRet = $AADUser.userprincipalname | remove-AADUserLicense -skuid $skuid -verbose -whatif ; 
+    PS> $bRet | %{if($_.Success){write-host "$($_.AzureADUser.userprincipalname):Success"} else { write-warning "$($_.AzureADUser.userprincipalname):FAILURE" } ; 
+    Pipeline example
+    .LINK
+    https://github.com/tostka/verb-AAD
+    #>
+    #Requires -Version 3
+    #Requires -Modules AzureAD, verb-Text
+    #Requires -RunasAdministrator
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    [CmdletBinding()]
+    PARAM (
+        # ValueFromPipeline: will cause params to match on matching type, [array] input -> [array]$param
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true)]
+        [ValidateNotNullOrEmpty()]
+        [string[]]$Users, 
+        [string]$skuid,
+        [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
+        [ValidateNotNullOrEmpty()]
+        [string]$TenOrg = $global:o365_TenOrgDefault,
+        [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]")]
+        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [switch]$whatif,
+        [switch]$silent
+    ) ;
+    BEGIN {
+        ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+        $Verbose = ($VerbosePreference -eq 'Continue') ;
+        
+        $pltRXO = [ordered]@{
+            Credential = $Credential 
+            verbose = $($VerbosePreference -eq 'Continue') ;
+            silent = $true ; # always silent, echo only warn/errors
+        } ; 
+        #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
+        Connect-AAD @pltRXO ; 
+        
+        # check if using Pipeline input or explicit params:
+        if ($PSCmdlet.MyInvocation.ExpectingInput) {
+            write-verbose "Data received from pipeline input: '$($InputObject)'" ;
+        } else {
+            # doesn't actually return an obj in the echo
+            write-verbose "Data received from parameter input: " # '$($InputObject)'" ;
+        } ;
+    } 
+    PROCESS {
+        $Error.Clear() ;
+        $ttl = ($users|  measure ).count ;  
+        $procd = 0 ; 
+        foreach ($user in $users) {
+            $procd ++ ; 
+            $sBnrS="`n#*------v $(${CmdletName}): PROCESSING ($($procd)/$($ttl)): $($user):$($skuid) v------" ; 
+            $smsg = $sBnrS ; 
+            if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            $Report = @{
+                AzureADUser = $null ; 
+                AddedLicenses = @(); 
+                RemovedLicenses = @(); 
+                FixedUsageLocation = $false ; 
+                Success = $false ; 
+            } ; 
+            $error.clear() ;
+            TRY {
+                <# rem out search string option - if we're mandating UPN/guids, it's always going to fail the initial attempt, skip it, odds of feeding it a dname etc is low
+                $pltGAADU=[ordered]@{ SearchString = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
+                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
+                $AADUser = Get-AzureADUser @pltGAADU ; 
+                if (-not $AADUser) {
+                
+                    $smsg = "Failed: Get-AzureADUser -SearchString $($pltGAADU.searchstring)" ; 
+                    $smsg += "`nretrying as -objectid..." ; 
+                    if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
+                    $pltGAADU.remove('SearchString') ; 
+                    $pltGAADU.Add("ObjectID",$user) ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
+                    $AADUser = Get-AzureADUser @pltGAADU ;         
+                } ; 
+                #>
+                $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
+                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
+                $AADUser = Get-AzureADUser @pltGAADU ;   
+                      
+                if ($AADUser) {
+                    $report.AzureADUser = $AADUser ; 
+                    if (-not $AADUser.UsageLocation) {
+                        $smsg = "AADUser: MISSING USAGELOCATION, FORCING" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                        $spltSAADUUL = [ordered]@{ 
+                            ObjectID = $AADUser.UserPrincipalName ;
+                            UsageLocation = "US" ;
+                            whatif = $($whatif) ;
+                            verbose = ($VerbosePreference -eq "Continue") ;
+                        } ;
+                        $smsg = "set-AADUserUsageLocationw`n$(($spltSAADUUL|out-string).trim())" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        $bRet = set-AADUserUsageLocation @spltSAADUUL ; 
+                        if($bRet.Success){
+                            $smsg = "set-AADUserUsageLocation updated UsageLocation:$($bRet.AzureADuser.UsageLocation)" ; 
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                            # update the local AADUser to reflect the updated AADU returned
+                            $AADUser = $bRet.AzureADuser ; 
+                            $Report.FixedUsageLocation = $true ; 
+                        } else { 
+                            $smsg = "set-AADUserUsageLocation: FAILED TO UPDATE USAGELOCATION!" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            $Report.FixedUsageLocation = $false ; 
+                            if(-not $whatif){
+                                BREAK; 
+                            } 
+                        } ; 
+                    } ;    
+                    
+                    # check lic avail
+                    $pltGLPList=[ordered]@{ 
+                        TenOrg= $TenOrg; 
+                        verbose=$($VerbosePreference -eq "Continue") ; 
+                        credential= $Credential ;
+                        #$pltRXO.credential ; 
+                        erroraction = 'STOP' ;
+                    } ;
+                    $smsg = "get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    $skus = get-AADlicensePlanList @pltGLPList ;
+                    
+                    if($tsku = $skus[$skuid]){
+                        $smsg = "($($skuid):$($tsku.SkuPartNumber) is present in Tenant SKUs)" ;
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    } else { 
+                        $smsg = "($($skuid):$($tsku.SkuPartNumber) is NOT PRESENT in Tenant SKUs)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        
+                    } ; 
+                    
+                    if($AADUser.Assignedlicenses.skuid -contains $tsku.SkuId){
+                        
+                        $licenses = $AADUser.Assignedlicenses.skuid |?{$_ -eq $skuid} ; 
+
+                        $smsg = "Removing license SKUID ($($skuid)) from user:$($user)" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+
+                        $AssignedLicenses = @{
+                            addLicenses = @()
+                            removeLicenses= @($licenses)
+                        } ; 
+                        $pltSAADUL=[ordered]@{
+                            ObjectId = $AADUser.ObjectID ;
+                            AssignedLicenses = $AssignedLicenses ;
+                            erroraction = 'STOP' ;
+                            verbose = $($VerbosePreference -eq "Continue") ;
+                        } ;
+                        $smsg = "Set-AzureADUserLicense w`n$(($pltSAADUL|out-string).trim())" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+
+                        if (-not $whatif) {
+                            Set-AzureADUserLicense @pltSAADUL ;
+                                
+                            $Report.RemovedLicenses += "$($tsku.SkuPartNumber):$($tsku.SkuId)" ; 
+                            $Report.Success = $true ; 
+                        } else {
+                            $Report.Success = $false ; 
+                            $smsg = "(-whatif: skipping exec (set-AureADUser lacks proper -whatif support))" ; ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        }  ;
+
+                        $AADUser = Get-AzureADUser @pltGAADU ; 
+                        $report.AzureADUser = $AADUser ; 
+                        $usrPlans = $usrLics=@() ; 
+                        foreach($pLic in $AADUser.AssignedLicenses.skuid){
+                            $usrLics += $skus[$plic].SkuPartNumber ; 
+                        } ; 
+                        foreach($pPlan in $AADUser.assignedplans){
+                            $usrPlans += $_.service ; 
+                        } ; 
+                        $smsg = "POST:`n$(($AADUser|ft -a UserPrincipalName,DisplayName| out-string).trim())" ;
+                        $smsg += "`nLicenses: $(($usrLics -join ','|out-string).trim())" ;  
+                        $smsg += "`nPlans: $(( ($usrPlan | select -unique) -join ','|out-string).trim())" ; 
+                        if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                
+                        #[PSCustomObject]$Report | write-output ;
+                        New-Object PSObject -Property $Report | write-output ;
+
+                    } else {
+                        $smsg = "$($AADUser.userprincipalname) does not have AssignedLicense:$($tsku.SkuPartNumber)" ; 
+                        if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $report.Success = $true ; 
+                        #[PSCustomObject]$Report | write-output ;
+                        New-Object PSObject -Property $Report | write-output ;
+                    } ;
+                        
+                } else {
+                    $smsg = "Unable to locate AzureADUser" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    $report.Success = $false ; 
+                    #[PSCustomObject]$Report | write-output ;
+                    New-Object PSObject -Property $Report | write-output ;
+                    Break ; 
+                } ;
+            } CATCH {
+                $ErrTrapd = $_ ; 
+                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Break ;
+            } ; 
+
+            $smsg = $sBnrS.replace('-v','-^').replace('v-','^-')
+            if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ; # loop-E
+    }  # PROC-E
+    END{
+        $smsg = "(processed $($procd) users)" ; 
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;         
+    } ;
+}
+
+#*------^ remove-AADUserLicense.ps1 ^------
+
 #*------v Remove-MsolUserDirectLicenses.ps1 v------
 Function Remove-MsolUserDirectLicenses{
     <#
@@ -5364,6 +6608,291 @@ function search-GraphApiAAD {
 
 #*------^ search-GraphApiAAD.ps1 ^------
 
+#*------v set-AADUserUsageLocation.ps1 v------
+function set-AADUserUsageLocation {
+    <#
+    .SYNOPSIS
+    set-AADUserUsageLocation.ps1 - Set AzureADUser.UsageLocation on an array of AzureADUsers
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2022-03-22
+    FileName    : 
+    License     : MIT License
+    Copyright   : (c) 2022 Todd Kadrie
+    Github      : https://github.com/tostka/verb-XXX
+    Tags        : Powershell
+    AddedCredit : 
+    AddedWebsite:	
+    AddedTwitter:	URL
+    REVISIONS
+    * 10:30 AM 3/24/2022 add pipeline support
+    2:31 PM 3/22/2022 init, simple subset port of set-aaduserLicense() ; 
+    .DESCRIPTION
+    set-AADUserUsageLocation.ps1 - Set AzureADUser.UsageLocation on an array of AzureADUsers[-users 'upn@domain.com','upn2@domain.com']
+    .PARAMETER  Users
+    Array of User Userprincipal/Guids to have the specified license applied
+    .PARAMETER  UsageLocation
+    Azure UsageLocation to be applied to the users (defaults to 'US)[-UsageLocation 'US'].
+    .PARAMETER Whatif
+    Parameter to run a Test no-change pass [-Whatif switch]
+    .PARAMETER Silent
+    Suppress all but error, warn or verbose outputs
+    .EXAMPLE
+    PS> $bRet = set-AADUserUsageLocation -users 'upn@domain.com','upn2@domain.com' -usageLocation 'US' -verbose ;
+    PS> $bRet | %{if($_.Success){write-host "$($_.AzureADUser.userprincipalname):Success"} else { write-warning "$($_.AzureADUser.userprincipalname):FAILURE" } ; 
+    Add US UsageLocation to the array of user UPNs specified in -users, with verbose output
+    .LINK
+    https://github.com/tostka/verb-AAD
+    #>
+    #Requires -Version 3
+    #Requires -Modules AzureAD, verb-Text
+    #Requires -RunasAdministrator
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    [CmdletBinding()]
+    PARAM (
+        # ValueFromPipeline: will cause params to match on matching type, [array] input -> [array]$param
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true)]
+        [ValidateNotNullOrEmpty()]
+        [string[]]$Users, 
+        [string]$UsageLocation = 'US',
+        [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
+        [ValidateNotNullOrEmpty()]
+        [string]$TenOrg = $global:o365_TenOrgDefault,
+        [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
+        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [switch]$whatif,
+        [switch]$silent
+    ) ;
+    BEGIN {
+        ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+        $Verbose = ($VerbosePreference -eq 'Continue') ;
+       
+       $pltRXO = [ordered]@{
+            Credential = $Credential 
+            verbose = $($VerbosePreference -eq 'Continue') ;
+            silent = $true ; # always silent, echo only warn/errors
+        } ; 
+        #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
+        Connect-AAD @pltRXO ;         
+        
+        # check if using Pipeline input or explicit params:
+        if ($PSCmdlet.MyInvocation.ExpectingInput) {
+            write-verbose "Data received from pipeline input: '$($InputObject)'" ;
+        } else {
+            # doesn't actually return an obj in the echo
+            #write-verbose "Data received from parameter input: " # '$($InputObject)'" ;
+        } ;
+        
+    } 
+    PROCESS {
+        $Error.Clear() ;
+        $ttl = ($users|  measure ).count ;  
+        $procd = 0 ; 
+        foreach ($user in $users) {
+            $procd ++ ; 
+            $sBnrS="`n#*------v $(${CmdletName}): PROCESSING ($($procd)/$($ttl)): $($user):$($skuid) v------" ; 
+            $smsg = $sBnrS ; 
+            if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            $Report = @{
+                AzureADUser = $null ; 
+                FixedUsageLocation = $false ; 
+                Success = $false ; 
+            } ; 
+            $error.clear() ;
+            TRY {
+
+                <# rem out search string option - if we're mandating UPN/guids, it's always going to fail the initial attempt, skip it, odds of feeding it a dname etc is low
+                $pltGAADU=[ordered]@{ SearchString = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
+                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
+                $AADUser = Get-AzureADUser @pltGAADU ; 
+                if (-not $AADUser) {
+                
+                    $smsg = "Failed: Get-AzureADUser -SearchString $($pltGAADU.searchstring)" ; 
+                    $smsg += "`nretrying as -objectid..." ; 
+                    if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
+                    $pltGAADU.remove('SearchString') ; 
+                    $pltGAADU.Add("ObjectID",$user) ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
+                    $AADUser = Get-AzureADUser @pltGAADU ;         
+                } ; 
+                #>
+                $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
+                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
+                $AADUser = Get-AzureADUser @pltGAADU ;   
+            
+                if ($AADUser) {
+                    $report.AzureADUser = $AADUser ; 
+                    if (-not $AADUser.UsageLocation) {
+                        $smsg = "AADUser: $($AADUser.userprincipalname): MISSING USAGELOCATION, FORCING TO:$($usagelocation)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                        $spltSAADU = [ordered]@{ ObjectID = $AADUser.UserPrincipalName ;
+                            UsageLocation = "US" ;
+                            ErrorAction = 'Stop' ;
+                        } ;
+
+                        $smsg = "Set-AzureADUser with:`n$(($spltSAADU|out-string).trim())`n" ; ;
+                        if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        if (-not $whatif) {
+                            $Exit = 0 ;
+
+                                TRY {
+                                    Set-AzureADUser @spltSAADU ;
+                                    $Report.FixedUsageLocation = $true ; 
+                                    $AADUser = Get-AzureADUser @pltGAADU ; 
+                                    $smsg = "POST:Confirming UsageLocation -eq US:$($AADUser.UsageLocation)" ; 
+                                    if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    
+                                    $Report = @{
+                                        AzureADUser = $AADUser ; 
+                                        FixedUsageLocation = $true ; 
+                                        Success = $true ; 
+                                    } ; 
+
+                                } CATCH {
+                                  $ErrTrapd=$_ ;
+                                  $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                                  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                                  else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                  #-=-record a STATUSWARN=-=-=-=-=-=-=
+                                  $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                                  if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                                  if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                                  #-=-=-=-=-=-=-=-=
+                                  $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+                                  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                                  else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                  $Report = @{
+                                        AzureADUser = $AADUser ; 
+                                        FixedUsageLocation = $false ; 
+                                        Success = $false ; 
+                                  } ; 
+                                  $Report | write-output ; 
+                                  BREAK #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                              } ; 
+                        } else {
+                            $smsg = "(-whatif: skipping exec (set-AureADUser lacks proper -whatif support))" ; ;
+                            if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        }  ;
+                    } else {
+                        $smsg = "AADUser: $($AADUser.userprincipalname): has functional usagelocation pre-set:$($AADUser.usagelocation)" ;
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                         $Report = @{
+                            AzureADUser = $AADUser; 
+                            FixedUsageLocation = $false ; 
+                            Success = $true ; 
+                        } ; 
+                        $Report | write-output ; 
+                    } ;         
+
+                } else {
+                    $smsg = "Unable to locate AzureADUser" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    Break ; 
+                } ;
+            } CATCH {
+                $ErrTrapd = $_ ; 
+                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Break ;
+            } ; 
+
+            $smsg = $sBnrS.replace('-v','-^').replace('v-','^-')
+            if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ; # loop-E
+    }  # PROC-E
+    END{
+        $smsg = "(processed $($procd) users)" ; 
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;         
+    } ;
+}
+
+#*------^ set-AADUserUsageLocation.ps1 ^------
+
+#*------v test-AADUserIsLicensed.ps1 v------
+function test-AADUserIsLicensed {
+    <#
+    .SYNOPSIS
+    test-AADUserIsLicensed.ps1 - Evaluate IsLicensed status on a passed in AzureADUser [Microsoft.Open.AzureAD.Model.User] object
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2022-03-22
+    FileName    : 
+    License     : MIT License
+    Copyright   : (c) 2022 Todd Kadrie
+    Github      : https://github.com/tostka/verb-XXX
+    Tags        : Powershell
+    REVISIONS
+    1:32 PM 3/23/2022 init; confirmed functional
+    .DESCRIPTION
+    test-AADUserIsLicensed.ps1 - Evaluate IsLicensed status on a passed in AzureADUser [Microsoft.Open.AzureAD.Model.User] object
+    (Evaluates AssignedLicenses.count -gt 0). 
+    Emulates the lost get-MsolUser IsLicensed property
+    .PARAMETER  User
+    AzureADUser [Microsoft.Open.AzureAD.Model.User] object
+    .EXAMPLE
+    PS> $isLicensed = test-AADUserIsLicensed -user $AzureADUser -verbose
+    Evaluate IsLicensed status on passed AzureADUser object
+    .LINK
+    https://github.com/tostka/verb-AAD
+    #>
+    #Requires -Version 3
+    #Requires -Modules AzureAD, verb-Text
+    #Requires -RunasAdministrator
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    [CmdletBinding()]
+
+     Param(
+        [Parameter(Position=0,Mandatory=$True,HelpMessage="Either Msoluser object or UserPrincipalName for user[-User upn@domain.com|`$msoluserobj ]")]
+        [Microsoft.Open.AzureAD.Model.User]$User
+        #[switch]$silent # removed, there's no echos enabled
+    )
+    BEGIN {
+        #${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+        #$Verbose = ($VerbosePreference -eq 'Continue') ;
+        #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
+        
+        # check if using Pipeline input or explicit params:
+        if ($PSCmdlet.MyInvocation.ExpectingInput) {
+            #write-verbose "Data received from pipeline input: '$($InputObject)'" ;
+        } else {
+            # doesn't actually return an obj in the echo
+            #write-verbose "Data received from parameter input: '$($InputObject)'" ;
+        } ;
+    } 
+    PROCESS {
+        
+         [boolean]($User.AssignedLicenses.count -gt 0)
+
+    }  # PROC-E
+    END{} ;
+}
+
+#*------^ test-AADUserIsLicensed.ps1 ^------
+
 #*------v test-MsolUserLicenseDirectAssigned.ps1 v------
 Function test-MsolUserLicenseDirectAssigned {
     <#
@@ -5532,6 +7061,466 @@ Function test-MsolUserLicenseGroupAssigned {
 
 #*------^ test-MsolUserLicenseGroupAssigned.ps1 ^------
 
+#*------v toggle-AADLicense.ps1 v------
+function toggle-AADLicense{
+    <#
+    .SYNOPSIS
+    toggle-AADLicense.ps1 - SharedMailboxes: Temp Add & then Remove a Lic to fix 'License Reconcilliation Needed' status
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2019-02-06
+    License     : MIT License
+    Copyright   : (c) 2019 Todd Kadrie
+    Github      : https://github.com/tostka
+    AddedCredit : REFERENCE
+    AddedWebsite:	URL
+    AddedTwitter:	URL
+    REVISIONS
+    * 1:22 PM 3/23/2022 sub'd in AzureAD cmdlets for MSOL cmdlets, ren'd toggle-o365License -> toggle-AADLicense (retained as Alias)
+    * 1:57 PM 8/25/2021 returning Msol lic-related props (vs no return); added LicenseSku parm, defaulted to EXCHANGESTANDARD ;ren'd O365LicenseToggle -> toggle-o365License
+    .DESCRIPTION
+    .PARAMETER  User
+    User [-User `$UserObjectVariable ]
+    .PARAMETER LicenseSku
+    MS LicenseSku value for license to be applied (defaults to EXCHANGESTANDARD) [-LicenseSku tenantname:LICENSESKU]
+    .PARAMETER Credential
+    Credentials [-Credentials [credential object]
+    .PARAMETER ShowDebug
+    Parameter to display Debugging messages [-ShowDebug switch]
+    .PARAMETER Whatif
+    Parameter to run a Test no-change pass [-Whatif switch]
+    .PARAMETER Silent
+    Suppress all but error, warn or verbose outputs
+    .EXAMPLE
+    toggle-AADLicense -User $AADUser -whatif:$($whatif) -showDebug:$($showdebug) ;
+    Toggle the license on the specified User object
+    .LINK
+    https://github.com/tostka/verb-AAD
+    #>
+    #Requires -Version 3
+    #Requires -Modules AzureAD, verb-Text
+    [CmdletBinding()]
+    [Alias('toggle-o365License')]
+    Param(
+        [Parameter(Position=0,Mandatory=$True,HelpMessage="Either AzureADuser object or UserPrincipalName for user[-User upn@domain.com|`$msoluserobj ]")]
+        $User,
+        [Parameter(Position = 0, Mandatory = $false, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true, HelpMessage = "MS LicenseSku value for license to be applied (defaults to EXCHANGESTANDARD) [-LicenseSku tenantname:LICENSESKU]")]
+        $LicenseSku = $tormeta.o365LicSkuExStd,
+        [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
+        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [switch] $showDebug,
+        [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
+        [switch] $whatIf,
+        [switch]$silent
+    ) # PARAM BLOCK END
+
+    ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+    $Verbose = ($VerbosePreference -eq 'Continue') ;
+
+    $exprops="SamAccountName","RecipientType","RecipientTypeDetails","UserPrincipalName" ;
+    $LicenseSku="toroco:EXCHANGESTANDARD" # 11:05 AM 11/11/2019 switch to 'Exchange Online (Plan 1)', rather than E3
+    # "toroco:ENTERPRISEPACK" ;
+    $rgxEmailAddress = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$"
+
+    #connect-msol @pltRXO;
+    Connect-AAD @pltRXO;
+
+    switch($user.GetType().FullName){
+        'Microsoft.Online.Administration.User' {
+            $smsg = "MSOLUSER OBJECT IS NO LONGER SUPPORTED BY THIS FUNCTION!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            $smsg = "(-user:MsolU detected)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            # use it intact
+        } ;
+        'Microsoft.Open.AzureAD.Model.User' {
+            $smsg = "(-user:AzureADU detected)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            # use it intact
+        } ;
+        'System.String'{
+            $smsg = "(-user:string detected)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            if($user -match $rgxEmailAddress){
+                $smsg = "(-user:EmailAddress/UPN detected`nconverting to AzureADUser)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                $pltgMsol=[ordered]@{UserPrincipalName = $tUPN ;ErrorAction = 'STOP';} ;
+                $smsg = "get-AzureADUser w`n$(($pltgMsol|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                $pltGAADU=[ordered]@{ ObjectID = $tUPN ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ;
+                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ;
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+
+                $error.clear() ;
+                TRY {
+
+                    #$User = get-msoluser -UserPrincipalName $tUPN -EA STOP
+                    #$User = get-msoluser @pltgMsol ;
+                    $User  = Get-AzureADUser @pltGAADU ;
+
+                } CATCH {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #-=-record a STATUSWARN=-=-=-=-=-=-=
+                    $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                    if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                    if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ;
+                    #-=-=-=-=-=-=-=-=
+                    $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                } ;
+
+            } ;
+        }
+        default{
+            $smsg = "Unrecognized format for -User:$($User)!. Please specify either a user UPN, or pass a full AzureADUser object." ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            Break ;
+        }
+    } ;
+
+    $pltGLPList=[ordered]@{ TenOrg= $TenOrg; verbose=$($VerbosePreference -eq "Continue") ; credential= $pltRXO.credential ; } ;
+
+    $skus  = get-AADlicensePlanList @pltGLPList ;
+
+    #if($User.IsLicensed){
+    # moving to aad: lacks the islicensed prop. have to interpolate from the AssignedLicenses.count
+    # $isLicensed = [boolean]((get-AzureAdUser -obj todd.kadrie@toro.com).AssignedLicenses.count -gt 0)
+    if([boolean]($User.AssignedLicenses.count -gt 0)){
+        $smsg= "$($User.UserPrincipalName) is already licenced`nREMOVING ONLY" ; ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    } else {
+            <# -ORIG CODE---------
+            if(!$User.UsageLocation){
+
+                write-host -foregroundcolor green "MISSING USAGELOCATION, FORCING" ;
+                $spltMUsr=[ordered]@{
+                    UserPrincipalName=$User.UserPrincipalName ;
+                    UsageLocation="US" ;
+                    ErrorAction = 'Stop' ;
+                } ;
+                $smsg="Set-MsolUser with:`n$(($spltMUsr|out-string).trim())`n" ; ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                if(!$whatif){
+
+                    $Exit = 0 ;
+                    Do {
+                        Try {
+                            Set-MsolUser @spltMUsr ;
+                            # 1:59 PM 10/11/2018 pull back and confirm hit
+                            $smsg= "POST:Confirming UsageLocation -eq US..." ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                          $Exit = $Retries ;
+                        } Catch {
+                            Start-Sleep -Seconds $RetrySleep ;
+                            $Exit ++ ;
+                            $smsg = "Failed to exec cmd because: $($Error[0])" ;
+                            $smsg += "`nTry #: $Exit" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                            else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            If ($Exit -eq $Retries) {
+                                $smsg =  "Unable to exec cmd!" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            } ;
+                        }  ;
+                    } Until ($Exit -eq $Retries) ;
+
+                } ;
+            } ;
+            #> # ---ORIG CODE--------
+
+            # 12:36 PM 3/23/2022 splice in verb-aad:set-AADUserUsageLocation support
+            if (-not $User.UsageLocation) {
+                $smsg = "AADUser: MISSING USAGELOCATION, FORCING" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                $spltSAADUUL = [ordered]@{
+                    ObjectID = $User.UserPrincipalName ;
+                    UsageLocation = "US" ;
+                    whatif = $($whatif) ;
+                    verbose = ($VerbosePreference -eq "Continue") ;
+                } ;
+                $smsg = "set-AADUserUsageLocationw`n$(($spltSAADUUL|out-string).trim())" ;
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                $bRet = set-AADUserUsageLocation @spltSAADUUL ;
+                if($bRet.Success){
+                    $smsg = "set-AADUserUsageLocation updated UsageLocation:$($bRet.AzureADuser.UsageLocation)" ;
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                    # update the local AADUser to reflect the updated AADU returned
+                    $User  = $bRet.AzureADuser ;
+                    $Report.FixedUsageLocation = $true ;
+                } else {
+                    $smsg = "set-AADUserUsageLocation: FAILED TO UPDATE USAGELOCATION!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $Report.FixedUsageLocation = $false ;
+                    if(-not $whatif){
+                        BREAK;
+                    }
+                } ;
+            } ;
+
+            <# ----ORIG MSOL CODE-------
+            $spltLicAdd=[ordered]@{
+                UserPrincipalName=$User.UserPrincipalName ;
+                AddLicenses=$LicenseSku ;
+            } ;
+
+            $smsg= "`nADD-E3:Set-MsolUserLicense with:`n$(($spltLicAdd|out-string).trim())`n" ;;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            if(!$whatif){
+
+                $Exit = 0 ;
+                Do {
+                    Try {
+                      Set-MsolUserLicense @spltLicAdd ;
+                      $Exit = $Retries ;
+                    } Catch {
+                        Start-Sleep -Seconds $RetrySleep ;
+                        connect-msol @pltRXO;
+                        $Exit ++ ;
+                        $smsg = "Failed to exec cmd because: $($Error[0])" ;
+                        $smsg += "`nTry #: $Exit" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        If ($Exit -eq $Retries) {
+                            $smsg =  "Unable to exec cmd!" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                            else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        } ;
+                    }  ;
+                } Until ($Exit -eq $Retries) ;
+
+
+                Do {
+                    # 7:38 PM 10/11/2018 nail up
+                    connect-msol @pltRXO;
+                    write-host "." -NoNewLine;Start-Sleep -m (1000 * 5)
+                } Until ((Get-MsolUser -userprincipalname $User.UserPrincipalName |?{$_.IsLicensed})) ;
+                # 1:53 PM 8/25/2021 cap the result for return
+                $Result = Get-MsolUser -userprincipalname $User.UserPrincipalName | select UserPrincipalName,isLicensed,LicenseReconciliationNeeded ;
+                $smsg = "Get-MsolUser post-add:`n$(($result | ft -auto UserPrincipalName,isLicensed,LicenseReconciliationNeeded|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } else { "(whatif)" };
+            #> # ----ORIG MSOL CODE-------
+
+            # azuerad code:
+            if( $LicenseSku.contains(':') ){
+                $LicenseSkuName = $LicenseSku.split(':')[1] ;
+                # need the skuid, not the name, could pull another licplan list indiexedonName, but can also post-filter the hashtable, and get it.
+                $LicenseSku = ($skus.values | ?{$_.SkuPartNumber -eq $LicenseSkuName}).skuid ;
+            } ;
+            $smsg = "(attempting license:$($LicenseSku)...)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            #$bRes = add-AADUserLicense -Users $User.UserPrincipalName -skuid $LicenseSku -verbose -whatif
+            $pltAAADUL=[ordered]@{
+                Users=$User.UserPrincipalName ;
+                skuid=$LicenseSku ;
+                verbose = $($VerbosePreference -eq "Continue") ;
+                erroraction = 'STOP' ;
+                whatif = $($whatif) ;
+            } ;
+            $smsg = "add-AADUserLicense w`n$(($pltAAADUL|out-string).trim())" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            $Result = add-AADUserLicense @pltAAADUL ;
+            if($Result.Success){
+                $smsg = "add-AADUserLicense added  Licenses:$($Result.AddedLicense)" ;
+                # $User.AssignedLicenses.skuid
+                $smsg += "`n$(($User.AssignedLicenses.skuid|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                $smsg = "Detailed Return:`n$(($Result|out-string).trim())" ;
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                # update the local AADUser to reflect the updated AADU returned
+                #$User = $Result.AzureADuser ;
+                #$Report.FixedUsageLocation = $true ;
+                BREAK ; # abort further loops if one successfully applied
+            } elseif($whatif){
+                $smsg = "(whatif pass, exec skipped), " ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } else {
+                $smsg = "add-AADUserLicense : FAILED TO ADD SPECIFIED LICENSE!" ;
+                $smsg += "`n$(($Result|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #$Report.FixedUsageLocation = $false ;
+                if(-not $whatif){
+                    BREAK;
+                }
+            } ;
+
+    } ;
+
+
+    Try {
+
+        #$tMsol=Get-MsolUser -userprincipalname $User.UserPrincipalName ;
+        $tAADU = Get-AzureADUser @pltGAADU ;
+        $Exit = $Retries ;
+    <#
+    } Catch {
+        Start-Sleep -Seconds $RetrySleep ;
+        connect-msol @pltRXO;
+        $Exit ++ ;
+        $smsg = "Failed to exec cmd because: $($Error[0])" ;
+        $smsg += "`nTry #: $Exit" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        If ($Exit -eq $Retries) {
+            $smsg =  "Unable to exec cmd!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+            else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ;
+    }  ;
+    #>
+    } CATCH {
+        #$ErrTrapd=$Error[0] ;
+        $ErrTrapd=$_ ;
+        $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        #-=-record a STATUSWARN=-=-=-=-=-=-=
+        $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+        if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+        if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ;
+        #-=-=-=-=-=-=-=-=
+        $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+    } ;
+
+
+
+    #if($tMsol | select -expand licenses | ?{$_.AccountSkuId  -eq $LicenseSku}){
+    if($tAADU | select -expand AssignedLicenses | ?{$_.SkuId  -eq $LicenseSku}){
+        # remove matched license
+
+        <# ---ORIG MSOL CODE--------
+        $spltLicRmv=[ordered]@{
+            UserPrincipalName=$User.UserPrincipalName ;
+            RemoveLicenses=$LicenseSku ;
+        } ;
+
+        $smsg= "PULL-$($LicenseSku):Set-MsolUserLicense with:`n$(($spltLicRmv|out-string).trim())`n" ;;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+        if(!$whatif){
+            Set-MsolUserLicense @spltLicRmv ;
+            Do {
+                connect-msol @pltRXO;
+                write-host "." -NoNewLine;Start-Sleep -m (1000 * 5)
+            } Until ((Get-MsolUser -userprincipalname $User.UserPrincipalName |?{!$_.IsLicensed})) ;
+            $Result=Get-MsolUser -userprincipalname $User.UserPrincipalName| ft -auto UserPrincipalName,isLicensed,LicenseReconciliationNeeded ;
+            if($Result.LicenseReconciliationNeeded){
+                $smsg="$($User.UserPrincipalName) LicenseReconciliationNeeded STILL AN ISSUE" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } else {
+                $smsg="$($User.UserPrincipalName) LicenseReconciliationNeeded CLEARED" ;                      ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ;
+            $smsg= "`n$(($result|out-string).trim())`n" ;;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } else { "(whatif)" };
+        #> # ---ORIG MSOL CODE--------
+
+        # $Result = remove-AADUserLicense -users 'upn@domain.com','upn2@domain.com' -skuid $skuid -verbose -whatif ;
+        $pltRAADUL=[ordered]@{
+            Users=$User.UserPrincipalName ;
+            skuid=$LicenseSku ;
+            verbose = $($VerbosePreference -eq "Continue") ;
+            erroraction = 'STOP' ;
+            whatif = $($whatif) ;
+        } ;
+        $smsg = "remove-AADUserLicense w`n$(($pltRAADUL|out-string).trim())" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+        $Result = remove-AADUserLicense @pltRAADUL ;
+        if($Result.Success){
+            $smsg = "remove-AADUserLicense removed Licenses:$($Result.RemovedLicenses)" ;
+            # $User.AssignedLicenses.skuid
+            $smsg += "`n$(($User.AssignedLicenses.skuid|out-string).trim())" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            $smsg = "Detailed Return:`n$(($Result|out-string).trim())" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            # update the local AADUser to reflect the updated AADU returned
+            #$User = $Result.AzureADuser ;
+            #$Report.FixedUsageLocation = $true ;
+            BREAK ; # abort further loops if one successfully applied
+        } elseif($whatif){
+            $smsg = "(whatif pass, exec skipped), " ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } else {
+            $smsg = "remove-AADUserLicense : FAILED TO REMOVE SPECIFIED LICENSE!" ;
+            $smsg += "`n$(($Result|out-string).trim())" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #$Report.FixedUsageLocation = $false ;
+            if(-not $whatif){
+                BREAK;
+            }
+        } ;
+
+
+    } else {
+            $smsg="$($User.UserPrincipalName) does not have an existing $($LicenseSku) license to remove" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    };
+
+    #$true | write-output ;
+    $result | write-output ; # 1:56 PM 8/25/2021 return the msol with lic-related props
+    #$Result.Success
+
+}
+
+#*------^ toggle-AADLicense.ps1 ^------
+
 #*------v Wait-AADSync.ps1 v------
 Function Wait-AADSync {
     <#
@@ -5588,14 +7577,14 @@ Function Wait-AADSync {
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,convert-AADUImmuntableIDToADUObjectGUID,convert-ADUObjectGUIDToAADUImmuntableID,Disconnect-AAD,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,get-aaduser,Get-DsRegStatus,Get-JWTDetails,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,get-MsolUserLastSync,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,Initialize-AADSignErrorsHash,profile-AAD-Signons,Write-Log,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,Wait-AADSync -Alias *
+Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,convert-AADUImmuntableIDToADUObjectGUID,convert-ADUObjectGUIDToAADUImmuntableID,Disconnect-AAD,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADLicenseFullName,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,get-aaduser,get-AADUserLicenseDetails,Get-DsRegStatus,Get-JWTDetails,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,get-MsolUserLastSync,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,Initialize-AADSignErrorsHash,profile-AAD-Signons,Write-Log,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,remove-AADUserLicense,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,set-AADUserUsageLocation,test-AADUserIsLicensed,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,toggle-AADLicense,Wait-AADSync -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUzUpcnH0sbhxynrgx0eO+9tpM
-# M1WgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU2uWH+wnKbx/qgZQsPlGwLsCK
+# HWegggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -5610,9 +7599,9 @@ Export-ModuleMember -Function Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsol
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQQL/8n
-# G7YRppyNBdct11DTUGZHIDANBgkqhkiG9w0BAQEFAASBgGredSaIHFlnMWUsc/h1
-# hX1KJf/vDq0xtG+2Ch41e4zJsyUjZQvEz/hXj4EaoqE69x0o7VFqbZ7x6LTcAXb4
-# z/NIQK7spVT5EDdBWt2B/MB+iiYW3y17YhVy5FfLIwbtazt27Gax/LEoKKuQ4IR8
-# aQztn/Y8veJnFGHr+9C5SLOA
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBS+p4li
+# R6ouaW8hMoDl20J8FaHBRDANBgkqhkiG9w0BAQEFAASBgICVdRRGcAtEFSUZeyet
+# nH/Py79d0H3ZL1DgNA99C7qAy27xGkyGMejc4PlKM9DJ9Gn3hjNjr6wFHF0dyU+5
+# EfZROj3qaNaUjSfxJVC3NF75u0EMOeBJdTnr/P6u1fK4iwWYS92NXhEcnB9EOiIx
+# kk8x7msGtwDQKPadcXZV83BS
 # SIG # End signature block

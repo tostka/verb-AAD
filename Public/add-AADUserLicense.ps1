@@ -1,5 +1,3 @@
-# add-AADUserLicense
-
 #*----------v Function add-AADUserLicense() v----------
 function add-AADUserLicense {
     <#
@@ -11,15 +9,16 @@ function add-AADUserLicense {
     Website     :	http://www.toddomation.com
     Twitter     :	@tostka / http://twitter.com/tostka
     CreatedDate : 2022-03-22
-    FileName    : 
+    FileName    : add-AADUserLicense.ps1
     License     : MIT License
     Copyright   : (c) 2022 Todd Kadrie
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell
-    AddedCredit : Jaap de Koning (jaap.adm)
-    AddedWebsite:	https://alwaysautomate.it/2018/08/05/hello-world/
-    AddedTwitter:	URL
+    AddedCredit : 
+    AddedWebsite:	
+    AddedTwitter:	
     REVISIONS
+    * 10:30 AM 3/24/2022 add pipeline support
     2:28 PM 3/22/2022 init; confirmed functional
     .DESCRIPTION
     add-AADUserLicense.ps1 - Add a single license to an array of AzureADUsers
@@ -35,6 +34,10 @@ function add-AADUserLicense {
     PS> $bRet = add-AADUserLicense -users 'upn@domain.com','upn2@domain.com' -skuid nnnnnnnn-nnnn-nnnn-nnnn-nnnnnnnnnnnn 
     PS> $bRet | %{if($_.Success){write-host "$($_.AzureADUser.userprincipalname):Success"} else { write-warning "$($_.AzureADUser.userprincipalname):FAILURE" } ; 
     Add license with skuid specified, to the array of user UPNs specified in -users
+    .EXAMPLE
+    PS> $bRet = $AADUser.userprincipalname | add-AADUserLicense -skuid $skuid -verbose -whatif ; 
+    PS> $bRet | %{if($_.Success){write-host "$($_.AzureADUser.userprincipalname):Success"} else { write-warning "$($_.AzureADUser.userprincipalname):FAILURE" } ; 
+    Pipeline example
     .LINK
     https://github.com/tostka/verb-AAD
     #>
@@ -44,7 +47,8 @@ function add-AADUserLicense {
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM (
-        [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
+        # ValueFromPipeline: will cause params to match on matching type, [array] input -> [array]$param
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true)]
         [ValidateNotNullOrEmpty()]
         [string[]]$Users, 
         [string]$skuid,
@@ -59,7 +63,14 @@ function add-AADUserLicense {
     BEGIN {
         ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
-        Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
+        
+        $pltRXO = [ordered]@{
+            Credential = $Credential 
+            verbose = $($VerbosePreference -eq 'Continue') ;
+            silent = $true ; # always silent, echo only warn/errors
+        } ; 
+        #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
+        Connect-AAD @pltRXO ;         
         
         # check if using Pipeline input or explicit params:
         if ($PSCmdlet.MyInvocation.ExpectingInput) {
@@ -89,25 +100,30 @@ function add-AADUserLicense {
             } ; 
             $error.clear() ;
             TRY {
-                #$pltGAADU=[ordered]@{ ObjectId = $tUPN ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
+                <# rem out search string option - if we're mandating UPN/guids, it's always going to fail the initial attempt, skip it, odds of feeding it a dname etc is low
                 $pltGAADU=[ordered]@{ SearchString = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
                 $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
                 $AADUser = Get-AzureADUser @pltGAADU ; 
                 if (-not $AADUser) {
+                
                     $smsg = "Failed: Get-AzureADUser -SearchString $($pltGAADU.searchstring)" ; 
                     $smsg += "`nretrying as -objectid..." ; 
                     if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
                     $pltGAADU.remove('SearchString') ; 
                     $pltGAADU.Add("ObjectID",$user) ; 
-                    $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
                     if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
-                
-                    $AADUser = Get-AzureADUser @pltGAADU ;                 
+                    $AADUser = Get-AzureADUser @pltGAADU ;         
                 } ; 
+                #>
+                $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
+                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
+                $AADUser = Get-AzureADUser @pltGAADU ;   
             
                 if ($AADUser) {
                     $report.AzureADUser = $AADUser ; 
@@ -172,9 +188,6 @@ function add-AADUserLicense {
                             $AssignedLicenses.AddLicenses = $license ;
 
                             # confirm that the user doesn't have the lic in question:
-                            <# ( get-AzureAdUser -obj todd.kadrie@toro.com | select -expand Assignedlicenses | select -expand skuid ) -contains '6fd2c87f-b296-42f0-b197-1e91e994b900'
-                            True
-                            #>
                             if($AADUser.Assignedlicenses.skuid -notcontains $license.SkuId){
                                 
                                 $smsg = "Adding license SKUID ($($skuid)) to user:$($user)" ; 
