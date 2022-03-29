@@ -18,6 +18,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 1:24 PM 3/28/2022 fixed missing `n on #669; confirmed works fine with MFA, as long as get-TenantMFA properly returns $MFA -eq $true (uses -AccountID param & prompts for MAuth logon)
     * 9:57 AM 9/17/2021 added silent to CBH
     * 5:38 PM 8/17/2021 added -silent param
     # 3:20 PM 7/26/2021 updated add-pstitlebar
@@ -251,7 +252,7 @@ Function Connect-AAD {
             } ; 
             
             if($silent){} else { 
-                $smsg = "$(($AADConnection |ft -a|out-string).trim())" ;
+                $smsg = "`n$(($AADConnection |ft -a|out-string).trim())" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ; 
@@ -281,14 +282,14 @@ Function Connect-AAD {
             if($silent){} else { 
                 $smsg = "Connected to Tenant:`n$(($token.AccessToken | ft -a TenantId,UserId,LoginType|out-string).trim())" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ $smsg = "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ; 
             if(($token.AccessToken).userid -eq $Credential.username){
                 $TokenTag = convert-TenantIdToTag -TenantId $TenantId ;                    
                 $smsg = "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
                 if($silent){} else { 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ $smsg = "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ;
                 $TenOrg=get-TenantTag -Credential $Credential ; 
                 $sTitleBarTag = @("AAD") ;
@@ -298,7 +299,7 @@ Function Connect-AAD {
                 $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).TenantID  -verbose:$($verbose) ; 
                 $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ $smsg = "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 Disconnect-AzureAD ; 
                 throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
             } ; 
