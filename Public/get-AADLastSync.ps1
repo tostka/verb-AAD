@@ -8,6 +8,7 @@ Function get-AADLastSync {
     Website     :	https://www.toddomation.com
     Twitter     :	@tostka
     REVISIONS   :
+    * 3:50 PM 6/21/2022 as MicrosoftOnline MSOL module is wrecked/deprecated with MFA mandates, retool this to use AAD: (Get-AzureADTenantDetail).CompanyLastDirSyncTime
     * 4:08 PM 7/24/2020 added full multi-ten cred support
     * 1:03 PM 5/27/2020 moved alias: get-MsolLastSync win func
     * 9:51 AM 2/25/2020 condenced output
@@ -26,10 +27,12 @@ Function get-AADLastSync {
     get-AADLastSync
     .LINK
     #>
+    #Requires -Modules AzureAD
     [CmdletBinding()]
     [Alias('get-MsolLastSync')]
     Param([Parameter()]$Credential = $global:credo365TORSID) ;
     $verbose = ($VerbosePreference -eq "Continue") ; 
+    <#
     try { Get-MsolAccountSku -ErrorAction Stop | out-null }
     catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
       "Not connected to MSOnline. Now connecting to $($credo365.username.split('@')[1])." ;
@@ -37,7 +40,10 @@ Function get-AADLastSync {
       if($MFA){ Connect-MsolService }
       else {Connect-MsolService -Credential $Credential ;}
     } ;
-    $LastDirSyncTime = (Get-MsolCompanyInformation).LastDirSyncTime ;
+    #>
+    Connect-AAD -Credential $Credential ;
+    #$LastDirSyncTime = (Get-MsolCompanyInformation).LastDirSyncTime ;
+    $LastDirSyncTime = (Get-AzureADTenantDetail).CompanyLastDirSyncTime ;
     New-Object PSObject -Property @{
       TimeGMT   = $LastDirSyncTime  ;
       TimeLocal = $LastDirSyncTime.ToLocalTime() ;
