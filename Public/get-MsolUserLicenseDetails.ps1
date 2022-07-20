@@ -202,7 +202,7 @@ Function get-MsolUserLicenseDetails {
         "VISIOCLIENT"                        = "Visio Pro Online"
         "VISIOONLINE_PLAN1"                  = "Visio Online Plan 1"
         "WINDOWS_STORE"                      = "Windows Store for Business"
-        "YAMMER_ENTERPRISE"                  = "Yammer for the Starship Enterprise"
+        "YAMMER_ENTERPRISE"                  = "Yammer Enterprise"
         "YAMMER_MIDSIZE"                     = "Yammer"
     }
 
