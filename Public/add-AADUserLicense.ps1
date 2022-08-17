@@ -1,4 +1,4 @@
-#*----------v Function add-AADUserLicense() v----------
+#*------v add-AADUserLicense.ps1 v------
 function add-AADUserLicense {
     <#
     .SYNOPSIS
@@ -18,6 +18,7 @@ function add-AADUserLicense {
     AddedWebsite:	
     AddedTwitter:	
     REVISIONS
+    * 2:35 PM 8/12/2022 expanded echo on lic attempt
     * 10:30 AM 3/24/2022 add pipeline support
     2:28 PM 3/22/2022 init; confirmed functional
     .DESCRIPTION
@@ -246,9 +247,10 @@ function add-AADUserLicense {
                                 New-Object PSObject -Property $Report | write-output ;
                             } ;
                         } else {
-                            $smsg = "($($LicenseSkuId) has *NO* available units in Tenant $($tsku.consumedunits)/$($tsku.activeunits))"
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            $smsg = "($($SkuId.SkuPartNumber) has *NO* available units in Tenant $($tsku.Consumed)/$($tsku.Enabled))"
+                            $smsg += "`n$(($tsku|out-string).trim())" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                             $report.Success = $false ; 
                             #[PSCustomObject]$Report | write-output ;
                             New-Object PSObject -Property $Report | write-output ;
@@ -285,5 +287,6 @@ function add-AADUserLicense {
         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;         
     } ;
-} ; 
-#*------^ END Function add-AADUserLicense() ^------
+}
+
+#*------^ add-AADUserLicense.ps1 ^------
