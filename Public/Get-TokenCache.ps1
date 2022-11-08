@@ -1,4 +1,4 @@
-#*------v Get-TokenCache.ps1 v------
+﻿#*------v Get-TokenCache.ps1 v------
 function Get-TokenCache {
     <#
     .SYNOPSIS

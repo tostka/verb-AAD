@@ -1,4 +1,4 @@
-#*------v get-AADlicensePlanList.ps1 v------
+﻿#*------v get-AADlicensePlanList.ps1 v------
 function get-AADlicensePlanList {
     <#
     .SYNOPSIS

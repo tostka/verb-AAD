@@ -1,4 +1,4 @@
-#*------v connect-AzureRM.ps1 v------
+﻿#*------v connect-AzureRM.ps1 v------
 function connect-AzureRM {
     <#
     .SYNOPSIS

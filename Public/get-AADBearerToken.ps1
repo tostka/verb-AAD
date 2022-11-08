@@ -1,4 +1,4 @@
-#*------v get-AADBearerToken.ps1 v------
+﻿#*------v get-AADBearerToken.ps1 v------
 function get-AADBearerToken {
     <#
     .SYNOPSIS

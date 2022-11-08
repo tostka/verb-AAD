@@ -1,4 +1,4 @@
-#*------v Function profile-AAD-Signons v------
+﻿#*------v Function profile-AAD-Signons v------
 Function profile-AAD-Signons {
     <#
     .SYNOPSIS

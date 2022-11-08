@@ -1,4 +1,4 @@
-#*------v Get-MsolUnexpectedEnabledPlansForUser.ps1 v------
+﻿#*------v Get-MsolUnexpectedEnabledPlansForUser.ps1 v------
 Function Get-MsolUnexpectedEnabledPlansForUser {
     <#
     .SYNOPSIS

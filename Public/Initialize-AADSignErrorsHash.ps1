@@ -1,4 +1,4 @@
-#*------v Initialize-AADSignErrorsHash.ps1 v------
+﻿#*------v Initialize-AADSignErrorsHash.ps1 v------
 function Initialize-AADSignErrorsHash {
     <#
     .SYNOPSIS

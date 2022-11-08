@@ -1,4 +1,4 @@
-#*------v Get-MsolDisabledPlansForSKU.ps1 v------
+﻿#*------v Get-MsolDisabledPlansForSKU.ps1 v------
 Function Get-MsolDisabledPlansForSKU {
     <#
     .SYNOPSIS

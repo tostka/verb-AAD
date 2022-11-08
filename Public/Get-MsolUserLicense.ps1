@@ -1,4 +1,4 @@
-#*------v Get-MsolUserLicense.ps1 v------
+﻿#*------v Get-MsolUserLicense.ps1 v------
 Function Get-MsolUserLicense {
     <#
     .SYNOPSIS

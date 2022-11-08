@@ -1,4 +1,4 @@
-#*------v resolve-GuestExternalAddr2UPN.ps1 v------
+﻿#*------v resolve-GuestExternalAddr2UPN.ps1 v------
 Function resolve-GuestExternalAddr2UPN {
     <#
     .SYNOPSIS

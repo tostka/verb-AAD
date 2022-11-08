@@ -1,4 +1,4 @@
-#*------v Function get-AADLicenseFullName v------
+﻿#*------v Function get-AADLicenseFullName v------
 function get-AADLicenseFullName {
 <#
     .SYNOPSIS

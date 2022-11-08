@@ -1,4 +1,4 @@
-#*------v Get-JWTDetails.ps1 v------
+﻿#*------v Get-JWTDetails.ps1 v------
 function Get-JWTDetails {
     <#
     .SYNOPSIS

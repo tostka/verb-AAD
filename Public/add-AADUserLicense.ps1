@@ -1,4 +1,4 @@
-#*------v add-AADUserLicense.ps1 v------
+﻿#*------v add-AADUserLicense.ps1 v------
 function add-AADUserLicense {
     <#
     .SYNOPSIS

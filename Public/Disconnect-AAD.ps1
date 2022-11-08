@@ -1,4 +1,4 @@
-#*------v Disconnect-AAD.ps1 v------
+﻿#*------v Disconnect-AAD.ps1 v------
 Function Disconnect-AAD {
     <#
     .SYNOPSIS

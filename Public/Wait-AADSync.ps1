@@ -1,4 +1,4 @@
-#*------v Wait-AADSync.ps1 v------
+﻿#*------v Wait-AADSync.ps1 v------
 Function Wait-AADSync {
     <#
     .SYNOPSIS

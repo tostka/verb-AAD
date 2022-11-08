@@ -1,4 +1,4 @@
-#*------v Function get-AADBearerTokenHeaders v------
+﻿#*------v Function get-AADBearerTokenHeaders v------
 Function get-AADBearerTokenHeaders {
     <#
     .SYNOPSIS

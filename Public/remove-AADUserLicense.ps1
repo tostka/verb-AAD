@@ -1,4 +1,4 @@
-#*----------v Function remove-AADUserLicense() v----------
+﻿#*----------v Function remove-AADUserLicense() v----------
 function remove-AADUserLicense {
     <#
     .SYNOPSIS

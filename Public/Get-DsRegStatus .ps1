@@ -1,4 +1,4 @@
-#*------v Get-DsRegStatus.ps1 v------
+﻿#*------v Get-DsRegStatus.ps1 v------
 function Get-DsRegStatus {
     <#
     .SYNOPSIS

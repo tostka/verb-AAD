@@ -1,4 +1,4 @@
-#*------v convert-ADUObjectGUIDToAADUImmuntableID.ps1 v------
+﻿#*------v convert-ADUObjectGUIDToAADUImmuntableID.ps1 v------
 Function convert-ADUObjectGUIDToAADUImmuntableID {
     <#
     .SYNOPSIS

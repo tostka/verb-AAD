@@ -1,4 +1,4 @@
-#*------v Connect-AAD.ps1 v------
+﻿#*------v Connect-AAD.ps1 v------
 Function Connect-AAD {
     <#
     .SYNOPSIS

@@ -1,4 +1,4 @@
-#*------v Add-ADALType.ps1 v------
+﻿#*------v Add-ADALType.ps1 v------
 function Add-ADALType {
     <#
     .SYNOPSIS

@@ -1,4 +1,4 @@
-#*------v search-AADSignInReports.ps1 v------
+﻿#*------v search-AADSignInReports.ps1 v------
 Function search-AADSignInReports {
     <#
     .SYNOPSIS

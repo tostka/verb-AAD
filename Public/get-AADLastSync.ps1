@@ -1,4 +1,4 @@
-#*------v get-AADLastSync.ps1 v------
+﻿#*------v get-AADLastSync.ps1 v------
 Function get-AADLastSync {
   <#
     .SYNOPSIS

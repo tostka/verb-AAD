@@ -1,4 +1,4 @@
-#*------v get-AADToken.ps1 v------
+﻿#*------v get-AADToken.ps1 v------
 function get-AADToken {
     <#
     .SYNOPSIS

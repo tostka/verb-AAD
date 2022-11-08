@@ -1,4 +1,4 @@
-#*------v Get-ServiceToken.ps1 v------
+﻿#*------v Get-ServiceToken.ps1 v------
 function Get-ServiceToken {
     <#
     .SYNOPSIS

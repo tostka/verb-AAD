@@ -1,4 +1,4 @@
-#*------v search-GraphApiAAD.ps1 v------
+﻿#*------v search-GraphApiAAD.ps1 v------
 function search-GraphApiAAD {
     <#
     .SYNOPSIS

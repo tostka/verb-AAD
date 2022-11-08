@@ -1,4 +1,4 @@
-#*------v Remove-MsolUserDirectLicenses.ps1 v------
+﻿#*------v Remove-MsolUserDirectLicenses.ps1 v------
 Function Remove-MsolUserDirectLicenses{
     <#
     .SYNOPSIS

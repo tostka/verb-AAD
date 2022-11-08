@@ -1,4 +1,4 @@
-#*------v test-MsolUserLicenseDirectAssigned.ps1 v------
+﻿#*------v test-MsolUserLicenseDirectAssigned.ps1 v------
 Function test-MsolUserLicenseDirectAssigned {
     <#
     .SYNOPSIS

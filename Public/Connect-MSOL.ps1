@@ -1,4 +1,4 @@
-#*------v Connect-MSOL.ps1 v------
+﻿#*------v Connect-MSOL.ps1 v------
 Function Connect-MSOL {
     <#    
     .SYNOPSIS

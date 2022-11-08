@@ -1,4 +1,4 @@
-#*------v test-MsolUserLicenseGroupAssigned.ps1 v------
+﻿#*------v test-MsolUserLicenseGroupAssigned.ps1 v------
 Function test-MsolUserLicenseGroupAssigned {
     <#
     .SYNOPSIS
