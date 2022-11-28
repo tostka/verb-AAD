@@ -18,6 +18,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    # 4:45 PM 7/7/2022 workaround msal.ps bug: always ipmo it FIRST: "Get-msaltoken : The property 'Authority' cannot be found on this object. Verify that the property exists."
     * 1:24 PM 3/28/2022 fixed missing `n on #669; confirmed works fine with MFA, as long as get-TenantMFA properly returns $MFA -eq $true (uses -AccountID param & prompts for MAuth logon)
     * 9:57 AM 9/17/2021 added silent to CBH
     * 5:38 PM 8/17/2021 added -silent param
@@ -87,6 +88,29 @@ Function Connect-AAD {
         $TenantID = get-TenantID -Credential $Credential ;
     } ;
     PROCESS {
+        # 4:45 PM 7/7/2022 workaround msal.ps bug: always ipmo it FIRST: "Get-msaltoken : The property 'Authority' cannot be found on this object. Verify that the property exists."
+        # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
+        $modname = 'MSAL.PS' ;
+        $error.clear() ;
+        Try { Get-Module -name $modname -listavailable -ErrorAction Stop | out-null } Catch {
+            $pltInMod = [ordered]@{Name = $modname ; verbose=$false ;} ;
+            if ( $env:COMPUTERNAME -match $rgxMyBoxUID ) { $pltInMod.add('scope', 'CurrentUser') } else { $pltInMod.add('scope', 'AllUsers') } ;
+            $smsg = "Install-Module w scope:$($pltInMod.scope)`n$(($pltInMod|out-string).trim())" ;
+            if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            Install-Module @pltIMod ;
+        } ; # IsInstalled
+        $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; verbose=$false} ;
+        # this forces a specific rev into the ipmo!
+        if ($MinimumVersion) { $pltIMod.add('MinimumVersion', $MinimumVersion.tostring()) } ;
+        $error.clear() ;
+        Try { Get-Module $modname -ErrorAction Stop | out-null } Catch {
+            $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            Import-Module @pltIMod ;
+        } ; # IsImported
+
         $smsg = "(Check for/install AzureAD module)" ; 
         if($silent){} else { 
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -103,7 +127,19 @@ Function Connect-AAD {
         TRY { 
             #I'm going to assume that it's due to too many repeated req's for gAADTD
             # so lets work with & eval the local AzureSession Token instead - it's got the userid, and the tenantid, both can validate the conn, wo any queries.:
-            $token = get-AADToken -verbose:$($verbose) ; 
+            # ADAL call, doesn 't work with MSAL
+            #$token = get-AADToken -verbose:$($verbose) ; 
+            <#
+$connectionDetails = @{
+    'TenantId'     = 'dev.nicolonsky.ch' ;
+    'ClientId'     = '453436af-5b9d-449b-82b6-22001ee3b727' ;
+    'ClientSecret' = '3wD0xU571J6S70N-P-4oy_.ZtduB5JkQBC' | ConvertTo-SecureString -AsPlainText -Force ;
+} ;
+Get-MsalToken @connectionDetails ;                
+
+            #>
+
+
             if( ($null -eq $token) -OR ($token.count -eq 0)){
                 # not connected/authenticated
                 #Connect-AzureAD -TenantId $TenantID -Credential $Credential ; 
