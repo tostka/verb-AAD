@@ -26,23 +26,24 @@ Function profile-AAD-Signons {
 
     ## Retrieve logs for a given user via AAD Portal [process in 1/30/2023 UI]
 
-     1. Edge browse: https://portal.azure.com/ Azure AD > Users > [search]
-     2. UL pane: click Sign-in logs
-     3. Date: Last 1 month, _Apply_ 
-     4. Columns: [x]ALL!, OK
-     5. Add-Filters:
-       - (x) Status >  'Status: None Selected' > [x]Success|Failure|Interrupted, Apply 
-        > Application: *appears* to be Client, not resource 
-        > Office 365 Exchange Online - looks like OWA?
-        > Outlook Mobile - OM (?)
-    6. Click _Download_ to pull down, export to csv/(x)json. (preserves the sub-objects!)
-    -  Ren default filename: `SignIns_2022-12-31_2023-01-30` ->
-        `TICKET-AADSignIns-UPNPREFIX-30d_2022-12-31_2023-01-30`
-    7. _Download_
-    8. Pops dlg: click _Save as_ (v Save).  
-    9. Click _Downloads_ toolbar link in Edge (far L) > find the download, click _Show in folder_ > explorer opens host folder. 
-    10. Locate file & Move to:  `d:\scripts\logs\`
-    11. Profile the resulting .json file in this script:
+    1. Edge browse: https://portal.azure.com/ 
+    2. Azure AD > Users > [search]
+    3. UL pane: click Sign-in logs
+    4. Date: Last 1 month, _Apply_ 
+    5. Columns: [x]ALL!, OK
+    6. Add-Filters:
+      - (x) Status >  'Status: None Selected' > [x]Success|Failure|Interrupted, Apply 
+      > Application: *appears* to be Client, not resource 
+      > Office 365 Exchange Online - looks like OWA?
+      > Outlook Mobile - OM (?)
+    7. Click _Download_ to pull down, export to csv/(x)json. (preserves the sub-objects!)
+      -  Ren default filename: `SignIns_2022-12-31_2023-01-30` ->
+      `TICKET-AADSignIns-UPNPREFIX-30d_2022-12-31_2023-01-30`
+    8. _Download_
+    9. Pops dlg: click _Save as_ (v Save).  
+    10. Click _Downloads_ toolbar link in Edge (far L) > find the download, click _Show in folder_ > explorer opens host folder. 
+    11. Locate file & Move to:  `d:\scripts\logs\`
+    12. Profile the resulting .json file in this script:
     
     PS> profile-AAD-Signons -Files [fullpath to json] ; 
 
@@ -55,19 +56,16 @@ Function profile-AAD-Signons {
     .OUTPUTS
     None. Returns no objects or output.
     .EXAMPLE
-    .\profile-AAD-Signons -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json";
+    PS> profile-AAD-Signons -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json";
     Process a single json AAD signon log
     .EXAMPLE
-    .\profile-AAD-Signons -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json","c:\usr\work\incid\todd.USER-SignIns__2019-07-07__2019-08-06b.csv.json" ;
+    PS> profile-AAD-Signons -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json","c:\usr\work\incid\todd.USER-SignIns__2019-07-07__2019-08-06b.csv.json" ;
     Process an array of json AAD signon logs
     .LINK
     #>
-
     ### Note: vers 2: #Requires -Version 2.0
-    #Requires -Modules ActiveDirectory
-    #Requires -Version 3
-
-
+    ##Requires -Modules ActiveDirectory
+    ##Requires -Version 3
     Param(
         [Parameter(Position=0,Mandatory=$false,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Files [-file c:\path-to\file.ext]")]
         [array]$Files,
