@@ -11,7 +11,7 @@ Function profile-AAD-Signons {
     Website:	URL
     Twitter:	URL
     REVISIONS   : 
-    * 2:41 PM 1/30/2023 fixed fundemental path-discovery breaks since moving it into verb-AAD (wasn't discovering any prior .ps1 paths; needed function discovery code spliced in). : 
+    3:23 PM 1/30/2023 added echo of output $logfile at end of each file ; fixed fundemental path-discovery breaks since moving it into verb-AAD (wasn't discovering any prior .ps1 paths; needed function discovery code spliced in). : 
     * 11:18 AM 9/16/2021 string cleaning
     * 3:04 PM 6/16/2021, shifted to standard start-log mod support, conditioned helper funcs, added test for events in target file, echo on gap
     * 11:11 AM 6/15/2021 Ren'd Build-AADSignErrorsHash() -> Initialize-AADSignErrorsHash (compliant verb) ; sync'd copy & set it to defer to the verb-AAD mod version
@@ -838,7 +838,7 @@ Function profile-AAD-Signons {
                     $ClientAppUseds = $evtsfail | select -unique clientAppUsed | select -expand clientAppUsed ;
 
                     <#
-                    #>foreach ($resDname in $resDnames) {
+                    foreach ($resDname in $resDnames) {
                         $smsg = "`n`n--Profiling resourceDisplayNames:$($resDname)..`n`n " ;
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -1182,6 +1182,8 @@ Function profile-AAD-Signons {
                 write-host -foregroundcolor white "`nLocation details:`n$(($evtlast| select -expand location|out-string).trim())" ;
                 write-host -foregroundcolor yellow "$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
 
+                $smsg = "`n`nresults logged to logfile:`n$($logfile)`n`n" ; 
+                write-host -foregroundcolor yellow $smsg ; 
 
                 $smsg = "`n$($sBnr.replace('=v','=^').replace('v=','^='))`n" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
