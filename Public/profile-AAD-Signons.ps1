@@ -2,7 +2,7 @@
 Function profile-AAD-Signons {
     <#
     .SYNOPSIS
-    profile-AAD-Signons.ps1 - profile AAD Sign-ons Activity JSON dump Splitbrain and outline remediation steps
+    profile-AAD-Signons - profile AAD Sign-ons Activity JSON dump Splitbrain and outline remediation steps
     .NOTES
     Author: Todd Kadrie
     Website:	http://www.toddomation.com
@@ -11,6 +11,7 @@ Function profile-AAD-Signons {
     Website:	URL
     Twitter:	URL
     REVISIONS   : 
+    * 2:41 PM 1/30/2023 fixed fundemental path-discovery breaks since moving it into verb-AAD (wasn't discovering any prior .ps1 paths; needed function discovery code spliced in). : 
     * 11:18 AM 9/16/2021 string cleaning
     * 3:04 PM 6/16/2021, shifted to standard start-log mod support, conditioned helper funcs, added test for events in target file, echo on gap
     * 11:11 AM 6/15/2021 Ren'd Build-AADSignErrorsHash() -> Initialize-AADSignErrorsHash (compliant verb) ; sync'd copy & set it to defer to the verb-AAD mod version
@@ -22,6 +23,29 @@ Function profile-AAD-Signons {
     * 1:01 PM 8/20/2019 v0.1.0 init vers (converted check-ExosplitBrain.ps1), subbed in write-log from verb-transcript (debug support)
     .DESCRIPTION
     profile-AAD-Signons.ps1 - profile AAD Sign-ons Activity JSON dump Splitbrain and outline remediation steps
+
+    ## Retrieve logs for a given user via AAD Portal [process in 1/30/2023 UI]
+
+     1. Edge browse: https://portal.azure.com/ Azure AD > Users > [search]
+     2. UL pane: click Sign-in logs
+     3. Date: Last 1 month, _Apply_ 
+     4. Columns: [x]ALL!, OK
+     5. Add-Filters:
+       - (x) Status >  'Status: None Selected' > [x]Success|Failure|Interrupted, Apply 
+        > Application: *appears* to be Client, not resource 
+        > Office 365 Exchange Online - looks like OWA?
+        > Outlook Mobile - OM (?)
+    6. Click _Download_ to pull down, export to csv/(x)json. (preserves the sub-objects!)
+    -  Ren default filename: `SignIns_2022-12-31_2023-01-30` ->
+        `TICKET-AADSignIns-UPNPREFIX-30d_2022-12-31_2023-01-30`
+    7. _Download_
+    8. Pops dlg: click _Save as_ (v Save).  
+    9. Click _Downloads_ toolbar link in Edge (far L) > find the download, click _Show in folder_ > explorer opens host folder. 
+    10. Locate file & Move to:  `d:\scripts\logs\`
+    11. Profile the resulting .json file in this script:
+    
+    PS> profile-AAD-Signons -Files [fullpath to json] ; 
+
     .PARAMETER  UPNs
     User Userprincipalnames (array)[-UPNs]
     .PARAMETER ShowDebug
@@ -31,10 +55,10 @@ Function profile-AAD-Signons {
     .OUTPUTS
     None. Returns no objects or output.
     .EXAMPLE
-    .\profile-AAD-Signons.ps1 -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json";
+    .\profile-AAD-Signons -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json";
     Process a single json AAD signon log
     .EXAMPLE
-    .\profile-AAD-Signons.ps1 -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json","c:\usr\work\incid\todd.USER-SignIns__2019-07-07__2019-08-06b.csv.json" ;
+    .\profile-AAD-Signons -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json","c:\usr\work\incid\todd.USER-SignIns__2019-07-07__2019-08-06b.csv.json" ;
     Process an array of json AAD signon logs
     .LINK
     #>
@@ -61,21 +85,75 @@ Function profile-AAD-Signons {
     # If using WMI calls, push any cred into WMI:
     #if ($Credential -ne $Null) {$WmiParameters.Credential = $Credential }  ;
 
+    # 2:28 PM 1/30/2023 getting fail on all path res, update to current mixed discovery
     # scriptname with extension
-    $ScriptDir=(Split-Path -parent $MyInvocation.MyCommand.Definition) + "\" ;
-    $ScriptBaseName = (Split-Path -Leaf ((&{$myInvocation}).ScriptName))  ;
-    $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName) ;
+    #if ($PSScriptRoot -eq "") {
+    if( -not (get-variable -name PSScriptRoot -ea 0) -OR ($PSScriptRoot -eq '')){
+        if ($psISE) { $ScriptName = $psISE.CurrentFile.FullPath } 
+        elseif($psEditor){
+            if ($context = $psEditor.GetEditorContext()) {$ScriptName = $context.CurrentFile.Path } 
+        } elseif ($host.version.major -lt 3) {
+            $ScriptName = $MyInvocation.MyCommand.Path ;
+            $PSScriptRoot = Split-Path $ScriptName -Parent ;
+            $PSCommandPath = $ScriptName ;
+        } else {
+            if ($MyInvocation.MyCommand.Path) {
+                $ScriptName = $MyInvocation.MyCommand.Path ;
+                $PSScriptRoot = Split-Path $MyInvocation.MyCommand.Path -Parent ;
+            } else {throw "UNABLE TO POPULATE SCRIPT PATH, EVEN `$MyInvocation IS BLANK!" } ;
+        };
+        if($ScriptName){
+            $ScriptDir = Split-Path -Parent $ScriptName ;
+            $ScriptBaseName = split-path -leaf $ScriptName ;
+            $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($ScriptName) ;
+        } ; 
+    } else {
+        if($PSScriptRoot){$ScriptDir = $PSScriptRoot ;}
+        else{
+            write-warning "Unpopulated `$PSScriptRoot!" ; 
+            $ScriptDir=(Split-Path -parent $MyInvocation.MyCommand.Definition) + "\" ;
+        }
+        if ($PSCommandPath) {$ScriptName = $PSCommandPath } 
+        else {
+            $ScriptName = $myInvocation.ScriptName
+            $PSCommandPath = $ScriptName ;
+        } ;
+        $ScriptBaseName = (Split-Path -Leaf ((& { $myInvocation }).ScriptName))  ;
+        $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName) ;
+    } ;
+    if(!$ScriptDir){
+        write-host "Failed `$ScriptDir resolution on PSv$($host.version.major): Falling back to $MyInvocation parsing..." ; 
+        $ScriptDir=(Split-Path -parent $MyInvocation.MyCommand.Definition) + "\" ;
+        $ScriptBaseName = (Split-Path -Leaf ((&{$myInvocation}).ScriptName))  ; 
+        $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName) ;     
+    } else {
+        if(-not $PSCommandPath ){
+            $PSCommandPath  = $ScriptName ; 
+            if($PSCommandPath){ write-host "(Derived missing `$PSCommandPath from `$ScriptName)" ; } ;
+        } ; 
+        if(-not $PSScriptRoot  ){
+            $PSScriptRoot   = $ScriptDir ; 
+            if($PSScriptRoot){ write-host "(Derived missing `$PSScriptRoot from `$ScriptDir)" ; } ;
+        } ; 
+    } ; 
+    if(-not ($ScriptDir -AND $ScriptBaseName -AND $ScriptNameNoExt)){ 
+        throw "Invalid Invocation. Blank `$ScriptDir/`$ScriptBaseName/`ScriptNameNoExt" ; 
+        BREAK ; 
+    } ; 
+
+    $smsg = "`$ScriptDir:$($ScriptDir)" ;
+    $smsg += "`n`$ScriptBaseName:$($ScriptBaseName)" ;
+    $smsg += "`n`$ScriptNameNoExt:$($ScriptNameNoExt)" ;
+    $smsg += "`n`$PSScriptRoot:$($PSScriptRoot)" ;
+    $smsg += "`n`$PSCommandPath:$($PSCommandPath)" ;  ;
+    write-host $smsg ; 
     $ComputerName = $env:COMPUTERNAME ;
     $smtpFrom = (($scriptBaseName.replace(".","-")) + "@toro.com") ;
     #$smtpSubj= ("Daily Rpt: "+ (Split-Path $transcript -Leaf) + " " + [System.DateTime]::Now) ;
     $smtpSubj= "Proc Rpt:$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
     $smtpTo=$TORMeta['NotificationAddr1'] ;
     $sQot = [char]34 ; $sQotS = [char]39 ;
-    $NoProf=[bool]([Environment]::GetCommandLineArgs() -like '-noprofile'); # if($NoProf){# do this};
-    $MyBox="LYN-3V6KSY1","TIN-BYTEIII","TIN-BOX","TINSTOY","LYN-8DCZ1G2" ;
-    $DomainWork = "TORO";
-    $DomHome = "REDBANK";
-    $DomLab="TORO-LAB";
+
     #$ProgInterval= 500 ; # write-progress wait interval in ms
     # 12:23 PM 2/20/2015 add gui vb prompt support
     #[System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic') | Out-Null ;
@@ -93,7 +171,7 @@ Function profile-AAD-Signons {
         function Write-Log {
             <#
             .SYNOPSIS
-            Write-Log.ps1 - Write-Log writes a message to a specified log file with the current time stamp, and write-verbose|warn|error's the matching msg.
+            Write-Log - Write-Log writes a message to a specified log file with the current time stamp, and write-verbose|warn|error's the matching msg.
             .NOTES
             Author: Jason Wasser @wasserja
             Website:	https://www.powershellgallery.com/packages/MrAADAdministration/1.0/Content/Write-Log.ps1
@@ -343,7 +421,7 @@ Function profile-AAD-Signons {
     } ; #*------^ END Function get-colorcombo() ^------
 
     if(!(get-command Initialize-AADSignErrorsHash -ea 0)){
-        #*------v Initialize-AADSignErrorsHash.ps1 v------
+        #*------v Initialize-AADSignErrorsHash v------
         function Initialize-AADSignErrorsHash {
             <#
             .SYNOPSIS
@@ -515,7 +593,7 @@ Function profile-AAD-Signons {
             $AADSignOnError.add("530021", "Application does not meet the conditional access approved app requirements.") ;
             $AADSignOnError | write-output ;
         }
-        #*------^ Initialize-AADSignErrorsHash.ps1 ^------
+        #*------^ Initialize-AADSignErrorsHash ^------
     }
 
     #-------v Function Cleanup v-------
@@ -617,12 +695,15 @@ Function profile-AAD-Signons {
     # 12:15 PM 9/12/2018 remove dupes
     $reqMods=$reqMods| select -Unique ;
     #>
-    $ofile = join-path -path (Split-Path -parent $MyInvocation.MyCommand.Definition) -ChildPath "logs" ;
+    #$ofile = join-path -path (Split-Path -parent $MyInvocation.MyCommand.Definition) -ChildPath "logs" ;
+    $ofile = join-path -path $ScriptDir -ChildPath "logs" ;
     if(!(test-path -path $ofile)){ "Creating missing log dir $($ofile)..." ; mkdir $ofile  ; } ;
 
-    $transcript= join-path -path $ofile -childpath "$([system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName))-Transcript-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-trans-log.txt"  ;
+    #$transcript= join-path -path $ofile -childpath "$([system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName))-Transcript-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-trans-log.txt"  ;
+    $transcript= join-path -path $ofile -childpath "$($ScriptNameNoExt)-Transcript-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-trans-log.txt"  ;
     # 10:21 AM 10/18/2018 add log file variant as target of Write-Log:
-    $logfile = join-path -path $ofile -childpath "$([system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName))-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-LOG.txt"  ;
+    #$logfile = join-path -path $ofile -childpath "$([system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName))-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-LOG.txt"  ;
+    $logfile = $transcript.replace("-trans-log.txt","-log.txt");
     $logging = $True ;
     $smsg= "#*======v START PASS:$($ScriptBaseName) v======" ;
     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -1125,5 +1206,6 @@ Function profile-AAD-Signons {
     #stop-transcript ;
     #Cleanup
     #*======^ END SUB MAIN ^======
-} ; 
-#*------^ END Function profile-AAD-Signons.ps1 ^------
+}
+
+#*------^ End Function profile-AAD-Signons ^------
