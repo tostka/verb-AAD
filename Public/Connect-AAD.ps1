@@ -18,6 +18,13 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    # 2:44 PM 5/10/2023 fixed typo in END block ($username vs $credential.username) ; drop the UPN support, all the resolution code is built to work with a full credential.username; could fake it, but safer not to support the UPN logon ; 
+    if you want UPN logon use connect-azureAD -accountid UPN... ; added updated fault-tolerant load module block
+    rem'd unused obso code ; MFA & CBA support updates, cross compliant with EOM310 changes & fixes: 
+    Add: -UserRole & -UserPrincipalName; spec paramsets DefaultParameterSetName='UPN' ; updated UserRole to validate using global rgx; validated vaad:get-aadtoken() continues to work fine with MSAL auth lib (uses underlying )
+    added CBA object resulution, leverages verb-Auth:resolve-UserNameToUserRole(), and switches auth types on rgx'd cred.Username.
+    updated connect-azuread to use CBA AppID etc v AccountID (UPN)
+    fixed trailing END Tenant/Cred alignmnet validator, to properly work for CBA.username (lookup the auth cert FriendlyName, from the uname, and parse out the userrole/tenorg details via resolve-UserNameToUserRole()
     # 4:45 PM 7/7/2022 workaround msal.ps bug: always ipmo it FIRST: "Get-msaltoken : The property 'Authority' cannot be found on this object. Verify that the property exists."
     * 1:24 PM 3/28/2022 fixed missing `n on #669; confirmed works fine with MFA, as long as get-TenantMFA properly returns $MFA -eq $true (uses -AccountID param & prompts for MAuth logon)
     * 9:57 AM 9/17/2021 added silent to CBH
@@ -48,6 +55,8 @@ Function Connect-AAD {
     Proxyied connection support
     .PARAMETER Credential
     Credential to be used for connection
+    .PARAMETER UserRole
+    Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]
     .PARAMETER silent
     Switch to suppress all non-error echos
     .INPUTS
@@ -61,16 +70,32 @@ Function Connect-AAD {
     .LINK
     #>
     #Requires -Modules AzureAD
-    [CmdletBinding()] 
+    [CmdletBinding(DefaultParameterSetName='UPN')]
     [Alias('caad','raad','reconnect-AAD')]
     Param(
         [Parameter()][boolean]$ProxyEnabled = $False,
-        [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(ParameterSetName = 'Cred', HelpMessage = "Credential to use for this connection [-credential [credential obj variable]")]
+            [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(Mandatory = $false, HelpMessage = "Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]")]
+            # sourced from get-admincred():#182: $targetRoles = 'SID', 'CSID', 'ESVC','CSVC','UID','ESvcCBA','CSvcCBA','SIDCBA' ; 
+            #[ValidateSet("SID","CSID","UID","B2BI","CSVC","ESVC","LSVC","ESvcCBA","CSvcCBA","SIDCBA")]
+            # pulling the pattern from global vari w friendly err
+            [ValidateScript({
+                if(-not $rgxPermittedUserRoles){$rgxPermittedUserRoles = '(SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)'} ;
+                if(-not ($_ -match $rgxPermittedUserRoles)){throw "'$($_)' doesn't match `$rgxPermittedUserRoles:`n$($rgxPermittedUserRoles.tostring())" ; } ; 
+                return $true ; 
+            })]
+            [string[]]$UserRole = @('SID','CSVC'),
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
-        [switch] $silent
+            [switch] $silent
     ) ;
     BEGIN {
         $verbose = ($VerbosePreference -eq "Continue") ;
+        #if(-not (get-variable rgxCertFNameSuffix -ea 0)){$rgxCertFNameSuffix = '-([A-Z]{3})$' ; } ; 
+        if(-not $rgxCertThumbprint){$rgxCertThumbprint = '[0-9a-fA-F]{40}' } ; # if it's a 40char hex string -> cert thumbprint  
+        if(-not $rgxSmtpAddr){$rgxSmtpAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ; } ; # email addr/UPN
+        if(-not $rgxDomainLogon){$rgxDomainLogon = '^[a-zA-Z][a-zA-Z0-9\-\.]{0,61}[a-zA-Z]\\\w[\w\.\- ]+$' } ; # DOMAIN\samaccountname 
+
         $smsg = "EXEC:get-TenantMFARequirement -Credential $($Credential.username)" ; 
         if($silent){} else { 
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -82,64 +107,124 @@ Function Connect-AAD {
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         } ;         
-        $TenantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
+        $TenantTag = $TenOrg = get-TenantTag -Credential $Credential ; 
         $sTitleBarTag = @("AAD") ;
         $sTitleBarTag += $TenantTag ;
         $TenantID = get-TenantID -Credential $Credential ;
     } ;
     PROCESS {
-        # 4:45 PM 7/7/2022 workaround msal.ps bug: always ipmo it FIRST: "Get-msaltoken : The property 'Authority' cannot be found on this object. Verify that the property exists."
+        # workaround msal.ps bug: always ipmo it FIRST: "Get-msaltoken : The property 'Authority' cannot be found on this object. Verify that the property exists."
         # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
         $modname = 'MSAL.PS' ;
+        $smsg = "(load/install $($modname) module)" ; 
+        if($silent){} else { 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ;
+        $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; verbose=$true} ;
         $error.clear() ;
-        Try { Get-Module -name $modname -listavailable -ErrorAction Stop | out-null } Catch {
-            $pltInMod = [ordered]@{Name = $modname ; verbose=$false ;} ;
-            if ( $env:COMPUTERNAME -match $rgxMyBoxUID ) { $pltInMod.add('scope', 'CurrentUser') } else { $pltInMod.add('scope', 'AllUsers') } ;
-            $smsg = "Install-Module w scope:$($pltInMod.scope)`n$(($pltInMod|out-string).trim())" ;
-            if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            Install-Module @pltIMod ;
-        } ; # IsInstalled
-        $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; verbose=$false} ;
-        # this forces a specific rev into the ipmo!
-        if ($MinimumVersion) { $pltIMod.add('MinimumVersion', $MinimumVersion.tostring()) } ;
-        $error.clear() ;
-        Try { Get-Module $modname -ErrorAction Stop | out-null } Catch {
-            $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
-            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            Import-Module @pltIMod ;
+        if(-not ( Get-Module @pltIMod | out-null )){
+            Try {
+                $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                Import-Module @pltIMod ;
+            } Catch {
+                if(-not (Get-Module @pltIMod -listavailable | out-null)){
+                    if($env:computername -match $rgxMyBoxW){$pltIMod.add('scope','CurrentUser')} else { $pltIMod.add('scope','AllUsers')} ;
+                    $smsg = "MISSING $($modname)!: Install-Module? w`n$(($pltIMod|out-string).trim())" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $pltIMod.verbose = $true ; 
+                    $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ; 
+                    if ($bRet.ToUpper() -eq "YYY") {
+                        Install-Module @pltIMod ; 
+                    } else {
+                            $smsg = "Invalid response. Exiting" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        #exit 1
+                        break ; 
+                    } ; #DoInstall
+                } ;  # IsInstalled
+            } ; # NotImportable
         } ; # IsImported
 
-        $smsg = "(Check for/install AzureAD module)" ; 
+        # Note:gmo doesn't throw an error when target isn't found, have to if/then (not try/catch)
+        $modname = 'AzureAD' ; 
+        $smsg = "(load/install $($modname) module)" ; 
         if($silent){} else { 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        } ;         Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
-        $smsg = "Import-Module -Name AzureAD -MinimumVersion '2.0.0.131'" ; 
-        if($silent){} else { 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        } ;  
-       Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
+        } ;
+        $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; verbose=$true} ;
+        $error.clear() ;
+        if(-not ( Get-Module @pltIMod | out-null )){
+            Try {
+                $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                Import-Module @pltIMod ;
+            } Catch {
+                if(-not (Get-Module @pltIMod -listavailable | out-null)){
+                    if($env:computername -match $rgxMyBoxW){$pltIMod.add('scope','CurrentUser')} else { $pltIMod.add('scope','AllUsers')} ;
+                    $smsg = "MISSING $($modname)!: Install-Module? w`n$(($pltIMod|out-string).trim())" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $pltIMod.verbose = $true ; 
+                    $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ; 
+                    if ($bRet.ToUpper() -eq "YYY") {
+                        Install-Module @pltIMod ; 
+                    } else {
+                            $smsg = "Invalid response. Exiting" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        #exit 1
+                        break ; 
+                    } ; #DoInstall
+                } ;  # IsInstalled
+            } ; # NotImportable
+        } ; # IsImported
+
         #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         # with multitenants and changes between, instead we need ot test 'what tenant' we're connected to
         TRY { 
             #I'm going to assume that it's due to too many repeated req's for gAADTD
             # so lets work with & eval the local AzureSession Token instead - it's got the userid, and the tenantid, both can validate the conn, wo any queries.:
-            # ADAL call, doesn 't work with MSAL
-            #$token = get-AADToken -verbose:$($verbose) ; 
-            <#
-$connectionDetails = @{
-    'TenantId'     = 'dev.nicolonsky.ch' ;
-    'ClientId'     = '453436af-5b9d-449b-82b6-22001ee3b727' ;
-    'ClientSecret' = '3wD0xU571J6S70N-P-4oy_.ZtduB5JkQBC' | ConvertTo-SecureString -AsPlainText -Force ;
-} ;
-Get-MsalToken @connectionDetails ;                
+            
+            #$token = get-AADToken -verbose:$($verbose) ; # this actually wraps the [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens object
+            <# MSAL library calls:
+            $connectionDetails = @{
+                'TenantId'     = 'dev.nicolonsky.ch' ;
+                'ClientId'     = '453436af-5b9d-449b-82b6-22001ee3b727' ;
+                'ClientSecret' = '3wD0xU571J6S70N-P-4oy_.ZtduB5JkQBC' | ConvertTo-SecureString -AsPlainText -Force ;
+            } ;
+            Get-MsalToken @connectionDetails ;                
 
+            $connectionDetails = @{
+                'TenantId'     = $TenantID ;
+                #'ClientId'     = '453436af-5b9d-449b-82b6-22001ee3b727' ;
+                # Set well-known client ID for Azure PowerShell
+                ClientId  = "1950a258-227b-4e31-a9cf-717495945fc2"
+                'ClientSecret' = '3wD0xU571J6S70N-P-4oy_.ZtduB5JkQBC' | ConvertTo-SecureString -AsPlainText -Force ;
+            } ;
+            Get-MsalToken @connectionDetails ;    
             #>
+            <# Simpler to use get-aadtoken() call, which uses underlying intact obj (not ADAL or MSAL dependant); 
+            works direct as well: $global:token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens  ; 
+            can use direct connection status test as well:
+            if ($null -eq [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens){
+                Connect-AzureAD ;
+            } else {
+                $token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens ;
+                Write-Verbose "Connected to tenant: $($token.AccessToken.TenantId) with user: $($token.AccessToken.UserId)" ;
+            } ;
+            #>
+            $token = get-AADToken -verbose:$($verbose) ;
 
-
+            # token pull is rem'd, so the below will never validate, just jumps to catch
             if( ($null -eq $token) -OR ($token.count -eq 0)){
                 # not connected/authenticated
                 #Connect-AzureAD -TenantId $TenantID -Credential $Credential ; 
@@ -188,7 +273,11 @@ Get-MsalToken @connectionDetails ;
         }#>
         CATCH {
             
-            if(!$Credential){
+            $pltCAAD=[ordered]@{
+                ErrorAction='Stop';
+            }; 
+
+            if(-not $Credential){
                 if(get-command -Name get-admincred) {
                     Get-AdminCred ;
                 } else {
@@ -209,24 +298,138 @@ Get-MsalToken @connectionDetails ;
                 }  ;
             } ; 
 
-            $smsg = "Authenticating to AAD:$($Credential.username.split('@')[1].tostring()), w $($Credential.username)..."  ;
+            $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; 
+            #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ;
+
+            if($credential.username -match $rgxCertThumbprint){
+                $smsg =  "(UserName:Certificate Thumbprint detected)"
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $pltCAAD.Add("CertificateThumbprint", [string]$Credential.UserName);                    
+                $pltCAAD.Add("ApplicationId", [string]$Credential.GetNetworkCredential().Password);
+                if($TenantID = get-TenantID -Credential $Credential){
+                    $pltCAAD.Add("TenantId", [string]$TenantID);
+                } else { 
+                    $smsg = "UNABLE TO RESOLVE `$TENORG:$($TenOrg) TO FUNCTIONAL `$$($TenOrg)meta.o365_TenantDomain!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    throw $smsg ; 
+                    Break ; 
+                } ; 
+                #$uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; 
+                ##$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ;
+                if($uRoleReturn.TenOrg){
+                    $TenOrg = $uRoleReturn.TenOrg  ; 
+                    #$smsg = "(using CBA:cred:$($TenOrg):$([string]$tcert.friendlyname))" ; 
+                    #$smsg = "(using CBA:cred:$($TenOrg):$([string](get-childitem -path "Cert:\CurrentUser\My\$($credential.username)").FriendlyName ))" ; 
+                    #$uRoleReturn.FriendlyName
+                    $smsg = "(using CBA:cred:$($TenOrg):$([string]$uRoleReturn.FriendlyName))" ; 
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                } else {
+                    $smsg = "Unable to resolve `$credential.username ($($credential.username))"
+                    $smsg += "`nto a usable 'UserRole' spec!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    throw $smsg ;
+                    Break ;
+                } ; 
+             } else { 
+                <#  interactive ModernAuth -UserPrincipalName isn't supported, param is -AccountId
+                    -AadAccessToken <String>
+                    Specifies a Azure Active Directory Graph access token.
+                    -AccountId <String>
+                        Specifies the ID of an account. You must specify the UPN of the user when authenticating with a user access token.
+                    -ApplicationId <String>
+                        Specifies the application ID of the service principal.
+                    -AzureEnvironmentName <EnvironmentName>
+                        Specifies the name of the Azure environment. The acceptable values for this parameter are:
+                        - AzureCloud
+                        - AzureChinaCloud
+                        - AzureUSGovernment
+                        - AzureGermanyCloud
+                        The default value is AzureCloud.
+                    -CertificateThumbprint <String>
+                        Specifies the certificate thumbprint of a digital public key X.509 certificate of a user account that has permission to perform
+                        this action.
+                    -Credential <PSCredential>
+                        Specifies a PSCredential object. For more information about the PSCredential object, type Get-Help Get-Credential.
+                        The PSCredential object provides the user ID and password for organizational ID credentials.
+                    -InformationAction <ActionPreference>
+                        Specifies how this cmdlet responds to an information event. The acceptable values for this parameter are:
+                        - Continue
+                        - Ignore
+                        - Inquire
+                        - SilentlyContinue
+                        - Stop
+                        - Suspend
+                    -InformationVariable <String>
+                        Specifies a variable in which to store an information event message.
+                    -LogLevel <LogLevel>
+                        Specifies the log level. The accdeptable values for this parameter are:
+                        - Info
+                        - Error
+                        - Warning
+                        - None
+                        The default value is Info.
+                    -MsAccessToken <String>
+                        Specifies a Microsoft Graph access token.
+                    -TenantId <String>
+                        Specifies the ID of a tenant.
+                        If you do not specify this parameter, the account is authenticated with the home tenant.
+                        You must specify the TenantId parameter to authenticate as a service principal or when using Microsoft account.
+                    -Confirm [<SwitchParameter>]
+                        Prompts you for confirmation before running the cmdlet.
+                    -WhatIf [<SwitchParameter>]
+                        Shows what would happen if the cmdlet runs. The cmdlet is not run.
+                    -LogFilePath <String>
+                        The path where the log file for this PowerShell session is written to. Provide a value here if you need to deviate from the
+                        default PowerShell log file location.
+                #>
+                <# original support for -userprincipalname ; too many dependancies for use of full $credential object
+                if ($UserPrincipalName) {
+                    #$pltCAAD.Add("UserPrincipalName", [string]$UserPrincipalName);
+                    $pltCAAD.Add("AccountId", [string]$UserPrincipalName);
+                    $smsg = "(using cred:$([string]$UserPrincipalName))" ; 
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                } elseif ($Credential -AND -not $UserPrincipalName){
+                    $pltCAAD.Add("AccountId", [string]$Credential.username);
+                    $smsg = "(using cred:$($credential.username))" ; 
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                };
+                #>
+                if ($Credential){
+                    $pltCAAD.Add("AccountId", [string]$Credential.username);
+                    $smsg = "(using cred:$($credential.username))" ; 
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                } else {
+                    $smsg = "Missing dependant -Credential!" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    Break ; 
+                } ; 
+            } 
+
+            if($uRoleReturn.UserRole -match 'CBA'){ $smsg = "Authenticating to AAD:$($uRoleReturn.TenOrg), w CBA cred:$($uRoleReturn.FriendlyName)"  }
+            else {$smsg = "Authenticating to AAD:$($uRoleReturn.TenOrg), w $($Credential.username)..."  ;} ; 
             if($silent){} else { 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ; 
-            $pltCAAD=[ordered]@{
-                    ErrorAction='Stop';
-            }; 
-            if($TenantID){
+            
+            if($TenantID -AND ($pltcaad.keys -notcontains 'TenantID')){
                 $smsg = "Forcing TenantID:$($TenantID)" ; 
                 if($silent){} else { 
                     $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ;                
-                $pltCAAD.add('TenantID',$TenantID) ;
+                $pltCAAD.add('TenantID',[string]$TenantID) ;
             } 
-            if(!$MFA){
+            if(-not $MFA){
                 #Connect-AzureAD -Credential $Credential -ErrorAction Stop ;
                 $smsg = "EXEC:Connect-AzureAD -Credential $($Credential.username) (no MFA, full credential)" ; 
                 if($silent){} else { 
@@ -237,14 +440,18 @@ Get-MsalToken @connectionDetails ;
                 if($Credential.username){$pltCAAD.add('Credential',$Credential)} ;
             } else {
                 #Connect-AzureAD -AccountID $Credential.userName ;
-                $smsg = "EXEC:Connect-AzureAD -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
-                if($silent){} else { 
-                    $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                } ;                
-
-                if($Credential.username){$pltCAAD.add('AccountId',$Credential.username)} ;
+                #$smsg = "EXEC:Connect-AzureAD -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
+                if($token){
+                    if($silent){} else { 
+                        $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ;                
+                } ; 
+                if($pltcaad.keys -notcontains 'ApplicationId' -AND $pltcaad.keys -notcontains 'CertificateThumbprint' -AND $pltcaad.keys -notcontains 'AccountId'){
+                    # add UPN AccountID logon, if missing and non-CBA
+                    if($Credential.username -AND ($pltCAAD.keys -notcontains 'AccountId') ){$pltCAAD.add('AccountId',$Credential.username)} ;
+                } 
             } ;
 
             $smsg = "Connect-AzureAD w`n$(($pltCAAD|out-string).trim())" ; 
@@ -264,11 +471,16 @@ Get-MsalToken @connectionDetails ;
                 } else {
                     if($silent){} else { 
                         $smsg = "(single Tenant connection returned)" 
-                        if($silent){} else { 
-                            $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                        } ;
+                        # need to reqry the token for updated status
+                        #$token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens ; # direct call option
+                        $token = get-AADToken -verbose:$($verbose) ;
+                        if($token){
+                            if($silent){} else { 
+                                $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            } ;
+                        } ; 
                     } ; 
                 } ; 
             } CATCH {
@@ -307,21 +519,25 @@ Get-MsalToken @connectionDetails ;
             # not connected/authenticated
             #Connect-AzureAD -TenantId $TenantID -Credential $Credential ; 
             #throw "" # gen an error to dump into generic CATCH block
-        } else { 
-            <# borked by psreadline v1/v2 breaking changes
-            if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
-                $smsg = "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
-                $Host.UI.RawUI.BackgroundColor = $PSBgColor
-                $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
-            } ;
-            #>
+        } else {             
             if($silent){} else { 
                 $smsg = "Connected to Tenant:`n$(($token.AccessToken | ft -a TenantId,UserId,LoginType|out-string).trim())" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ; 
+            $TokenTag = convert-TenantIdToTag -TenantId $TenantId ;    
+            if( $credential.username -match $rgxCertThumbprint) {
+                if($tcert = get-childitem -path "Cert:\CurrentUser\My\$($credential.username)"){
+                    $certTag = [regex]::match($tcert.friendlyname,$rgxCertFNameSuffix).captures[0].groups[1].value ;
+                }else {
+                    $smsg = "CBA Certificate Thumprint cred uname detected, but unable to locate the assoicated cert in CU\My!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    break ;
+                }
+            } ; 
             if(($token.AccessToken).userid -eq $Credential.username){
-                $TokenTag = convert-TenantIdToTag -TenantId $TenantId ;                    
+                #$TokenTag = convert-TenantIdToTag -TenantId $TenantId ;                    
                 $smsg = "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
                 if($silent){} else { 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -331,11 +547,17 @@ Get-MsalToken @connectionDetails ;
                 $sTitleBarTag = @("AAD") ;
                 $sTitleBarTag +=  $TokenTag ;# $TenOrg ;
                 Add-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");
+            }elseif( ($credential.username -match $rgxCertThumbprint) -AND ((Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_Prefix -eq $uRoleReturn.TenOrg  )){
+                # compare cert friendlyname suffix (TenOrg equiv) to $xxxMeta.o365_Prefix
+                # validate that the connected AAD is to the CBA Cert tenant
+                $smsg = "(AAD Authenticated & Functional CBA cert:$($certTag),($($tcert.friendlyname)))" ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;        
             } else { 
                 $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).TenantID  -verbose:$($verbose) ; 
                 $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                 Disconnect-AzureAD ; 
                 throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
             } ; 
