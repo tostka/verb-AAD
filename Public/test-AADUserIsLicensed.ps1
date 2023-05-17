@@ -39,7 +39,6 @@ function test-AADUserIsLicensed {
      Param(
         [Parameter(Position=0,Mandatory=$True,HelpMessage="Either Msoluser object or UserPrincipalName for user[-User upn@domain.com|`$msoluserobj ]")]
         [Microsoft.Open.AzureAD.Model.User]$User
-        #[switch]$silent # removed, there's no echos enabled
     )
     BEGIN {
         #${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;

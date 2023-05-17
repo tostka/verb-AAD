@@ -1,6 +1,6 @@
 ﻿# get-AADUserLicenseDetails
 
-#*------v get-AADUserLicenseDetails.ps1 v------
+#*------v get-AADUserLicenseDetails.ps1 v------ 
 Function get-AADUserLicenseDetails {
     <#
     .SYNOPSIS
