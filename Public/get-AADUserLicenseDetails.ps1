@@ -1,57 +1,88 @@
 ﻿# get-AADUserLicenseDetails
 
-#*------v get-AADUserLicenseDetails.ps1 v------ 
+#*------v get-AADUserLicenseDetails.ps1 v------
 Function get-AADUserLicenseDetails {
     <#
     .SYNOPSIS
-    get-AADUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD/MSOL)
+    get-AADUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD)
     .NOTES
-    Updated By: : Todd Kadrie
-    Website:	http://tinstoys.blogspot.com
-    Twitter:	http://twitter.com/tostka
-    Based on work by :Brad Wyatt
-    Website: https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2022-
+    FileName    : 
+    License     : MIT License
+    Copyright   : (c) 2022 Todd Kadrie
+    Github      : https://github.com/tostka/verb-XXX
+    Tags        : Powershell
+    AddedCredit : Brad Wyatt
+    AddedWebsite:	https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
+    AddedTwitter:	URL
     REVISIONS   :
+    * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
+    * 8:30 AM 5/22/2023 add: 7pswl support; fixed to IndexOnName =$false ; ; removed ValueFromPipelineByPropertyName ; 
+    * 10:13 AM 5/19/2023 err suppress: test for lic assignment before trying to indexed-hash lookup; add echo on no-license status ; 
+    * 4:43 PM 5/17/2023 rounded out params for $pltRXO passthru
+    * 8:15 AM 12/21/2022 updated CBH; sub'd out showdebug for w-v
     * 2:02 PM 3/23/2022 convert verb-aad:get-MsolUserLicensedetails -> get-AADUserLicenseDetails (Msonline -> AzureAD module rewrite)
     .DESCRIPTION
     get-AADUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD)
-    Based on the core lic hash & lookup code in Brad's "Get Friendly License Name for all Users in Office 365 Using PowerShell" script
+    Originally inspired by the MSOnline/MSOL-based core lic hash & lookup code in Brad's "Get Friendly License Name for all Users in Office 365 Using PowerShell" script. Since completely rewritten for AzureAD module, expanded output details. 
     .PARAMETER UPNs
     Array of Userprincipalnames to be looked up
-    .PARAMETER ShowDebug
-    Parameter to display Debugging messages [-ShowDebug switch]
     .PARAMETER Credential
     Credential to be used for connection
+    .PARAMETER silent
+    Switch to specify suppression of all but warn/error echos.(unimplemented, here for cross-compat)
+    .PARAMETER ShowDebug
+    Debugging Flag (use -verbose; retained solely for legacy compat)[-showDebug]
+
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
-    Returns an object with LastDirSyncTime, expressed as TimeGMT & TimeLocal
+    Returns objects summarizing each of the AADUser's licenses (User DisplayName, UserPrincipalName, LicAccountSkuID, LicenseFriendlyName)
     .EXAMPLE
-    get-AADUserLicenseDetails -UPNs fname.lname@domain.com ;
+    PS> get-AADUserLicenseDetails -UPNs fname.lname@domain.com ;
     Retrieve MSOL License details on specified UPN
     .EXAMPLE
-    $EXOLicDetails = get-AADUserLicenseDetails -UPNs $exombx.userprincipalname -showdebug:$($showdebug)
-    Retrieve MSOL License details on specified UPN, with showdebug specified
+    PS> $EXOLicDetails = get-AADUserLicenseDetails -UPNs $exombx.userprincipalname
+    Retrieve MSOL License details on specified UPN
     .LINK
+    https://github.com/tostka/verb-AAD
     https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     #>
-    
     Param(
-        [Parameter(Position = 0, Mandatory = $True, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true, HelpMessage = "An array of MSolUser objects")][ValidateNotNullOrEmpty()]
-        [alias('Userprincipalname')]
-        [string]$UPNs,
-        [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
-        [Parameter(HelpMessage = "Debugging Flag [-showDebug]")][switch] $showDebug
+        [Parameter(Position = 0, Mandatory = $False, ValueFromPipeline = $true, HelpMessage = "An array of MSolUser objects")][ValidateNotNullOrEmpty()]
+            [alias('Userprincipalname')]
+            [string]$UPNs,
+        [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
+            [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+            [switch] $silent,
+        [Parameter(HelpMessage = "Debugging Flag (use -verbose; retained solely for legacy compat)[-showDebug]")]
+            [switch] $showDebug
     ) ;
     ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
     $Verbose = ($VerbosePreference -eq 'Continue') ;
     
-    $Retries = 4 ;
-    $RetrySleep = 5 ;
-    #Connect-AAD ;
-    #Connect-Msol ;
-    Connect-AAD -Credential:$Credential -verbose:$($verbose) -silent ;
 
+    if(-not $DoRetries){$DoRetries = 4 } ;    # # times to repeat retry attempts
+    if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
+
+    # reconstruct RXO for pass-on
+    # downstream commands
+    $pltRXO = [ordered]@{
+        Credential = $Credential ;
+        verbose = $($VerbosePreference -eq "Continue")  ;
+    } ;
+    if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+        $pltRxo.add('Silent',$silent) ;
+    } ;
+    # default connectivity cmds - force silent false
+    $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
+    if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
+    Connect-AAD @pltRXOC ;
 
     # [Product names and service plan identifiers for licensing in Azure Active Directory | Microsoft Docs](https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference)
 
@@ -201,19 +232,22 @@ Function get-AADUserLicenseDetails {
         "YAMMER_MIDSIZE"                     = "Yammer"
     }
 
+    # $AADUser
     Foreach ($User in $UPNs) {
-        if ($showdebug) { write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Getting all licenses for $($User)..."  ; } ;
-
+        $smsg = "$((get-date).ToString('HH:mm:ss')):Getting all licenses for $($User)..."  ;  ;
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         $Exit = 0 ;
         Do {
             Try {
 
-                $pltGLPList=[ordered]@{ 
-                    TenOrg= $TenOrg; 
-                    IndexOnName =$true ;
-                    verbose=$($VerbosePreference -eq "Continue") ; 
-                    credential= $Credential ;
-                    #$pltRXO.credential ; 
+                $pltGLPList = [ordered]@{ 
+                    TenOrg = $TenOrg; 
+                    #IndexOnName =$true ;
+                    IndexOnName =$false ;
+                    verbose = $($VerbosePreference -eq "Continue") ; 
+                    credential = $Credential ;
+                    silent = $false ; 
                     erroraction = 'STOP' ;
                 } ;
                 $smsg = "get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ; 
@@ -223,7 +257,11 @@ Function get-AADUserLicenseDetails {
                 
                 #$MsolU = Get-MsolUser -UserPrincipalName $User ;
 
-                $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
+                $pltGAADU=[ordered]@{
+                    ObjectID = $user ;
+                    ErrorAction = 'STOP' ;
+                    verbose = ($VerbosePreference -eq "Continue") ;
+                } ; 
                 $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
@@ -234,22 +272,43 @@ Function get-AADUserLicenseDetails {
                 $Licenses = $AADUser.AssignedLicenses.skuid ; 
                 # come back as lic guids, not TENANT:guid
                 # have to be converted to suit
-                $Licenses = $Licenses |%{$skus[$_].SkuPartNumber ; } ; 
-
-                $Exit = $Retries ;
+                if($Licenses){
+                    $Licenses = $Licenses |foreach-object{$skus[$_].SkuPartNumber ; } ; 
+                } else { 
+                    $smsg = "AADU:$($AADUser.userprincipalname) *has no* .AssignedLicenses.skuid's: No assigned licenses" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                } ; 
+                $Exit = $DoRetries ;
             } Catch {
                 Start-Sleep -Seconds $RetrySleep ;
                 $Exit ++ ;
-                Write-Verbose "Failed to exec cmd because: $($Error[0])" ;
-                Write-Verbose "Try #: $Exit" ;
-                If ($Exit -eq $Retries) { Write-Warning "Unable to exec cmd!" } ;
+                $smsg = "Failed to exec cmd because: $($Error[0])" ;
+                $smsg += "`nWWTry #: $Exit" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
+                If ($Exit -eq $DoRetries) {
+                    $smsg = "Unable to exec cmd!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                } ;
             }  ;
-        } Until ($Exit -eq $Retries) ;
+        } Until ($Exit -eq $DoRetries) ;
 
         $AggregLics = @() ;
         
+        if(($Licenses|measure-object).count -eq 0){
+            $smsg = "$($AADUser.userprincipalname).AssignedLicenses.skuid is *empty*: User UN-Licensed" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+        } ; 
         Foreach ($License in $Licenses) {
-            if ($showdebug) { Write-Host "Finding $License in the Hash Table..." -ForegroundColor White }
+            $smsg = "Finding $License in the Hash Table..." ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             #$LicenseItem = $License -split ":" | Select-Object -Last 1
             #$TextLic = $Sku.Item("$LicenseItem")
             $TextLic = $sku[$License] ; 
@@ -284,7 +343,7 @@ Function get-AADUserLicenseDetails {
     } # if-E
 
 
-    $AggregLics | write-output ; # 11:33 AM 1/9/2019 export the aggreg, NewObject02 was never more than a single lic
+    $AggregLics | write-output ; # export the aggreg, NewObject02 was never more than a single lic
 }
 
 #*------^ get-AADUserLicenseDetails.ps1 ^------
