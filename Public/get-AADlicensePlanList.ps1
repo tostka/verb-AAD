@@ -1,4 +1,6 @@
-﻿#*------v get-AADlicensePlanList.ps1 v------
+﻿# get-AADlicensePlanList
+
+#*------v get-AADlicensePlanList.ps1 v------
 function get-AADlicensePlanList {
     <#
     .SYNOPSIS
@@ -14,6 +16,8 @@ function get-AADlicensePlanList {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/
     REVISIONS
+    * 2:33 PM 5/17/2023 added cred/silent/pltrxo support; 
+    * 3:19 PM 5/15/2023 get-AADlicensePlanList() works w latest aad/exo-eom updates
     * 12:54 PM 3/24/2022 added addition of resolved 'friendlyname' (via verb-aad:get-AADLicenseFullName), to the datatable returned, when in NON-Raw mode
     * 4:37 PM 3/23/2022 rem'd spurious managedby param
     * 9:31 AM 3/22/2022 add: 
@@ -31,8 +35,10 @@ function get-AADlicensePlanList {
     Switch specifies to return the raw get-AADlicensePlanList properties, indexed on SkuID
     .PARAMETER IndexOnName
     Switch specifies to return the raw get-AADlicensePlanList properties, indexed on Name (for name -> details/skuid lookups; default is indexed on SkuID for sku->details/name lookups)
-    .PARAMETER Credential
-    Credential to be used for connection
+     .PARAMETER  Credential
+    Credential to use for this connection [-credential 'account@domain.com']
+    .PARAMETER silent
+    Switch to specify suppression of all but warn/error echos.
     .PARAMETER ShowDebug
     Parameter to display Debugging messages [-ShowDebug switch]
     .PARAMETER Whatif
@@ -108,13 +114,17 @@ function get-AADlicensePlanList {
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM(
-        [switch]$Raw,
-        [switch]$IndexOnName,
+        [Parameter(Mandatory=$false,HelpMessage="Switch specifies to return the raw get-AADlicensePlanList properties, indexed on SkuID")]
+            [switch]$Raw,
+        [Parameter(Mandatory=$false,HelpMessage="Switch specifies to return the raw get-AADlicensePlanList properties, indexed on Name (for name -> details/skuid lookups; default is indexed on SkuID for sku->details/name lookups)")]
+            [switch]$IndexOnName,
         [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
-        [ValidateNotNullOrEmpty()]
-        [string]$TenOrg = $global:o365_TenOrgDefault,
-        [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
-        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+            [ValidateNotNullOrEmpty()]
+            [string]$TenOrg = $global:o365_TenOrgDefault,
+        [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
+            [System.Management.Automation.PSCredential]$Credential,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+            [switch] $silent,
         [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
         [switch] $showDebug,
         [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
@@ -131,6 +141,17 @@ function get-AADlicensePlanList {
         $propsAADL = 'SkuId',  'SkuPartNumber',  @{name='Enabled';Expression={$_.PrepaidUnits.enabled }},  
             @{name='Consumed';Expression={$_.ConsumedUnits} }, @{name='Available';Expression={$_.PrepaidUnits.enabled - $_.ConsumedUnits} }, 
             @{name='Warning';Expression={$_.PrepaidUnits.warning} }, @{name='Suspended';Expression={$_.PrepaidUnits.suspended} } ;
+
+        # downstream commands
+        $pltRXO = [ordered]@{
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+            silent = $silent ; 
+        } ;
+        # default connectivity cmds
+        # default connectivity cmds - force silent false
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
+        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
     } ;
     PROCESS {
         $Error.Clear() ;
@@ -145,7 +166,7 @@ function get-AADlicensePlanList {
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $licensePlanList = $null ; 
 
-        Connect-AAD -Credential:$Credential -verbose:$($verbose) -silent ;
+        Connect-AAD @pltRXOC ; 
 
         $error.clear() ;
         TRY {
