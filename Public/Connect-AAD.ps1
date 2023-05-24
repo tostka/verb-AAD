@@ -1,4 +1,6 @@
-﻿#*------v Connect-AAD.ps1 v------
+﻿# Connect-AAD.ps1
+
+#*------v Connect-AAD.ps1 v------
 Function Connect-AAD {
     <#
     .SYNOPSIS
@@ -18,6 +20,8 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 4:13 PM 5/22/2023 removed msal code ; updated w silent support, and full wlt; 
+    * 10:05 AM 5/19/2023 added trailing certy fn after token citations
     * 2:59 PM 5/15/2023 simplified manual cred/tenant alignment code to simpler resolve-UserNameToUserRole  tests against token.tenantid; purged rem'd code
     * 6:27 PM 5/12/2023 fixed logic in fault ipmo block ; revised tenant/cred align validation to use resolve-UserNameToUserRole
     # 2:44 PM 5/10/2023 fixed typo in END block ($username vs $credential.username) ; drop the UPN support, all the resolution code is built to work with a full credential.username; could fake it, but safer not to support the UPN logon ; 
@@ -113,12 +117,14 @@ Function Connect-AAD {
         $sTitleBarTag = @("AAD") ;
         $sTitleBarTag += $TenantTag ;
         $TenantID = get-TenantID -Credential $Credential ;
+
     } ;
     PROCESS {
         # workaround msal.ps bug: always ipmo it FIRST: "Get-msaltoken : The property 'Authority' cannot be found on this object. Verify that the property exists."
         # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
         # Note:gmo doesn't throw an error when target isn't found, have to if/then (not try/catch); 
         # also don't if(xxx| out-null): it doesn't eval as 'true', _ever_ (capt/assign output to a vari to dump). 
+        <#
         $modname = 'MSAL.PS' ;
         $smsg = "(load/install $($modname) module)" ; 
         if($silent){} else { 
@@ -155,7 +161,7 @@ Function Connect-AAD {
                 } ;  # IsInstalled
             } ; # NotImportable
         } ; # IsImported
-
+        #>
         # Note:gmo doesn't throw an error when target isn't found, have to if/then (not try/catch); 
         # also don't if(xxx| out-null): it doesn't eval as 'true', _ever_ (capt/assign output to a vari to dump). 
         $modname = 'AzureAD' ; 
@@ -202,23 +208,6 @@ Function Connect-AAD {
             # so lets work with & eval the local AzureSession Token instead - it's got the userid, and the tenantid, both can validate the conn, wo any queries.:
             
             #$token = get-AADToken -verbose:$($verbose) ; # this actually wraps the [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens object
-            <# MSAL library calls:
-            $connectionDetails = @{
-                'TenantId'     = 'dev.nicolonsky.ch' ;
-                'ClientId'     = '453436af-5b9d-449b-82b6-22001ee3b727' ;
-                'ClientSecret' = '3wD0xU571J6S70N-P-4oy_.ZtduB5JkQBC' | ConvertTo-SecureString -AsPlainText -Force ;
-            } ;
-            Get-MsalToken @connectionDetails ;                
-
-            $connectionDetails = @{
-                'TenantId'     = $TenantID ;
-                #'ClientId'     = '453436af-5b9d-449b-82b6-22001ee3b727' ;
-                # Set well-known client ID for Azure PowerShell
-                ClientId  = "1950a258-227b-4e31-a9cf-717495945fc2"
-                'ClientSecret' = '3wD0xU571J6S70N-P-4oy_.ZtduB5JkQBC' | ConvertTo-SecureString -AsPlainText -Force ;
-            } ;
-            Get-MsalToken @connectionDetails ;    
-            #>
             <# Simpler to use get-aadtoken() call, which uses underlying intact obj (not ADAL or MSAL dependant); 
             works direct as well: $global:token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens  ; 
             can use direct connection status test as well:
@@ -229,24 +218,33 @@ Function Connect-AAD {
                 Write-Verbose "Connected to tenant: $($token.AccessToken.TenantId) with user: $($token.AccessToken.UserId)" ;
             } ;
             #>
-            write-verbose "resolve-UserNameToUserRole -UserName $($Credential.username)..." ; 
+            $smsg = "resolve-UserNameToUserRole -UserName $($Credential.username)..." ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; 
             #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ; 
-            write-verbose "get-AADToken..." ; 
+            $smsg = "get-AADToken..." ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             $token = get-AADToken -verbose:$($verbose) ;
-            write-verbose "convert-TenantIdToTag -TenantId $(($token.AccessToken).tenantid) (`$token.AccessToken).tenantid)" ; 
+            $smsg = "convert-TenantIdToTag -TenantId $(($token.AccessToken).tenantid) (`$token.AccessToken).tenantid)" ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             # convert token.tenantid to the 3-letter TenOrg
             $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid -verbose:$($verbose) ; 
-
+            #$Tenantdomain = convert-TenantIdToDomainName -TenantId ($token.AccessToken).tenantid ;
             if( ($null -eq $token) -OR ($token.count -eq 0)){
                 # not connected/authenticated
                 #Connect-AzureAD -TenantId $TenantID -Credential $Credential ; 
                 throw "" # gen an error to dump into generic CATCH block
             }elseif($token.count -gt 1){
-                write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MULTIPLE TOKENS RETURNED!`n$(( ($token.AccessToken) | ft -a  TenantId,UserId,LoginType |out-string).trim())" ; 
+                $smsg = "MULTIPLE TOKENS RETURNED!`n$(( ($token.AccessToken) | ft -a  TenantId,UserId,LoginType |out-string).trim())" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 # want to see if this winds up with a stack of parallel tokens
             } else {
                 $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ;  
+                $smsg += "`n$($urolereturn.TenOrg):$($urolereturn.UserRole)" ; 
                 if($silent){} else { 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -308,7 +306,7 @@ Function Connect-AAD {
                             } ; 
                     } ;
                     if(!$Credential){
-                        write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
+                        $smsg = "WHY$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
                         $Credential = Get-Credential ; 
                     } ;
                 }  ;
@@ -440,6 +438,7 @@ Function Connect-AAD {
                 $smsg = "Forcing TenantID:$($TenantID)" ; 
                 if($silent){} else { 
                     $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                    $smsg += "`n$($urolereturn.TenOrg):$($urolereturn.UserRole)" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ;                
@@ -450,6 +449,7 @@ Function Connect-AAD {
                 $smsg = "EXEC:Connect-AzureAD -Credential $($Credential.username) (no MFA, full credential)" ; 
                 if($silent){} else { 
                     $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                    $smsg += "`n$($urolereturn.TenOrg):$($urolereturn.UserRole)" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ;                
@@ -460,6 +460,7 @@ Function Connect-AAD {
                 if($token.AccessToken.AccessToken){
                     if($silent){} else { 
                         $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                        $smsg += "`n$($urolereturn.TenOrg):$($urolereturn.UserRole)" ; 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     } ;                
@@ -494,6 +495,7 @@ Function Connect-AAD {
                         if($token.AccessToken.AccessToken){
                             if($silent){} else { 
                                 $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                                $smsg += "`n$($urolereturn.TenOrg):$($urolereturn.UserRole)" ; 
                                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                             } ;
@@ -531,11 +533,16 @@ Function Connect-AAD {
         } ; # CATCH-E # err indicates no authenticated connection
     } ;  # PROC-E
     END {
-        write-verbose "get-AADToken..." ;
+        $smsg = "get-AADToken..." ;
+        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         $token = get-AADToken -verbose:$($verbose) ;
-        write-verbose "convert-TenantIdToTag -TenantId $(($token.AccessToken).tenantid) (`$token.AccessToken).tenantid)" ;
+        $smsg = "convert-TenantIdToTag -TenantId $(($token.AccessToken).tenantid) (`$token.AccessToken).tenantid)" ;
+        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         # convert token.tenantid to the 3-letter TenOrg
         $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid -verbose:$($verbose) ;
+        $Tenantdomain = convert-TenantIdToDomainName -TenantId ($token.AccessToken).tenantid ;
         if( ($null -eq $token) -OR ($token.count -eq 0)){
             $smsg = "NOT authenticated to any o365 Tenant AzureAD!" ; 
             if($credential.username -match $rgxCertThumbprint){
@@ -551,6 +558,7 @@ Function Connect-AAD {
             Connect-AAD -Credential $Credential -verbose:$($verbose) -Silent:$false  ; 
         } else {
             $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ;
+            $smsg += "`n$($urolereturn.TenOrg):$($urolereturn.UserRole)" ; 
             if($silent){} else {
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -583,4 +591,5 @@ Function Connect-AAD {
 
     } ; # END-E
 }
+
 #*------^ Connect-AAD.ps1 ^------
