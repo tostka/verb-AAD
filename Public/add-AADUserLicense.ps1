@@ -1,4 +1,6 @@
-﻿#*------v add-AADUserLicense.ps1 v------
+﻿# add-AADUserLicense
+
+#*------v add-AADUserLicense.ps1 v------
 function add-AADUserLicense {
     <#
     .SYNOPSIS
@@ -18,6 +20,8 @@ function add-AADUserLicense {
     AddedWebsite:	
     AddedTwitter:	
     REVISIONS
+    * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
+    * 4:31 PM 5/17/2023  rounded out params for $pltRXO passthru
     * 2:35 PM 8/12/2022 expanded echo on lic attempt
     * 10:30 AM 3/24/2022 add pipeline support
     2:28 PM 3/22/2022 init; confirmed functional
@@ -27,6 +31,10 @@ function add-AADUserLicense {
     Array of User Userprincipal/Guids to have the specified license applied
     .PARAMETER  skuid
     Azure LicensePlan SkuID for the license to be applied to the users.
+    .PARAMETER  Credential
+    Credential to use for this connection [-credential 'account@domain.com']
+    .PARAMETER silent
+    Switch to specify suppression of all but warn/error echos.
     .PARAMETER Whatif
     Parameter to run a Test no-change pass [-Whatif switch]
     .PARAMETER Silent
@@ -49,29 +57,38 @@ function add-AADUserLicense {
     [CmdletBinding()]
     PARAM (
         # ValueFromPipeline: will cause params to match on matching type, [array] input -> [array]$param
-        [Parameter(Mandatory=$false,ValueFromPipeline=$true)]
-        [ValidateNotNullOrEmpty()]
-        [string[]]$Users, 
-        [string]$skuid,
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true,HelpMessage="User identifiers")]
+            [ValidateNotNullOrEmpty()]
+            [string[]]$Users, 
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true,HelpMessage="LicenseSkuId")]
+            [string]$skuid,
         [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
-        [ValidateNotNullOrEmpty()]
-        [string]$TenOrg = $global:o365_TenOrgDefault,
-        [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
-        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
-        [switch]$whatif,
-        [switch]$silent
+            [ValidateNotNullOrEmpty()]
+            [string]$TenOrg = $global:o365_TenOrgDefault,
+        [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
+            [System.Management.Automation.PSCredential]$Credential,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+            [switch] $silent,
+        [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
+            [switch] $whatIf
     ) ;
     BEGIN {
         ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
         
+        # downstream commands
         $pltRXO = [ordered]@{
-            Credential = $Credential 
-            verbose = $($VerbosePreference -eq 'Continue') ;
-            silent = $true ; # always silent, echo only warn/errors
-        } ; 
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+            $pltRxo.add('Silent',$silent) ;
+        } ;
+        # default connectivity cmds - force silent false
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
+        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
         #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
-        Connect-AAD @pltRXO ;         
+        Connect-AAD @pltRXOC ;         
         
         # check if using Pipeline input or explicit params:
         if ($PSCmdlet.MyInvocation.ExpectingInput) {
@@ -101,25 +118,7 @@ function add-AADUserLicense {
             } ; 
             $error.clear() ;
             TRY {
-                <# rem out search string option - if we're mandating UPN/guids, it's always going to fail the initial attempt, skip it, odds of feeding it a dname etc is low
-                $pltGAADU=[ordered]@{ SearchString = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
-                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
-                $AADUser = Get-AzureADUser @pltGAADU ; 
-                if (-not $AADUser) {
                 
-                    $smsg = "Failed: Get-AzureADUser -SearchString $($pltGAADU.searchstring)" ; 
-                    $smsg += "`nretrying as -objectid..." ; 
-                    if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
-                    $pltGAADU.remove('SearchString') ; 
-                    $pltGAADU.Add("ObjectID",$user) ; 
-                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
-                    $AADUser = Get-AzureADUser @pltGAADU ;         
-                } ; 
-                #>
                 $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
                 $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -139,7 +138,7 @@ function add-AADUserLicense {
                             whatif = $($whatif) ;
                             verbose = ($VerbosePreference -eq "Continue") ;
                         } ;
-                        $smsg = "set-AADUserUsageLocationw`n$(($spltSAADUUL|out-string).trim())" ; 
+                        $smsg = "set-AADUserUsageLocation w`n$(($spltSAADUUL|out-string).trim())" ; 
                         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                         $bRet = set-AADUserUsageLocation @spltSAADUUL ; 
