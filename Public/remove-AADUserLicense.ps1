@@ -1,4 +1,6 @@
-﻿#*----------v Function remove-AADUserLicense() v----------
+﻿# remove-AADUserLicense.ps1
+
+#*----------v Function remove-AADUserLicense() v----------
 function remove-AADUserLicense {
     <#
     .SYNOPSIS
@@ -18,6 +20,9 @@ function remove-AADUserLicense {
     AddedWebsite:	
     AddedTwitter:	
     REVISIONS
+    * 3:25 PM 5/24/2023 rem'd purge; flip the set echo to wlt
+    * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
+    4:48 PM 5/17/2023rounded out params for $pltRXO passthru ; $TenOrg = $global:o365_TenOrgDefault, ; fixed half-written port from add-aaduserlic (record removals vs adds) ; 
     * 10:30 AM 3/24/2022 add pipeline support
     * 4:08 PM 3/22/2022 init; simple conversion of add-AADUserLicense; verified functional
     .DESCRIPTION
@@ -27,11 +32,11 @@ function remove-AADUserLicense {
     .PARAMETER  skuid
     Azure LicensePlan SkuID for the license to be applied to the users.
     .PARAMETER Credential
-    Credentials [-Credentials [credential object]
+    Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]
+    .PARAMETER silent
+    Switch to specify suppression of all but warn/error echos.(unimplemented, here for cross-compat)
     .PARAMETER Whatif
     Parameter to run a Test no-change pass [-Whatif switch]
-    .PARAMETER Silent
-    Suppress all but error, warn or verbose outputs
     .EXAMPLE
     PS> $lplistn = get-AADlicensePlanList -IndexOnName ; 
     PS> $skuid = $lplistn['EXCHANGESTANDARD'].skuid ; 
@@ -62,21 +67,29 @@ function remove-AADUserLicense {
         [ValidateNotNullOrEmpty()]
         [string]$TenOrg = $global:o365_TenOrgDefault,
         [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]")]
-        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
-        [switch]$whatif,
-        [switch]$silent
+            [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+            [switch] $silent,
+        [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
+            [switch] $whatIf
     ) ;
     BEGIN {
         ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
         
+        # downstream commands
         $pltRXO = [ordered]@{
-            Credential = $Credential 
-            verbose = $($VerbosePreference -eq 'Continue') ;
-            silent = $true ; # always silent, echo only warn/errors
-        } ; 
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+            $pltRxo.add('Silent',$silent) ;
+        } ;
+        # default connectivity cmds - force silent false
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
+        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
         #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
-        Connect-AAD @pltRXO ; 
+        Connect-AAD @pltRXOC ; 
         
         # check if using Pipeline input or explicit params:
         if ($PSCmdlet.MyInvocation.ExpectingInput) {
@@ -106,25 +119,7 @@ function remove-AADUserLicense {
             } ; 
             $error.clear() ;
             TRY {
-                <# rem out search string option - if we're mandating UPN/guids, it's always going to fail the initial attempt, skip it, odds of feeding it a dname etc is low
-                $pltGAADU=[ordered]@{ SearchString = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
-                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
-                $AADUser = Get-AzureADUser @pltGAADU ; 
-                if (-not $AADUser) {
                 
-                    $smsg = "Failed: Get-AzureADUser -SearchString $($pltGAADU.searchstring)" ; 
-                    $smsg += "`nretrying as -objectid..." ; 
-                    if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
-                    $pltGAADU.remove('SearchString') ; 
-                    $pltGAADU.Add("ObjectID",$user) ; 
-                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
-                    $AADUser = Get-AzureADUser @pltGAADU ;         
-                } ; 
-                #>
                 $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
                 $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -141,12 +136,16 @@ function remove-AADUserLicense {
                         $spltSAADUUL = [ordered]@{ 
                             ObjectID = $AADUser.UserPrincipalName ;
                             UsageLocation = "US" ;
+                            Credential = $pltRXO.Credential ; 
+                            verbose = $pltRXO.verbose  ; 
+                            silent = $false ; 
                             whatif = $($whatif) ;
-                            verbose = ($VerbosePreference -eq "Continue") ;
                         } ;
                         $smsg = "set-AADUserUsageLocationw`n$(($spltSAADUUL|out-string).trim())" ; 
-                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                         $bRet = set-AADUserUsageLocation @spltSAADUUL ; 
                         if($bRet.Success){
                             $smsg = "set-AADUserUsageLocation updated UsageLocation:$($bRet.AzureADuser.UsageLocation)" ; 
@@ -209,9 +208,11 @@ function remove-AADUserLicense {
                             verbose = $($VerbosePreference -eq "Continue") ;
                         } ;
                         $smsg = "Set-AzureADUserLicense w`n$(($pltSAADUL|out-string).trim())" ; 
-                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-
+                        $smsg += "`naddLicenses:$(($pltSAADUL.AssignedLicenses.addLicenses|out-string).trim())" ; 
+                        $smsg += "`nremoveLicenses:$(($pltSAADUL.AssignedLicenses.removeLicenses|out-string).trim())" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                         if (-not $whatif) {
                             Set-AzureADUserLicense @pltSAADUL ;
                                 
