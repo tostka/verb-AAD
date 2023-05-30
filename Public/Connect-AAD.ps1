@@ -20,6 +20,13 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    *3:15 PM 5/30/2023 Updates to support either -Credential, or -UserRole + -TenOrg, to support fully portable downstream credentials: 
+        - Add -UserRole & explicit -TenOrg params
+        - Drive TenOrg defaulted $global:o365_TenOrgDefault, or on $env:userdomain
+        - use the combo thru get-TenantCredential(), then set result to $Credential
+        - if using Credential, the above are backed out via get-TenantTag() on the $credential 
+        - CBA identifiers are resolve always via $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ;
+        removed some redundant & rem'd code
     * 4:13 PM 5/22/2023 removed msal code ; updated w silent support, and full wlt; 
     * 10:05 AM 5/19/2023 added trailing certy fn after token citations
     * 2:59 PM 5/15/2023 simplified manual cred/tenant alignment code to simpler resolve-UserNameToUserRole  tests against token.tenantid; purged rem'd code
@@ -60,9 +67,11 @@ Function Connect-AAD {
     .PARAMETER  ProxyEnabled
     Proxyied connection support
     .PARAMETER Credential
-    Credential to be used for connection
+    Credential to use for this connection [-credential [credential obj variable]
     .PARAMETER UserRole
-    Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]
+    Credential User Role spec for credential discovery (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]
+    .PARAMETER TenOrg
+        Optional Tenant Tag (wo -Credential)[-TenOrg 'XYZ']
     .PARAMETER silent
     Switch to suppress all non-error echos
     .INPUTS
@@ -71,8 +80,13 @@ Function Connect-AAD {
     None. Returns no objects or output.
     .EXAMPLE
     Connect-AAD
+    Demo connect using defaulted config (default profile driven TenOrg & UserRole spec)
     .EXAMPLE
     Connect-AAD -Credential $cred
+    Demo use of explicit credential object
+    .EXAMPLE
+    Connect-AAD -UserRole SIDCBA -TenOrg ABC -verbose  ; 
+    Demo use of UserRole (specifying a CBA variant), AND TenOrg spec, to connect (autoresolves against preconfigured credentials in profile)
     .LINK
     #>
     #Requires -Modules AzureAD
@@ -80,8 +94,9 @@ Function Connect-AAD {
     [Alias('caad','raad','reconnect-AAD')]
     Param(
         [Parameter()][boolean]$ProxyEnabled = $False,
-        [Parameter(ParameterSetName = 'Cred', HelpMessage = "Credential to use for this connection [-credential [credential obj variable]")]
-            [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage="Credential to use for this connection [-credential [credential obj variable]")]
+            [System.Management.Automation.PSCredential]$Credential,
+            # = $global:credo365TORSID, # defer to TenOrg & UserRole resolution
         [Parameter(Mandatory = $false, HelpMessage = "Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]")]
             # sourced from get-admincred():#182: $targetRoles = 'SID', 'CSID', 'ESVC','CSVC','UID','ESvcCBA','CSvcCBA','SIDCBA' ; 
             #[ValidateSet("SID","CSID","UID","B2BI","CSVC","ESVC","LSVC","ESvcCBA","CSvcCBA","SIDCBA")]
@@ -92,6 +107,10 @@ Function Connect-AAD {
                 return $true ; 
             })]
             [string[]]$UserRole = @('SID','CSVC'),
+        [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
+            [ValidateNotNullOrEmpty()]
+            #[ValidatePattern("^\w{3}$")]
+            [string]$TenOrg = $global:o365_TenOrgDefault,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
             [switch] $silent
     ) ;
@@ -101,6 +120,63 @@ Function Connect-AAD {
         if(-not $rgxCertThumbprint){$rgxCertThumbprint = '[0-9a-fA-F]{40}' } ; # if it's a 40char hex string -> cert thumbprint  
         if(-not $rgxSmtpAddr){$rgxSmtpAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ; } ; # email addr/UPN
         if(-not $rgxDomainLogon){$rgxDomainLogon = '^[a-zA-Z][a-zA-Z0-9\-\.]{0,61}[a-zA-Z]\\\w[\w\.\- ]+$' } ; # DOMAIN\samaccountname 
+
+        #-=-=-=-=-=-=-=-=
+        if(-not $Credential){
+            if($UserRole){
+                $smsg = "Using specified -UserRole:$( $UserRole -join ',' )" ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            } else { $UserRole = @('SID','CSVC') } ;
+            if($TenOrg){
+                $smsg = "Using explicit -TenOrg:$($TenOrg)" ;
+            } else {
+                switch -regex ($env:USERDOMAIN){
+                    ([regex]('(' + (( @($TORMeta.legacyDomain,$CMWMeta.legacyDomain)  |foreach-object{[regex]::escape($_)}) -join '|') + ')')).tostring() {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
+                    $TOLMeta.legacyDomain {$TenOrg = 'TOL' }
+                    default {throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; exit ; } ;
+                } ;
+                $smsg = "Imputed `$TenOrg from logged on USERDOMAIN:$($TenOrg)" ;
+            } ;
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            $o365Cred = $null ;
+            $pltGTCred=@{TenOrg=$TenOrg ; UserRole= $UserRole; verbose=$($verbose)} ;
+            $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            $o365Cred = get-TenantCredentials @pltGTCred ;
+            if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ;
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                $Credential = $o365Cred.Cred ;
+            } else {
+                $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                break ;
+            } ;
+        } else {
+            # test-exotoken only applies if $UseConnEXO  $false
+            $TenOrg = get-TenantTag -Credential $Credential ;
+        } ;
+        # build the cred etc once, for all below:
+        $pltCAAD=[ordered]@{
+            #Credential = $Credential ;
+            verbose = $($verbose) ;
+            erroraction = 'STOP' ;
+        } ;
+        <#if((gcm connect-AzureAD).Parameters.keys -contains 'silent'){
+            $pltCAAD.add('Silent',$false) ;
+        } ;
+        #>
+        # defer to resolve-UserNameToUserRole -Credential $Credential
+        $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ;
+        if($credential.username -match $rgxCertThumbprint){
+            $certTag = $uRoleReturn.TenOrg ;
+        } ; 
+        #-=-=-=-=-=-=-=-=
 
         $smsg = "EXEC:get-TenantMFARequirement -Credential $($Credential.username)" ; 
         if($silent){} else { 
@@ -218,11 +294,13 @@ Function Connect-AAD {
                 Write-Verbose "Connected to tenant: $($token.AccessToken.TenantId) with user: $($token.AccessToken.UserId)" ;
             } ;
             #>
-            $smsg = "resolve-UserNameToUserRole -UserName $($Credential.username)..." ; 
-            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; 
-            #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ; 
+            if(-not $uRoleReturn){
+                $smsg = "resolve-UserNameToUserRole -UserName $($Credential.username)..." ; 
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; 
+                #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ; 
+            } ; 
             $smsg = "get-AADToken..." ; 
             if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
@@ -287,7 +365,7 @@ Function Connect-AAD {
         }#>
         CATCH {
             
-            $pltCAAD=[ordered]@{
+            <#$pltCAAD=[ordered]@{
                 ErrorAction='Stop';
             }; 
 
@@ -314,13 +392,14 @@ Function Connect-AAD {
 
             #$uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; 
             #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ;
-
+            #>
             if($credential.username -match $rgxCertThumbprint){
                 $smsg =  "(UserName:Certificate Thumbprint detected)"
                 if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                 $pltCAAD.Add("CertificateThumbprint", [string]$Credential.UserName);                    
                 $pltCAAD.Add("ApplicationId", [string]$Credential.GetNetworkCredential().Password);
+                # resolve TenantID (guid) from Credential
                 if($TenantID = get-TenantID -Credential $Credential){
                     $pltCAAD.Add("TenantId", [string]$TenantID);
                 } else { 
@@ -330,13 +409,8 @@ Function Connect-AAD {
                     throw $smsg ; 
                     Break ; 
                 } ; 
-                #$uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; 
-                ##$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ;
                 if($uRoleReturn.TenOrg){
                     $TenOrg = $uRoleReturn.TenOrg  ; 
-                    #$smsg = "(using CBA:cred:$($TenOrg):$([string]$tcert.friendlyname))" ; 
-                    #$smsg = "(using CBA:cred:$($TenOrg):$([string](get-childitem -path "Cert:\CurrentUser\My\$($credential.username)").FriendlyName ))" ; 
-                    #$uRoleReturn.FriendlyName
                     $smsg = "(using CBA:cred:$($TenOrg):$([string]$uRoleReturn.FriendlyName))" ; 
                     if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
@@ -445,7 +519,6 @@ Function Connect-AAD {
                 $pltCAAD.add('TenantID',[string]$TenantID) ;
             } 
             if(-not $MFA){
-                #Connect-AzureAD -Credential $Credential -ErrorAction Stop ;
                 $smsg = "EXEC:Connect-AzureAD -Credential $($Credential.username) (no MFA, full credential)" ; 
                 if($silent){} else { 
                     $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
@@ -455,8 +528,6 @@ Function Connect-AAD {
                 } ;                
                 if($Credential.username){$pltCAAD.add('Credential',$Credential)} ;
             } else {
-                #Connect-AzureAD -AccountID $Credential.userName ;
-                #$smsg = "EXEC:Connect-AzureAD -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
                 if($token.AccessToken.AccessToken){
                     if($silent){} else { 
                         $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
