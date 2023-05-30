@@ -20,6 +20,7 @@ function set-AADUserUsageLocation {
     AddedWebsite:	
     AddedTwitter:	URL
     REVISIONS
+    * 3:26 PM 5/30/2023 rouneded out pswlt
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
     * 12:01 PM 5/22/2023 add: missing w-o for sucess on report; also test $aad.usageloc actually updated; updated cbh ; 
     * 9:55 AM 5/19/2023 CBH, added full call example context
@@ -233,11 +234,12 @@ function set-AADUserUsageLocation {
                     Break ; 
                 } ;
             } CATCH {
-                $ErrTrapd = $_ ; 
+                $ErrTrapd=$Error[0] ;
                 $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                Break ;
+                $smsg += "`n$($ErrTrapd.Exception.Message)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                BREAK ;
             } ; 
 
             $smsg = $sBnrS.replace('-v','-^').replace('v-','^-')
