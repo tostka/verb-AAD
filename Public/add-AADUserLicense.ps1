@@ -20,6 +20,7 @@ function add-AADUserLicense {
     AddedWebsite:	
     AddedTwitter:	
     REVISIONS
+    * 3:12 PM 5/30/2023 get-AzureAdUser  immed after lic add isn't returning curr status: added 500ms delay before repoll ; rounded out pswlt support
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
     * 4:31 PM 5/17/2023  rounded out params for $pltRXO passthru
     * 2:35 PM 8/12/2022 expanded echo on lic attempt
@@ -218,6 +219,8 @@ function add-AADUserLicense {
                                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                                 }  ;
 
+                                # for some reason below isn't really getting updated AADU (at least not whats coming through), add a delay 
+                                start-sleep -Milliseconds 500 ; 
                                 $AADUser = Get-AzureADUser @pltGAADU ; 
                                 $report.AzureADUser = $AADUser ; 
                                 $usrPlans = $usrLics=@() ; 
@@ -269,11 +272,12 @@ function add-AADUserLicense {
                     Break ; 
                 } ;
             } CATCH {
-                $ErrTrapd = $_ ; 
+                $ErrTrapd=$Error[0] ;
                 $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                Break ;
+                $smsg += "`n$($ErrTrapd.Exception.Message)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                BREAK ;
             } ; 
 
             $smsg = $sBnrS.replace('-v','-^').replace('v-','^-')
