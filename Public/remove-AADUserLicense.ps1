@@ -224,7 +224,8 @@ function remove-AADUserLicense {
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         }  ;
-
+                        # refreshing aadu, but for some reason when returned, it's not up to date (replication latency?)
+                        start-sleep -Milliseconds 500 ; 
                         $AADUser = Get-AzureADUser @pltGAADU ; 
                         $report.AzureADUser = $AADUser ; 
                         $usrPlans = $usrLics=@() ; 
@@ -262,11 +263,12 @@ function remove-AADUserLicense {
                     Break ; 
                 } ;
             } CATCH {
-                $ErrTrapd = $_ ; 
+                $ErrTrapd=$Error[0] ;
                 $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                Break ;
+                $smsg += "`n$($ErrTrapd.Exception.Message)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                BREAK ;
             } ; 
 
             $smsg = $sBnrS.replace('-v','-^').replace('v-','^-')
