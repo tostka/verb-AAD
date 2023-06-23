@@ -1,4 +1,6 @@
-﻿#*------v Function profile-AAD-Signons v------
+﻿# profile-AAD-Signons.ps1
+
+#*------v Function profile-AAD-Signons v------
 Function profile-AAD-Signons {
     <#
     .SYNOPSIS
@@ -11,7 +13,8 @@ Function profile-AAD-Signons {
     Website:	URL
     Twitter:	URL
     REVISIONS   : 
-    3:23 PM 1/30/2023 added echo of output $logfile at end of each file ; fixed fundemental path-discovery breaks since moving it into verb-AAD (wasn't discovering any prior .ps1 paths; needed function discovery code spliced in). : 
+    * 5:09 PM 2/2/2023 updated to -indent support, latest w-l support, I believe I've now got it logging *everything*, to capture the full report into the logs.
+    * 2:41 PM 1/30/2023 fixed fundemental path-discovery breaks since moving it into verb-AAD (wasn't discovering any prior .ps1 paths; needed function discovery code spliced in). : 
     * 11:18 AM 9/16/2021 string cleaning
     * 3:04 PM 6/16/2021, shifted to standard start-log mod support, conditioned helper funcs, added test for events in target file, echo on gap
     * 11:11 AM 6/15/2021 Ren'd Build-AADSignErrorsHash() -> Initialize-AADSignErrorsHash (compliant verb) ; sync'd copy & set it to defer to the verb-AAD mod version
@@ -161,195 +164,671 @@ Function profile-AAD-Signons {
 
     #*======v FUNCTIONS v======
 
-    #*------v Function Write-Log v-----
-    if(test-path function:Write-Log){
-        "(deferring to `$script:Write-Log())" ;
-    } else {
-        "(using default verb-logging:Write-Log())" ;
-        function Write-Log {
-            <#
-            .SYNOPSIS
-            Write-Log - Write-Log writes a message to a specified log file with the current time stamp, and write-verbose|warn|error's the matching msg.
-            .NOTES
-            Author: Jason Wasser @wasserja
-            Website:	https://www.powershellgallery.com/packages/MrAADAdministration/1.0/Content/Write-Log.ps1
-            Twitter:	@wasserja
-            Updated By: Todd Kadrie
-            Website:	http://www.toddomation.com
-            Twitter:	@tostka, http://twitter.com/tostka
-            Additional Credits: REFERENCE
-            Website:	URL
-            Twitter:	URL
-            REVISIONS   :
-            * 11:34 AM 8/26/2019 fixed missing noecho parameter desig in comment help
-            * 9:31 AM 2/15/2019:Write-Log: added Level:Debug support, and broader init
-                block example with $whatif & $ticket support, added -NoEcho to suppress console
-                echos and just use it for writing logged output
-            * 8:57 PM 11/25/2018 Write-Log:shifted copy to verb-logging, added defer to scope $script versions
-            * 2:30 PM 10/18/2018 added -useHost to have it issue color-keyed write-host commands vs write-(warn|error|verbose)
-                switched timestamp into the function (as $echotime), rather than redundant code in the $Message contstruction.
-            * 10:18 AM 10/18/2018 cleanedup, added to pshelp, put into OTB fmt, added trailing semis, parame HelpMessages, and -showdebug param
-            * Code simplification and clarification - thanks to @juneb_get_help  ;
-            * Added documentation.
-            * Renamed LogPath parameter to Path to keep it standard - thanks to @JeffHicks  ;
-            * Revised the Force switch to work as it should - thanks to @JeffHicks  ;
-
-            To Do:  ;
-            * Add error handling if trying to create a log file in a inaccessible location.
-            * Add ability to write $Message to $Verbose or $Error pipelines to eliminate  ;
-                duplicates.
-            .DESCRIPTION
-            The Write-Log function is designed to add logging capability to other scripts.
-            In addition to writing output and/or verbose you can write to a log file for  ;
-            later debugging.
-            .PARAMETER Message  ;
-            Message is the content that you wish to add to the log file.
-            .PARAMETER Path  ;
-            The path to the log file to which you would like to write. By default the function will create the path and file if it does not exist.
-            .PARAMETER Level  ;
-            Specify the criticality of the log information being written to the log defaults Info: (Error|Warn|Info)  ;
-            .PARAMETER useHost  ;
-            Switch to use write-host rather than write-[verbose|warn|error] [-useHost]
-            .PARAMETER NoEcho
-            Switch to suppress console echos (e.g log to file only [-NoEcho]
-            .PARAMETER NoClobber  ;
-            Use NoClobber if you do not wish to overwrite an existing file.
-            .PARAMETER ShowDebug
-            Parameter to display Debugging messages [-ShowDebug switch]
-            .INPUTS
-            None. Does not accepted piped input.
-            .OUTPUTS
-            Writes output to the specified Path.
-            .EXAMPLE
-            Write-Log -Message 'Log message'   ;
-            Writes the message to c:\Logs\PowerShellLog.log.
-            .EXAMPLE
-            Write-Log -Message 'Restarting Server.' -Path c:\Logs\Scriptoutput.log
-            Writes the content to the specified log file and creates the path and file specified.
-            .EXAMPLE
-            Write-Log -Message 'Folder does not exist.' -Path c:\Logs\Script.log -Level Error  ;
-            Writes the message to the specified log file as an error message, and writes the message to the error pipeline.
-            .EXAMPLE
-            # init content in script context ($MyInvocation is blank in function scope)
-            $logfile = join-path -path $ofile -childpath "$([system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName))-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-LOG.txt"  ;
-            $logging = $True ;
-            # ...
-            $sBnr="#*======v `$tmbx:($($Procd)/$($ttl)):$($tmbx) v======" ;
-            $smsg="$($sBnr)" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } ; #Error|Warn
-            Example that uses a variable and the -useHost switch, to trigger write-host use
-            .EXAMPLE
-            $transcript = join-path -path (Split-Path -parent $MyInvocation.MyCommand.Definition) -ChildPath "logs" ;
-            if(!(test-path -path $transcript)){ "Creating missing log dir $($transcript)..." ; mkdir $transcript  ; } ;
-            $transcript=join-path -path $transcript -childpath "$([system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName))"  ;
-            $transcript+= "-Transcript-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-trans-log.txt"  ;
-            # add log file variant as target of Write-Log:
-            $logfile=$transcript.replace("-Transcript","-LOG").replace("-trans-log","-log")
-            if($whatif){
-                $logfile=$logfile.replace("-BATCH","-BATCH-WHATIF") ;
-                $transcript=$transcript.replace("-BATCH","-BATCH-WHATIF") ;
-            } else {
-                $logfile=$logfile.replace("-BATCH","-BATCH-EXEC") ;
-                $transcript=$transcript.replace("-BATCH","-BATCH-EXEC") ;
-            } ;
-            if($Ticket){
-                $logfile=$logfile.replace("-BATCH","-$($Ticket)") ;
-                $transcript=$transcript.replace("-BATCH","-$($Ticket)") ;
-            } else {
-                $logfile=$logfile.replace("-BATCH","-nnnnnn") ;
-                $transcript=$transcript.replace("-BATCH","-nnnnnn") ;
-            } ;
-            $logging = $True ;
-
-            $sBnr="#*======v START PASS:$($ScriptBaseName) v======" ;
-            $smsg= "$($sBnr)" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } ; #Error|Warn
-            More complete boilerplate including $whatif & $ticket
-            .LINK
-            https://gallery.technet.microsoft.com/scriptcenter/Write-Log-PowerShell-999c32d0  ;
-            #>
-            [CmdletBinding()]
-            Param (
-                [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, HelpMessage = "Message is the content that you wish to add to the log file")]
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        #region WriteLogS ;#*======v Write-Log SIMPLIFIED (psb-psWriteLog.cbp) v======
+if(-not(get-command write-log -ea 0)){
+    #*------v Function write-log v------
+    <# write-log includable version, does FULL RANGE of levels, but has stripped down comments and details
+    - Call: 
+    write-verbose 'define log before first call:'
+    $logfile = "c:\scripts\logs\$($env:COMPUTERNAME)-Exzd-check-$(get-date -format 'yyyyMMdd-HHmmtt')-trans-log.txt" ; 
+    $smsg = "Unable to locate IIS logs through WebAdmin module!" ;
+    write-Log -message $smsg -Path $logfile -useHost -Level Warn ;
+    - syntax matches 7pswlt, aside from _ name prefix7ah
+    - can be unwrapped wo issues (no comments within).
+    - works well where start/stop-transcript aren't supported but you want to capture results into a file (Remote invoke-command, enter-pssession etc)
+    Native indent support relies on setting the $env:HostIndentSpaces to target indent. 
+    Also leverages following verb-io funcs: (life cycle: (init indent); (mod indent); write-log -indent; (clear indent e-vari))
+    (reset-HostIndent), (push-HostIndent,pop-HostIndent,set-HostIndent), write-log -indent, (clear-HostIndent).
+    #>
+    function write-log  {
+        [CmdletBinding()]
+        Param (
+            [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, 
+                HelpMessage = "Message is the content that you wish to add to the log file")]
                 [ValidateNotNullOrEmpty()][Alias("LogContent")]
-                [string]$Message,
-                [Parameter(Mandatory = $false, HelpMessage = "The path to the log file to which you would like to write. By default the function will create the path and file if it does not exist.")][Alias('LogPath')]
+                [Alias('Message')] 
+                [System.Object]$Object,
+            [Parameter(Mandatory = $false, 
+                HelpMessage = "The path to the log file to which you would like to write. By default the function will create the path and file if it does not exist.")]
+                [Alias('LogPath')]
                 [string]$Path = 'C:\Logs\PowerShellLog.log',
-                [Parameter(Mandatory = $false, HelpMessage = "Specify the criticality of the log information being written to the log defaults Info: (Error|Warn|Info)")][ValidateSet("Error", "Warn", "Info", "Debug")]
+            [Parameter(Mandatory = $false, 
+                HelpMessage = "Specify the criticality of the log information being written to the log (defaults Info): (Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success)[-level Info]")]
+                [ValidateSet('Error','Warn','Info','H1','H2','H3','H4','H5','Debug','Verbose','Prompt','Success')]
                 [string]$Level = "Info",
-                [Parameter(HelpMessage = "Switch to use write-host rather than write-[verbose|warn|error] [-useHost]")]
+            [Parameter(
+                HelpMessage = "Switch to use write-host rather than write-[verbose|warn|error] [-useHost]")]
                 [switch] $useHost,
-                [Parameter(HelpMessage = "Switch to suppress console echos (e.g log to file only [-NoEcho]")]
+            [Parameter(
+                HelpMessage="Specifies the background color. There is no default. The acceptable values for this parameter are:
+        (Black | DarkBlue | DarkGreen | DarkCyan | DarkRed | DarkMagenta | DarkYellow | Gray | DarkGray | Blue | Green | Cyan | Red | Magenta | Yellow | White)")]
+                [System.ConsoleColor]$BackgroundColor,
+            [Parameter(
+                HelpMessage="Specifies the text color. There is no default. The acceptable values for this parameter are:
+    (Black | DarkBlue | DarkGreen | DarkCyan | DarkRed | DarkMagenta | DarkYellow | Gray | DarkGray | Blue | Green | Cyan | Red | Magenta | Yellow | White)")]
+                [System.ConsoleColor]$ForegroundColor,
+            [Parameter(
+                HelpMessage="The string representations of the input objects are concatenated to form the output. No spaces or newlines are inserted between
+    the output strings. No newline is added after the last output string.")]
+                [System.Management.Automation.SwitchParameter]$NoNewline,
+            [Parameter(
+                HelpMessage = "Switch to use write-HostIndent-type code for console echos(see get-help write-HostIndent)[-useHost]")]
+                [Alias('in')]
+                [switch] $Indent,
+             [Parameter(
+                HelpMessage = "Switch to strip empty lines when using -Indent (which auto-splits multiline Objects)[-Flatten]")]
+                #[Alias('flat')]
+                [switch] $Flatten,
+            [Parameter(
+                HelpMessage="Specifies a separator string to insert between objects displayed by the host.")]
+            [System.Object]$Separator,
+            [Parameter(
+                HelpMessage="Character to use for padding (defaults to a space).[-PadChar '-']")]
+            [string]$PadChar = ' ',
+            [Parameter(
+                HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrment 8]")]
+            [int]$PadIncrment = 4,
+            [Parameter(
+                    HelpMessage = "Switch to suppress console echos (e.g log to file only [-NoEcho]")]
                 [switch] $NoEcho,
-                [Parameter(Mandatory = $false, HelpMessage = "Use NoClobber if you do not wish to overwrite an existing file.")]
+            [Parameter(Mandatory = $false, 
+                HelpMessage = "Use NoClobber if you do not wish to overwrite an existing file.")]
                 [switch]$NoClobber,
-                [Parameter(HelpMessage = "Debugging Flag [-showDebug]")]
-                [switch] $showDebug
-            )  ;
-
-            Begin {
-                $VerbosePreference = 'Continue'  ; # Set VerbosePreference to Continue so that verbose messages are displayed.
-            }  ;
-            Process {
-                # If the file already exists and NoClobber was specified, do not write to the log.
+            [Parameter(
+                HelpMessage = "Debugging Flag [-showDebug]")]
+                [switch] $showDebug,
+            [Parameter(
+                HelpMessage = "Switch to output a demo display of each Level, and it's configured color scheme (requires specification of a 'dummy' message string to avoid an error).[-Demo]")]
+                [switch] $demo
+        )  ;
+        BEGIN {
+            ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+            $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+            write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+            $Verbose = ($VerbosePreference -eq 'Continue') ;     
+            $pltWH = @{ Object = $null ; } ; 
+            if ($PSBoundParameters.ContainsKey('BackgroundColor')) {$pltWH.add('BackgroundColor',$BackgroundColor) ; } ;
+            if ($PSBoundParameters.ContainsKey('ForegroundColor')) { $pltWH.add('ForegroundColor',$ForegroundColor) ;} ;
+            if ($PSBoundParameters.ContainsKey('NoNewline')) {$pltWH.add('NoNewline',$NoNewline) ; } ;
+            if($Indent){
+                if ($PSBoundParameters.ContainsKey('Separator')) {$pltWH.add('Separator',$Separator) ; } ;
+                if (-not ([int]$CurrIndent = (Get-Item -Path Env:HostIndentSpaces -erroraction SilentlyContinue).Value ) ){[int]$CurrIndent = 0 ; } ; 
+                write-verbose "$($CmdletName): Discovered `$env:HostIndentSpaces:$($CurrIndent)" ; 
+            } ; 
+            if($host.Name -eq 'Windows PowerShell ISE Host' -AND $host.version.major -lt 3){
+                $pltError=@{foregroundcolor='yellow';backgroundcolor='darkred'};
+                $pltWarn=@{foregroundcolor='DarkMagenta';backgroundcolor='yellow'};
+                $pltInfo=@{foregroundcolor='gray';backgroundcolor='darkblue'};
+                $pltH1=@{foregroundcolor='black';backgroundcolor='darkyellow'};
+                $pltH2=@{foregroundcolor='darkblue';backgroundcolor='gray'};
+                $pltH3=@{foregroundcolor='black';backgroundcolor='darkgray'};
+                $pltH4=@{foregroundcolor='gray';backgroundcolor='DarkCyan'};
+                $pltH5=@{foregroundcolor='cyan';backgroundcolor='DarkGreen'};
+                $pltDebug=@{foregroundcolor='red';backgroundcolor='black'};
+                $pltVerbose=@{foregroundcolor='darkgray';backgroundcolor='black'};
+                $pltPrompt=@{foregroundcolor='DarkMagenta';backgroundcolor='darkyellow'};
+                $pltSuccess=@{foregroundcolor='Blue';backgroundcolor='green'};
+            } else {
+                $pltError=@{foregroundcolor='yellow';backgroundcolor='darkred'};
+                $pltWarn=@{foregroundcolor='DarkMagenta';backgroundcolor='yellow'};
+                $pltInfo=@{foregroundcolor='gray';backgroundcolor='darkblue'};
+                $pltH1=@{foregroundcolor='black';backgroundcolor='darkyellow'};
+                $pltH2=@{foregroundcolor='darkblue';backgroundcolor='gray'};
+                $pltH3=@{foregroundcolor='black';backgroundcolor='darkgray'};
+                $pltH4=@{foregroundcolor='gray';backgroundcolor='DarkCyan'};
+                $pltH5=@{foregroundcolor='cyan';backgroundcolor='DarkGreen'};
+                $pltDebug=@{foregroundcolor='red';backgroundcolor='black'};
+                $pltVerbose=@{foregroundcolor='darkgray';backgroundcolor='black'};
+                $pltPrompt=@{foregroundcolor='DarkMagenta';backgroundcolor='darkyellow'};
+                $pltSuccess=@{foregroundcolor='Blue';backgroundcolor='green'};
+            } ; 
+            if ($PSCmdlet.MyInvocation.ExpectingInput) {
+                write-verbose "Data received from pipeline input: '$($InputObject)'" ; 
+            } else {
+                write-verbose "(non-pipeline - param - input)" ; 
+            } ; 
+        }  ;
+        PROCESS {
+                if($Flatten){
+                    if($object.gettype().name -eq 'FormatEntryData'){
+                        write-verbose "skip split/flatten on these (should be pre-out-string'd before write-logging)" ; 
+                    } else { 
+                        [string[]]$Object = [string[]]$Object.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries) ;
+                    } ; 
+                } else { 
+                    [string[]]$Object = [string[]]$Object.ToString().Split([Environment]::NewLine) 
+                } ; 
                 if ((Test-Path $Path) -AND $NoClobber) {
                     Write-Error "Log file $Path already exists, and you specified NoClobber. Either delete the file or specify a different name."  ;
                     Return  ;
-                }
-                elseif (!(Test-Path $Path)) {
-                    # create the file including the path when missing.
+                } elseif (!(Test-Path $Path)) {
                     Write-Verbose "Creating $Path."  ;
                     $NewLogFile = New-Item $Path -Force -ItemType File  ;
-                }
-                else {
-                    # Nothing to see here yet.
-                }  ;
-
+                } else { }  ;
                 $FormattedDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"  ;
-                $EchoTime = "$((get-date).ToString('HH:mm:ss')):" ;
-
-                # Write message to error, warning, or verbose pipeline and specify $LevelText
+                $EchoTime = "$((get-date).ToString('HH:mm:ss')): " ;
+                $pltWH.Object = $EchoTime ; 
+                $pltColors = @{} ; 
                 switch ($Level) {
-                    'Error' {
-                        if ($useHost) {
-                            write-host -foregroundcolor red ($EchoTime + $Message)   ;
+                    'Error' {$LevelText = 'ERROR: ' ; $pltColors = $pltErr ; 
+                        if ($useHost) {} else {if (!$NoEcho) { Write-Error ($smsg + $Object) } } ;}
+                    'Warn' { $LevelText = 'WARNING: ' ; $pltColors = $pltWarn ; 
+                        if ($useHost) {} else {if (!$NoEcho) { Write-Warning ($smsg + $Object) } } ;}
+                    'Info' {$LevelText = 'INFO: ' ;  $pltColors = $pltInfo ; }
+                    'H1' { $LevelText = '# ' ; $pltColors = $pltH1 ; }
+                    'H2' {$LevelText = '## ' ; $pltColors = $pltH2 ;  }
+                    'H3' {$LevelText = '### ' ; $pltColors = $pltH3 ; }
+                    'H4' {$LevelText = '#### ' ; $pltColors = $pltH4 ; }
+                    'H5' { $LevelText = '##### ' ;  $pltColors = $pltH5 ; }
+                    'Debug' {$LevelText = 'DEBUG: ' ; $pltColors = $pltDebug ; 
+                        if ($useHost) {} else {if (!$NoEcho) { Write-Degug $smsg } }  ; }
+                    'Verbose' {
+                        $LevelText = 'VERBOSE: ' ; $pltColors = $pltVerbose ; 
+                        if ($useHost) {}else {if (!$NoEcho) { Write-Verbose ($smsg) } } ;  }
+                    'Prompt' {$LevelText = 'PROMPT: ' ; $pltColors = $pltPrompt ; }
+                    'Success' {$LevelText = 'SUCCESS: ' ; $pltColors = $pltSuccess ; }
+                } ;
+                if($pltColors.foregroundcolor){
+                if(-not ($pltWH.keys -contains 'foregroundcolor')){
+                    $pltWH.add('foregroundcolor',$pltColors.foregroundcolor) ; 
+                } elseif($pltWH.foregroundcolor -eq $null){
+                    $pltWH.foregroundcolor = $pltColors.foregroundcolor ; 
+                } ; 
+            } ; 
+            if($pltColors.backgroundcolor){
+                if(-not ($pltWH.keys -contains 'backgroundcolor')){
+                    $pltWH.add('backgroundcolor',$pltColors.backgroundcolor) ; 
+                } elseif($pltWH.backgroundcolor -eq $null){
+                    $pltWH.backgroundcolor = $pltColors.backgroundcolor ; 
+                } ; 
+            } ; 
+                if ($useHost) {
+                    if(-not $Indent){
+                        if($Level -match '(Debug|Verbose)' ){$pltWH.Object += "$($LevelText) ($($Object))" ;
+                        } else { $pltWH.Object += "$($LevelText) $($Object)" ; } ; 
+                        $smsg = "write-host w`n$(($pltWH|out-string).trim())" ; 
+                        write-host @pltwh ; 
+                    } else { 
+                        write-verbose 'indent support' ; 
+                        foreach ($obj in $object){
+                            $pltWH.Object = $EchoTime ; 
+                            if($Level -match '(Debug|Verbose)' ){
+                                if($obj.length -gt 0){ $pltWH.Object += "$($LevelText) ($($obj))" ;
+                                } else { $pltWH.Object += "$($LevelText)" ;} ; 
+                            } else {$pltWH.Object += "$($LevelText) $($obj)" ;} ; 
+                            Write-Host -NoNewline $($PadChar * $CurrIndent)  ; 
+                            write-host @pltwh ; 
+                        } ; 
+                    } ; 
+                } 
+                "$FormattedDate $LevelText : $Object" | Out-File -FilePath $Path -Append  ;
+        }  ; 
+    } ; 
+    #*------^ Write-Log.ps1 ^------
+} ; 
+<# VERS: * 2:58 PM 2/2/2023 updated fr prim vers
+11:47 AM 1/17/2023 rearranged comments
+#>
+#endregion  ; #*======^ Write-Log SIMPLIFIED (psb-psWriteLog.cbp) ^======
+
+    #region HostIndentS ; #*======v HostIndent SIMPLIFIED (psb-psHostIndent.cbp) v======
+    if(-not(get-command HostIndent -ea 0)){
+        #*------v Function HostIndent v------
+        <# HostIndent includable version of core cmdlets, has stripped down comments and details
+        - Call: 
+        write-verbose 'define log before first call:'
+        $smsg = "Unable to locate IIS logs through WebAdmin module!" ;
+        HostIndent -message $smsg ;
+        - can be unwrapped wo issues (no comments within).
+        - works well where you have complicated console output, but verb-io isn't supported (or verb-logging, for write-log)
+        Native indent support relies on setting the $env:HostIndentSpaces to target indent. 
+        Also leverages following verb-io funcs: (life cycle: (init indent); (mod indent); Write-HostIndent; (clear indent e-vari))
+        (reset-HostIndent), (push-HostIndent,pop-HostIndent,set-HostIndent),Write-HostIndent,  (clear-HostIndent),
+        Write-HostIndent -ForegroundColor Gray "($Domain)" -verbose ;
+        #>
+        #*------v Function reset-HostIndent v------
+        function reset-HostIndent {
+            <# * 2:01 PM 2/1/2023 add: -PID param
+            #>
+            [CmdletBinding()]
+            [Alias('r-hi')]
+            PARAM(
+                [Parameter(
+                    HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrement 8]")]
+                [int]$PadIncrement = 4,
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ; 
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;     
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $HISName = "Env:HostIndentSpaces$($PID)" ; 
+                } else { 
+                    $HISName = "Env:HostIndentSpaces" ; 
+                } ; 
+            
+                if(($smsg = Get-Item -Path "Env:HostIndentSpaces$($PID)" -erroraction SilentlyContinue).value){
+                  write-verbose $smsg ; 
+                } ; 
+                if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                    [int]$CurrIndent = 0 ; 
+                } ; 
+                $pltSV=[ordered]@{
+                    Path = $HISName 
+                    Value = 0; 
+                    Force = $true ; 
+                    erroraction = 'STOP' ;
+                } ;
+                $smsg = "$($CmdletName): Set 1 lvl:Set-Variable w`n$(($pltSV|out-string).trim())" ; 
+                write-verbose $smsg  ;
+                TRY{
+                    Set-Item @pltSV #-verbose ; 
+                } CATCH {
+                    $smsg = $_.Exception.Message ;
+                    write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    BREAK ;
+                } ;
+            } ;  
+        } ; 
+        #*------^ END Function reset-HostIndent ^------
+    } ; 
+    if(-not(get-command push-HostIndent -ea 0)){
+        #*------v Function push-HostIndent v------
+        function push-HostIndent {
+            <#
+            * 2:01 PM 2/1/2023 add: -PID param
+            #>
+            [CmdletBinding()]
+            [Alias('push-hi')]
+            PARAM(
+                [Parameter(
+                    HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrement 8]")]
+                [int]$PadIncrement = 4,
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ;
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;
+                write-verbose "$($CmdletName): Using `$PadIncrement:`'$($PadIncrement)`'" ;
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $HISName = "Env:HostIndentSpaces$($PID)" ;
+                } else {
+                    $HISName = "Env:HostIndentSpaces" ;
+                } ;
+                if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                    [int]$CurrIndent = 0 ;
+                } ;
+                write-verbose "$($CmdletName): Discovered `$$($HISName):$($CurrIndent)" ;
+                $pltSV=[ordered]@{
+                    Path = $HISName ;
+                    Value = [int](Get-Item -Path $HISName -erroraction SilentlyContinue).Value + $PadIncrement;
+                    Force = $true ;
+                    erroraction = 'STOP' ;
+                } ;
+                $smsg = "$($CmdletName): Set 1 lvl:Set-Variable w`n$(($pltSV|out-string).trim())" ;
+                write-verbose $smsg  ;
+                TRY{
+                    #Set-Variable @pltSV -verbose ;
+                    Set-Item @pltSV #-verbose ;
+                } CATCH {
+                    $smsg = $_.Exception.Message ;
+                    write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    BREAK ;
+                } ;
+            } ; 
+        } ;
+        #*------^ END Function push-HostIndent ^------
+    } ; 
+    if(-not(get-command pop-HostIndent -ea 0)){
+        #*------v Function pop-HostIndent v------
+        function pop-HostIndent {
+            <#
+            * 2:01 PM 2/1/2023 add: -PID param
+            #>
+            [CmdletBinding()]
+            [Alias('pop-hi')]
+            PARAM(
+                [Parameter(
+                    HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrement 8]")]
+                    [int]$PadIncrement = 4,
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ; 
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;     
+                write-verbose "$($CmdletName): Using `$PadIncrement:`'$($PadIncrement)`'" ; 
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $HISName = "Env:HostIndentSpaces$($PID)" ;
+                } else {
+                    $HISName = "Env:HostIndentSpaces" ;
+                } ;
+                if(($smsg = Get-Item -Path "Env:HostIndentSpaces$($PID)" -erroraction SilentlyContinue).value){
+                  write-verbose $smsg ; 
+                } ; 
+            
+                if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                    [int]$CurrIndent = 0 ; 
+                } ; 
+                write-verbose "$($CmdletName): Discovered `$$($HISName):$($CurrIndent)" ;  
+                if(($NewIndent = $CurrIndent - $PadIncrement) -lt 0){
+                    write-warning "$($CmdletName): `$HostIndentSpaces has reached 0/left margin (limiting to 0)" ; 
+                    $NewIndent = 0 ; 
+                } ; 
+                $pltSV=[ordered]@{
+                    Path = $HISName ; 
+                    Value = $NewIndent ; 
+                    Force = $true ; 
+                    erroraction = 'STOP' ;
+                } ;
+                $smsg = "$($CmdletName): Set 1 lvl:Set-Variable w`n$(($pltSV|out-string).trim())" ; 
+                write-verbose $smsg  ;
+                TRY{
+                    #Set-Variable @pltSV -verbose ; 
+                    Set-Item @pltSV #-verbose ; 
+                } CATCH {
+                    $smsg = $_.Exception.Message ;
+                    write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    BREAK ;
+                } ;
+            } ; 
+        } ; 
+        #*------^ END Function pop-HostIndent ^------
+    } ; 
+    if(-not(get-command set-HostIndent -ea 0)){
+        #*------v Function set-HostIndent v------
+        function set-HostIndent {
+            <#
+            * 2:01 PM 2/1/2023 add: -PID param
+            #>
+            [CmdletBinding()]
+            [Alias('pop-hi')]
+            PARAM(
+                [Parameter(Position=0,
+                    HelpMessage="Number of spaces to set write-hostIndent current indent (`$scop:HostIndentpaces) to.[-Spaces 8]")]
+                    [int]$Spaces,
+                [Parameter(
+                    HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrement 8]")]
+                [int]$PadIncrement = 4,
+                [Parameter(
+                    HelpMessage="Mathematical rounding logic to use for calculating nearest multiple of PadIncrement (RoundUp|RoundDown|AwayFromZero|Midpoint, default:RoundUp)[-Rounding awayfromzero]")]
+                    [ValidateSet('RoundUp','RoundDown','AwayFromZero','Midpoint')]
+                    [string]$Rounding = 'RoundUp',
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ;
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;
+                write-verbose "$($CmdletName): Using `$PadIncrement:`'$($PadIncrement)`'" ;
+                switch($Rounding){
+                    'RoundUp' {
+                        # always round up (to next higher multiple)
+                        $Spaces = ([system.math]::ceiling($Spaces/$PadIncrement))*$PadIncrement  ;
+                        write-verbose "Rounding:Roundup specified: Rounding to: $($Spaces)" ;
                         }
-                        else {
-                            if (!$NoEcho) { Write-Error ($EchoTime + $Message) } ;
-                        } ;
-                        $LevelText = 'ERROR:'  ;
-                    }
-                    'Warn' {
-                        if ($useHost) {
-                            write-host -foregroundcolor yellow ($EchoTime + $Message)    ;
+                    'RoundDown' {
+                        # always round down (to next lower multiple)
+                        $Spaces = ([system.math]::floor($Spaces/$PadIncrement))*$PadIncrement  ;
+                        write-verbose "Rounding:RoundDown specified: Rounding to: $($Spaces)" ;
                         }
-                        else {
-                            if (!$NoEcho) { Write-Warning ($EchoTime + $Message) } ;
-                        } ;
-                        $LevelText = 'WARNING:'  ;
+                    'AwayFromZero' {
+                        # traditional school: 'when remainder is 5 round up'
+                        $Spaces = ([system.math]::round($_/$PadIncrement,0,1))*$PadIncrement  ;
+                        write-verbose "Rounding:AwayFromZero specified: Rounding to: $($Spaces)" ;
                     }
-                    'Info' {
-                        if ($useHost) {
-                            write-host -foregroundcolor green ($EchoTime + $Message)   ;
-                        }
-                        else {
-                            if (!$NoEcho) { Write-Verbose ($EchoTime + $Message) } ;
-                        } ;
-                        $LevelText = 'INFO:'  ;
-                    }
-                    'Debug' {
-                        if (!$NoEcho) { Write-Debug -Verbose:$true ($EchoTime + $Message) }  ;
-                        $LevelText = 'DEBUG:'  ;
+                    'Midpoint' {
+                        # default programatic/banker's rounding: if midpoint 5, round to the *nearest even number*'
+                        $Spaces = ([system.math]::round($_/$PadIncrement))*$PadIncrement  ;
+                        write-verbose "Rounding:Midpoint specified: Rounding to: $($Spaces)" ;
                     }
                 } ;
-
-                # Write log entry to $Path
-                "$FormattedDate $LevelText $Message" | Out-File -FilePath $Path -Append  ;
-            }  ; # PROC-E
-            End {
-            }  ;
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $HISName = "Env:HostIndentSpaces$($PID)" ;
+                } else {
+                    $HISName = "Env:HostIndentSpaces" ;
+                } ;
+                if(($smsg = Get-Item -Path "Env:HostIndentSpaces$($PID)" -erroraction SilentlyContinue).value){
+                  write-verbose $smsg ; 
+                } ; 
+            
+                if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                    [int]$CurrIndent = 0 ;
+                } ;
+                write-verbose "$($CmdletName): Discovered `$$($HISName):$($CurrIndent)" ;
+                $pltSV=[ordered]@{
+                    Path = $HISName ;
+                    Value = $Spaces;
+                    Force = $true ;
+                    erroraction = 'STOP' ;
+                } ;
+                $smsg = "$($CmdletName): Set 1 lvl:Set-Variable w`n$(($pltSV|out-string).trim())" ;
+                write-verbose $smsg  ;
+                TRY{
+                    Set-Item @pltSV #-verbose ;
+                } CATCH {
+                    $smsg = $_.Exception.Message ;
+                    write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    BREAK ;
+                } ;
+            } ;  
         } ;
-    } ; #*------^ END Function Write-Log ^------
+        #*------^ END Function set-HostIndent ^------
+    } ; 
+    if(-not(get-command write-HostIndent -ea 0)){
+        #*------v Function write-HostIndent v------
+        function write-HostIndent {
+            <#
+                    * 2:01 PM 2/1/2023 add: -PID param
+                    #>
+            [CmdletBinding()]
+            [Alias('w-hi')]
+            PARAM(
+                [Parameter(
+                    HelpMessage="Specifies the background color. There is no default. The acceptable values for this parameter are:
+            (Black | DarkBlue | DarkGreen | DarkCyan | DarkRed | DarkMagenta | DarkYellow | Gray | DarkGray | Blue | Green | Cyan | Red | Magenta | Yellow | White)")]
+                    [System.ConsoleColor]$BackgroundColor,
+                [Parameter(
+                    HelpMessage="Specifies the text color. There is no default. The acceptable values for this parameter are:
+        (Black | DarkBlue | DarkGreen | DarkCyan | DarkRed | DarkMagenta | DarkYellow | Gray | DarkGray | Blue | Green | Cyan | Red | Magenta | Yellow | White)")]
+                    [System.ConsoleColor]$ForegroundColor,
+                [Parameter(
+                    HelpMessage="The string representations of the input objects are concatenated to form the output. No spaces or newlines are inserted between
+        the output strings. No newline is added after the last output string.")]
+                    [System.Management.Automation.SwitchParameter]$NoNewline,
+                [Parameter(Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,
+                    HelpMessage="Objects to display in the host")]
+                    [System.Object]$Object,
+                [Parameter(
+                    HelpMessage="Specifies a separator string to insert between objects displayed by the host.")]
+                    [System.Object]$Separator,
+                [Parameter(
+                    HelpMessage="Character to use for padding (defaults to a space).[-PadChar '-']")]
+                    [string]$PadChar = ' ',
+                [Parameter(
+                    HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrment 8]")]
+                [int]$PadIncrment = 4,
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ; 
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;     
+                $pltWH = @{} ; 
+                if ($PSBoundParameters.ContainsKey('BackgroundColor')) {
+                    $pltWH.add('BackgroundColor',$BackgroundColor) ; 
+                } ;
+                if ($PSBoundParameters.ContainsKey('ForegroundColor')) {
+                    $pltWH.add('ForegroundColor',$ForegroundColor) ; 
+                } ;
+                if ($PSBoundParameters.ContainsKey('NoNewline')) {
+                    $pltWH.add('NoNewline',$NoNewline) ; 
+                } ;
+                if ($PSBoundParameters.ContainsKey('Separator')) {
+                    $pltWH.add('Separator',$Separator) ; 
+                } ;
+                write-verbose "$($CmdletName): Using `$PadChar:`'$($PadChar)`'" ; 
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $HISName = "Env:HostIndentSpaces$($PID)" ;
+                } else {
+                    $HISName = "Env:HostIndentSpaces" ;
+                } ;
+                if(($smsg = Get-Item -Path "Env:HostIndentSpaces$($PID)" -erroraction SilentlyContinue).value){
+                  write-verbose $smsg ; 
+                } ; 
+            
+                if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                    [int]$CurrIndent = 0 ; 
+                } ; 
+                write-verbose "$($CmdletName): Discovered `$$($HISName):$($CurrIndent)" ; 
+                $Object = $Object.Split([Environment]::NewLine)
+                foreach ($obj in $object){
+                    Write-Host -NoNewline $($PadChar * $CurrIndent)  ; 
+                    write-host @pltWH -object $obj ; 
+                } ; 
+
+            } ; 
+        } ; 
+        #*------^ END Function write-HostIndent ^------
+    } ; 
+    if(-not(get-command clear-HostIndent -ea 0)){
+        #*------v Function clear-HostIndent v------
+        function clear-HostIndent {
+            <#
+            * 2:00 PM 2/2/2023 typo fix: (trailing block-comment end unmatched)
+            #>
+            [CmdletBinding()]
+            [Alias('c-hi')]
+            PARAM(
+                [Parameter(
+                    HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrement 8]")]
+                [int]$PadIncrement = 4,
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ; 
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;     
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $HISName = "Env:HostIndentSpaces$($PID)" ;
+                } else {
+                    $HISName = "Env:HostIndentSpaces" ;
+                } ;
+                if(($smsg = Get-Item -Path "Env:HostIndentSpaces$($PID)" -erroraction SilentlyContinue).value){
+                  write-verbose $smsg ; 
+                } ; 
+            
+                if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                    [int]$CurrIndent = 0 ; 
+                } ; 
+                $pltSV=[ordered]@{
+                    Path = $HISName ; 
+                    Force = $true ; 
+                    erroraction = 'STOP' ;
+                } ;
+                $smsg = "$($CmdletName): Set 1 lvl:Set-Variable w`n$(($pltSV|out-string).trim())" ; 
+                write-verbose $smsg  ;
+                TRY{
+                    Clear-Item @pltSV #-verbose ; 
+                } CATCH {
+                    $smsg = $_.Exception.Message ;
+                    write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    BREAK ;
+                } ;
+            } ;  
+        } ; 
+        #*------^ END Function clear-HostIndent ^------
+    } ; 
+    if(-not(get-command get-HostIndent -ea 0)){
+
+    #*------v Function get-HostIndent v------
+        function get-HostIndent {
+            <#
+                * 2:13 PM 2/3/2023 init
+            #>
+            [CmdletBinding()]
+            [Alias('s-hi')]
+            PARAM(
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ;
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $HISName = "Env:HostIndentSpaces$($PID)" ;
+                } else {
+                    $HISName = "Env:HostIndentSpaces" ;
+                } ;
+                write-verbose "$($CmdletName): Discovered `$$($HISName):$($CurrIndent)" ; 
+                $smsg = "$($CmdletName): get $($HISName) value)" ; 
+                write-verbose $smsg  ;
+                TRY{
+                    if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                        [int]$CurrIndent = 0 ; 
+                    } ; 
+                    $CurrIndent | write-output ; 
+                } CATCH {
+                    $smsg = $_.Exception.Message ;
+                    write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    $false  | write-output ; 
+                    BREAK ;
+                } ;
+            } ;  # BEG-E
+        } ;
+        #*------^ END Function get-HostIndent ^------
+    } ; 
+    <# VERS: 2:17 PM 2/3/2023 add get-hostindent(); updates ; 2:28 PM 2/2/2023 init
+    #>
+    #endregion HostIndentS ; #*------^ END  ^------#*======^ HostIndent SIMPLIFIED (psb-psHostIndent.cbp) ^======
 
     #*------v Function get-colorcombo v------
     function get-colorcombo {
@@ -615,7 +1094,10 @@ Function profile-AAD-Signons {
             #$Logname= (join-path -path (join-path -path $scriptDir -childpath "logs") -childpath ($scriptNameNoExt + "-" + $timeStampNow + "-ISEtrans.log")) ;
             # 2:02 PM 9/21/2018 missing $timestampnow, hardcode
             $Logname=(join-path -path (join-path -path $scriptDir -childpath "logs") -childpath ($scriptNameNoExt + "-" + (get-date -format 'yyyyMMdd-HHmmtt') + "-ISEtrans.log")) ;
-            write-host "`$Logname: $Logname";
+            $smsg = "H`$Logname: $Logname";
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
             Start-iseTranscript -logname $Logname ;
             #Archive-Log $Logname ;
             # 1:23 PM 4/23/2015 standardize processing file so that we can send a link to open the transcript for review
@@ -671,6 +1153,7 @@ Function profile-AAD-Signons {
     } #*------^ END Function Cleanup ^------
 
 
+
     #*======^ END FUNCTIONS ^======
 
     #*======v SUB MAIN v======
@@ -678,6 +1161,8 @@ Function profile-AAD-Signons {
     # 9:38 AM 8/29/2019 some errors say open a ticket with: Correlation ID, Request ID, and Error code, added to both prop sets
     $failprops = "createdDateTime", "userPrincipalName", "appDisplayName", "resourceDisplayName", "clientAppUsed", "ipAddress", "deviceDetail", "location","riskState","riskLevelAggregated","riskLevelDuringSignIn","riskDetail","riskEventTypes","riskLevel","status","correlationId","originalRequestId","status.errorCode" ;
     $recentevtprops = "createdDateTime", "userPrincipalName", "appDisplayName", "resourceDisplayName", "clientAppUsed", "ipAddress", "deviceDetail", "location", "riskState", "riskLevelAggregated", "riskLevelDuringSignIn", "riskDetail", "riskEventTypes", "riskLevel", "status","correlationId","originalRequestId" ;
+    #aad serviceprincipal useful reporting fields
+    $prpAADSvcP = 'AppDisplayName','DisplayName','ObjectId','PublisherName','AppOwnerTenantId','Homepage','LogoutUrl','ReplyUrls' ; 
 
     $AADSignOnError = Initialize-AADSignErrorsHash ;
 
@@ -703,11 +1188,13 @@ Function profile-AAD-Signons {
     #$logfile = join-path -path $ofile -childpath "$([system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName))-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-LOG.txt"  ;
     $logfile = $transcript.replace("-trans-log.txt","-log.txt");
     $logging = $True ;
-    $smsg= "#*======v START PASS:$($ScriptBaseName) v======" ;
-    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    #$smsg= "#*======v START PASS:$($ScriptBaseName) v======" ;
+    #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } #Error|Warn|Debug 
+    #else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    $smsg = $sBnr="#*======v  $(${CmdletName}): v======" ;
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } 
     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-
-
+    
     #start-TranscriptLog $Transcript
 
 
@@ -728,11 +1215,16 @@ Function profile-AAD-Signons {
 
     $rgxSID="^S-\d-\d+-(\d+-){1,14}\d+$" ;
 
-    write-host -foregroundcolor green "Net:$(($Files|measure).count) Json Files" ;
+    $smsg = "H5Net:$(($Files|measure).count) Json Files" ;
     $ttl=($Files|measure).count ;
     $Procd=0 ;
     foreach ($File in $Files){
         $Procd++ ;
+        reset-HostIndent ; 
+
+        #Connect-AzureAD ; 
+        connect-aad ; 
+
         # 9:20 AM 2/25/2019 Tickets will be an array of nnn's to match the mbxs, so use $Procd-1 as the index for tick# in the array
 
         # build outfile on the $file fullname
@@ -740,12 +1232,12 @@ Function profile-AAD-Signons {
         # $ofileobj=gci "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json" ;
         $logfile = $ofileobj.fullname.replace(".json","-parsed-json-rpt.txt") ;
 
-        $sBnr="#*======v `$File:($($Procd)/$($ttl)):$($File) v======" ;
+        $sBnr2="#*======v `$File:($($Procd)/$($ttl)):$($File) v======" ;
         $smsg="$($sBnr)" ;
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent } #Error|Warn|Debug 
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $smsg="Processing output into: $($logfile)" ;
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent } #Error|Warn|Debug 
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
         $bConfirmDo=$true ;
@@ -770,62 +1262,198 @@ Function profile-AAD-Signons {
                 $fltrDesc = "(`$_.status.signinstatus -eq 'Failure')" ;
                 #$colors = (get-colorcombo -random) ;
 
+                push-HostIndent ; 
+
                 $smsg = "`n`n==Json Parsing AAD Sign-ins`nin file:$($File)`n`n$((($EVTS|measure).count|out-string).trim()) events found in file`n" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $colors = (get-colorcombo -random) ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
+                write-host "`n`n" ;
 
                 $smsg = "`n`n==ALL Grouped Status.signinstatus (if populated):`n$(($EVTS.status.signinstatus | group| sort count -des | format-table -auto count,name|out-string).trim())`t" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==ALL Grouped Status.errorCode :`n$(($EVTS.status.errorCode | group| sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                write-host "`n`n" ; 
 
-                $smsg = "`n`n==ALL Grouped Appdisplaynames:`n$(($EVTS | group appDisplayName | sort count -des | format-table -auto count,name|out-string).trim())" ;
+                $grpd = $EVTS | group appDisplayName | sort count -des ; 
+                $smsg = "`n`n==ALL Grouped Appdisplaynames:`n$(($grpd | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                # stock desc for Office365 Shell WCSS-Client
+                $hsO365ShellWCssClient = @"
+Office 365 Shell WCSS-Client: Browser code that runs whenever a user navigates to (most) Office365 applications in the browser.  
+The shell, also known as the suite header, is shared code that loads as part of almost all Office365 workloads, 
+including SharePoint, OneDrive, Outlook, Yammer, and many more.
+"@ ; 
+                # Office Online Core SSO, likewise
+                $hsOfficeOnlineCoreSSO = @"
+The Microsoft Office Online Single-Sign-on application. 
+(avoids repeated logon prompts by using a single authentication token for all Office applications)
+"@ ; 
+                # OfficeHome, which is the www.office.com page
+                $hsOfficeHome = @"
+OfficeHome: The www.office.com page
+"@ ; 
+                # Windows Sign In
+                $hsWindowsSignIn = @"
+Windows Sign In: A user has logged into an Azure joined windows 10 device with the password or Windows hello, 
+"@ ; 
+                # Microsoft Account Controls V2
+                $hsMicrosoftAccountControlsV2 = @"
+Microsoft Account Controls V2: mysignins.microsoft.com
+"@ ; 
+                #
+                $hsMicrosoft365SupportService = @"
+Microsoft 365 Support Service: Authentication in Microsoft Office applications.
+"@ ; 
+
+                # DynPull the above unique names ; 
+                push-hostindent  ; 
+
+                write-host "`n`n" ; 
+
+                $smsg = "`nExpanding the above AppdisplayNames..." ; 
+                $colors = (get-colorcombo -random) ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt -Indent -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                foreach($apd in ($grpd | select -expand name)){
+                    write-host "`n`n" ; 
+                    $smsg = "`n==Get-AzureADServicePrincipal $($apd):" ; 
+                    $colors = (get-colorcombo -random) ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    
+                    switch($apd){
+                        'Office365 Shell WCSS-Client'{
+                            # doesn't traditionally return on SP qry, has a stock def per internal MS support 
+                            $smsg = $hsO365ShellWCssClient ;
+                            $bFound = $true ; 
+                        } ; 
+                        'Office Online Core SSO'{
+                            # doesn't traditionally return on SP qry, has a stock def per internal MS support 
+                            $smsg = $hsOfficeOnlineCoreSSO ;
+                            $bFound = $true ; 
+                        } 
+                        'OfficeHome'{
+                            # doesn't traditionally return on SP qry, has a stock def per internal MS support 
+                            $smsg = $hsOfficeHome ;
+                            $bFound = $true ; 
+                        } ; 
+                        'Windows Sign In'{
+                            # doesn't traditionally return on SP qry, has a stock def per internal MS support 
+                            # [Azure AD Signin logs -- User on an average locks the laptop or PC 10+ times, so every time user logs back, will the sign in log be recorded for 10times? - Microsoft Q&A - learn.microsoft.com/](https://learn.microsoft.com/en-us/answers/questions/451777/azure-ad-signin-logs-user-on-an-average-locks-the)
+                            $smsg = $hsWindowsSignIn ;
+                            $bFound = $true ; 
+                        } ; 
+                        'Microsoft Account Controls V2'{
+                            # doesn't traditionally return on SP qry, has a stock def per internal MS support 
+                            # [Azure AD Signin logs -- User on an average locks the laptop or PC 10+ times, so every time user logs back, will the sign in log be recorded for 10times? - Microsoft Q&A - learn.microsoft.com/](https://learn.microsoft.com/en-us/answers/questions/451777/azure-ad-signin-logs-user-on-an-average-locks-the)
+                            $smsg = $hsMicrosoftAccountControlsV2 ;
+                            $bFound = $true ; 
+                        } ; 
+                        'Microsoft 365 Support Service'{
+                            # doesn't traditionally return on SP qry, has a stock def per internal MS support 
+                            # [Azure AD Signin logs -- User on an average locks the laptop or PC 10+ times, so every time user logs back, will the sign in log be recorded for 10times? - Microsoft Q&A - learn.microsoft.com/](https://learn.microsoft.com/en-us/answers/questions/451777/azure-ad-signin-logs-user-on-an-average-locks-the)
+                            $smsg = $hsMicrosoft365SupportService ;
+                            $bFound = $true ; 
+                        } ; 
+                        default{
+                            $bFound = $false ; 
+                            if($AADSP = Get-AzureADServicePrincipal -Filter "DisplayName eq '$($apd)'"){
+                                $bFound = $true ; 
+                        
+                                $smsg = $(($AADSP | ft -a  $prpAADSvcP[0..3]|out-string).trim()) ; 
+                                $smsg += "`n$(($AADSP |  fl  $prpAADSvcP[4..7] |out-string).trim())" ; 
+                        
+                        
+                            } else { 
+                                $smsg = "No match returned on `$apd:$($apd)" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                            } ; 
+                        }
+                    } ; 
+                    
+                    if($bFound){
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                        else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    } ; 
+                }  ; 
+                pop-hostindent  ; 
+
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==ALL Grouped Resourcedisplayname :`n$(($EVTS | group resourceDisplayName | sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==ALL Grouped Clientappused:`n$(($EVTS | group clientAppUsed | sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==ALL Grouped devicedetail.operatingsystem:`n$((($evts|?{$_.deviceDetail}).devicedetail.operatingsystem | group| sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==resourcedisplayname:'office 365 exchange online'`nGrouped on devicedetail.operatingsystem:`n$((($evts |?{$_.resourcedisplayname -eq 'office 365 exchange online'}).devicedetail.operatingsystem | group| sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==resourcedisplayname:'office 365 exchange online'`nGrouped on deviceDetail.browser:`n$((($evts |?{$_.resourcedisplayname -eq 'office 365 exchange online'}).deviceDetail.browser | group| sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==resourcedisplayname:'office 365 exchange online'`nGrouped Clientappused:`n$((($evts |?{$_.resourcedisplayname -eq 'office 365 exchange online'}).Clientappused | group| sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
 
-
+                pop-HostIndent ; 
 
                 #$smsg= "`n`n==resourcedisplayname:'office 365 exchange online'`nDumped where non-zero status.errorcode:`n`n$(($evts |?{$_.resourcedisplayname -eq 'office 365 exchange online'} | ?{$_.status.errorCode -ne 0} | fl createdDateTime, userPrincipalName, appDisplayName, resourceDisplayName, clientAppUsed, ipAddress, deviceDetail, location,risk*,status|out-string).trim())`n`n" ;
 
                 # 8:32 AM 8/21/2019 profile fails
                 if ($evtsfail = $evts | ? { $_.status.errorcode -ne '0' } ) {
-
+                    
                     $smsg = "`n`n==FAILED (errorcode -ne 0) EVTS FOUND. PROFILING...`n`n " ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor YELLOW "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -837,57 +1465,67 @@ Function profile-AAD-Signons {
                     # collect clientAppUsed
                     $ClientAppUseds = $evtsfail | select -unique clientAppUsed | select -expand clientAppUsed ;
 
+                    push-hostindent 
+
                     <#
                     foreach ($resDname in $resDnames) {
                         $smsg = "`n`n--Profiling resourceDisplayNames:$($resDname)..`n`n " ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent } #Error|Warn|Debug 
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     }
                     #>
                     $smsg = "`n`n==FAILED Grouped Appdisplaynames:`n$(($evtsfail | group appDisplayName | sort count -des | format-table -auto count,name|out-string).trim())" ;
                     $colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    
+                    write-host "`n`n" ; 
 
                     $smsg = "`n`n==FAILED Grouped Resourcedisplayname :`n$(($evtsfail | group resourceDisplayName | sort count -des | format-table -auto count,name|out-string).trim())" ;
                     $colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
-
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    write-host "`n`n" ; 
                     $smsg = "`n`n==FAILED Grouped Clientappused:`n$(($evtsfail | group clientAppUsed | sort count -des | format-table -auto count,name|out-string).trim())" ;
                     $colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
-
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    write-host "`n`n" ; 
                     $smsg = "`n`n==FAILED Grouped devicedetail.operatingsystem:`n$((($evtsfail|?{$_.deviceDetail}).devicedetail.operatingsystem | group| sort count -des | format-table -auto count,name|out-string).trim())" ;
                     $colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
-
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    write-host "`n`n" ; 
                     # geo profile
                     $smsg = "`n`n==FAILED Grouped location.city:`n$(($evtsfail.location.city | group| sort count -des | format-table -auto count,name|out-string|out-string).trim())" ;
                     $colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                     $smsg = "`n`n==FAILED Grouped location.state:`n$(($evtsfail.location.state | group| sort count -des | format-table -auto count,name|out-string|out-string).trim())" ;
-                    #$colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     $smsg = "`n`n==FAILED Grouped location.countryOrRegion:`n$(($evtsfail.location.countryOrRegion | group| sort count -des | format-table -auto count,name|out-string|out-string).trim())" ;
-                    #$colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    
+                    write-host "`n`n" ; 
 
                     # status details
                     $smsg = "`n`n==FAILED Grouped status.failurereason:`n$(($evtsfail.status.failurereason | group| sort count -des | format-table -auto count,name|out-string|out-string).trim())" ;
                     $colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
 
                     <#
                     #$smsg = "`n`n==resourcedisplayname:'office 365 exchange online'`nDumped where non-zero status.errorcode:`n`n" ;
                     $smsg = "`n`n==Dumped Failures (status.errorcode -ne 0):`n`n" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } ; #Error|Warn|Debug
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent } ; #Error|Warn|Debug
 
                     #$dumpevts = $evtsfail | ? { $_.resourcedisplayname -eq 'office 365 exchange online' }  ;
                     $dumpevts = $evtsfail | sort Resourcedisplayname, Appdisplaynames, Clientappused  ;
@@ -895,15 +1533,15 @@ Function profile-AAD-Signons {
                         $sBnrS = "`n#*------v $($devt.createdDateTime): v------"
                         $smsg = "$($sBnrS)`n$(($devt| fl $failprops |out-string).trim())`b$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
                         # "riskState","riskLevelAggregated","riskLevelDuringSignIn","riskDetail","riskEventTypes","riskLevel"
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } ; #Error|Warn|Debug
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent } ; #Error|Warn|Debug
                     } ;
-                    #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } ; #Error|Warn|Debug
+                    #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent } ; #Error|Warn|Debug
                     #>
-
+                    pop-hostindent 
                 }
                 else {
                     $smsg = "`n`n==(no fail/errorcode <> 0 evts found" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ;
 
@@ -971,7 +1609,16 @@ Function profile-AAD-Signons {
 
                     } ;
                     $sBnrS = "`n#*------v $($profTag) SignOns Profiled  - $(($evtsProfiled|measure).count) events: : v------`n" ;
-                    write-host -foregroundcolor yellow "$($sBnrS)`n$($fltrDesc)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    write-host "`n`n" ; 
+
+                    $smsg = $fltrDesc ;
+                    $colors = (get-colorcombo -random) ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    
                     if ($evtsProfiled ) {
 
                         if ($profTag -match '(FAIL|ErrNon0)') {
@@ -984,11 +1631,43 @@ Function profile-AAD-Signons {
                                 foreach ($evt in $evtsProfiled) {
                                     $iDumpd++ ;
                                     write-host -foregroundcolor gray " - v Failure #$($iDumpd)/$($ittl) v -" ;
-                                    write-host -foregroundcolor white "$(($evt| fl $failprops|out-string).trim())" ;
-                                    write-host -foregroundcolor cyan "`nSTATUS:`n$(($evt| select -exp status|out-string).trim())" ;
-                                    write-host -foregroundcolor cyan "`nDEVICEDETAIL:`n$(($evt| select -exp devicedetail|out-string).trim())" ;
-                                    write-host -foregroundcolor darkgray "`nLOCATION:`n$(($evt | select -exp location|out-string).trim())" ;
-                                    write-host -foregroundcolor gray " - ^ Failure #$($iDumpd)/$($ittl)) ^ -" ;
+                                    $smsg =" - v Failure #$($iDumpd)/$($ittl) v -" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -foregroundcolor gray -indent -flatten} 
+                                    else{ write-host -foregroundcolor gray "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                                    push-hostindent 
+
+                                    $smsg = "$(($evt| fl $failprops|out-string).trim())" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten }  
+                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                    write-host "`n`n" ; 
+
+                                    $smsg ="`nSTATUS:`n$(($evt| select -exp status|out-string).trim())" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -foregroundcolor cyan -indent -flatten} 
+                                    else{ write-host -foregroundcolor cyan "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                                    push-hostindent 
+                                    write-host "`n`n" ; 
+
+                                    $smsg = "`nDEVICEDETAIL:`n$(($evt| select -exp devicedetail|out-string).trim())" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -foregroundcolor cyan -indent -flatten} 
+                                    else{ write-host -foregroundcolor cyan "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                                    write-host "`n`n" ; 
+
+                                    $smsg = "`nLOCATION:`n$(($evt | select -exp location|out-string).trim())" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -foregroundcolor darkgray -indent -flatten} 
+                                    else{ write-host -foregroundcolor darkgray "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    write-host "`n`n" ; 
+
+                                    $smsg = " - ^ Failure #$($iDumpd)/$($ittl)) ^ -" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -foregroundcolor gray -indent -flatten} 
+                                    else{ write-host -foregroundcolor gray "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                    pop-hostindent 
+                                    pop-hostindent 
+                                    write-host "`n`n" ; 
                                 } ;
                             }
                             else {
@@ -996,215 +1675,328 @@ Function profile-AAD-Signons {
                             }
                         }
                         else {
-                            $colors = (get-colorcombo -random) ;
+
                             $smsg = "$($profTag) SignOns grouped status.signInStatus" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                             $ret = $evtsProfiled.status.signInStatus | group | sort count -des | format-table -auto count, name ;
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"  ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
+                                write-host "`n`n" ; 
                             } else {
+                                push-hostindent 
                                 $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
+                                write-host "`n`n" ; 
                             };
 
-                            $colors = (get-colorcombo -random) ;
                             $smsg = "$($profTag) SignOns grouped status.errorCode"
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            write-host "`n`n" ; 
+
                             $ret=$evtsProfiled.status.errorCode | group | sort count -des
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"  ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
+                                write-host "`n`n" ; 
                             } else {
+                                push-hostindent 
                                 $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
+                                write-host "`n`n" ; 
                             } ;
                             if ($errorcodes = $evtsProfiled.status.errorCode | group | select name) {
                                 foreach ($ec in $errorcodes) {
                                     $errstring = $aadsignonerror["$($ec.name)"] ;
                                     $smsg = "ErrorCode:$($ec.name):$($errstring)" ;
-                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                                 } ;
-                                "`n" ;
-                            }
-                            else {
-                                "(no errorcodes to group)"
-                            }
 
-                            $colors = (get-colorcombo -random) ;
+                            } else {
+                                $smsg ="(no errorcodes to group)" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            }
+                            write-host "`n`n" ; 
+
                             $smsg = "$($profTag) SignOns grouped status.failureReason" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            
                             $ret = $evtsProfiled.status.failureReason | group | sort count -des | format-table -auto count, name ;
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"  ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                            }
-                            else {
+                                pop-hostindent 
+                            }else {
+                                push-hostindent 
                                 $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
-                            #write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):CMDLET w`n$((|out-string).trim())" ;
+                            write-host "`n`n" ; 
 
-                            $colors = (get-colorcombo -random) ;
                             $smsg = "`n$($profTag) SignOns grouped location.countryOrRegion" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                             $ret = $evtsProfiled | select -exp location | group countryOrRegion | sort count -des | format-table -auto count, name ;
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"  ;
-                                write-host $smsg ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
-                            }
-                            else {
-                                $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                pop-hostindent 
+                            }else {
+                                push-hostindent 
+                                $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
+                            write-host "`n`n" ; 
 
                             $smsg = "$($profTag) SignOns grouped location.state" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                             $ret = $evtsProfiled | select -exp location | group state | sort count -desc | format-table -auto count, name ;
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"  ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             }
                             else {
+                                push-hostindent 
                                 $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
+                            write-host "`n`n" ; 
 
-                            $colors = (get-colorcombo -random) ;
                             $smsg = "`n$($profTag) SignOns grouped ipAddress" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                             $ret = $evtsProfiled | group ipAddress | sort Name | format-table -auto count, name ;
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"  ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             }
                             else {
+                                push-hostindent 
                                 $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
+                            write-host "`n`n" ; 
 
-                            $colors = (get-colorcombo -random) ;
                             $smsg = "`n$($profTag) SignOns grouped deviceDetail.browser" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                             $ret = ($evtsProfiled.deviceDetail.browser | group $_ | sort count -des | format-table -auto count, name |out-string).trim();
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                            }
-                            else {
+                                pop-hostindent 
+                            }else {
+                                push-hostindent 
                                 $smsg = ($ret | format-table -auto count, name |out-string).trim();
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
+                            write-host "`n`n" ; 
 
-                            $colors = (get-colorcombo -random) ;
                             $smsg = "`n$($profTag) SignOns grouped devicedetail.operatingsystem" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
-                            write-host @colors
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                             $ret = ($evtsProfiled.devicedetail.operatingsystem | group $_ | sort count -des | format-table -auto count, name | out-string).trim();
                             if (!$ret) {
+                                push-hostindent
                                 $smsg = "(unpopulated field across data series)`n"
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             }
                             else {
-                                $smsg = $ret | format-table -auto count, name ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                push-hostindent
+                                #$smsg = $ret | format-table -auto count, name ;
+                                # do the splat output, above is breaking split
+                                $smsg = $(($ret | format-table -auto count, name|out-string).trim()) ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
+                            write-host "`n`n" ; 
 
-                            $colors = (get-colorcombo -random) ;
                             $smsg = "$($profTag) SignOns grouped deviceDetail.displayname" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
-                            write-host @colors
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                             $ret = ($evtsProfiled.deviceDetail.displayname | group $_ | sort count -des |out-string).trim();
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             }
                             else {
-                                $smsg = $ret | format-table -auto count, name ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                push-hostindent
+                                #$smsg = $ret | format-table -auto count, name ;
+                                # do the splat output, above is breaking split
+                                $smsg = $(($ret | format-table -auto count, name|out-string).trim()) ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
+                            write-host "`n`n" ; 
 
-                            $sBnrSx = "`n#*------v Most Recent $($profTag) Event: v------" ;
-                            write-host -foregroundcolor yellow "$($sBnrSx)" ;
+                            $smsg = $sBnrSx = "`n#*------v Most Recent $($profTag) Event: v------" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            push-hostindent 
                             $evtlast = ($evtsProfiled | sort createddatetime)[-1] ;
-                            write-host -foregroundcolor white "$(($evtlast| format-list $recentevtprops |out-string).trim())" ;
-                            write-host -foregroundcolor white "`nStatus details:`n$(($evtlast| select -expand Status|out-string).trim())" ;
-                            write-host -foregroundcolor white "`nLocation details:`n$(($evtlast| select -expand location|out-string).trim())" ;
-                            write-host -foregroundcolor yellow "$($sBnrSx.replace('-v','-^').replace('v-','^-'))" ;
+                            $smsg = "$(($evtlast| format-list $recentevtprops |out-string).trim())" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            write-host "`n`n" ; 
 
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            $smsg = "`nStatus details:`n$(($evtlast| select -expand Status|out-string).trim())" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            $smsg = "`nLocation details:`n$(($evtlast| select -expand location|out-string).trim())" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            pop-hostindent
+                            $smsg = "$($sBnrSx.replace('-v','-^').replace('v-','^-'))" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                             
                         } ;
 
-                    }
-                    else {
-                        write-host @colors "(No signons matched traditional $($profTag) profile)" ;
+                    } else {
+                        #write-host @colors "(No signons matched traditional $($profTag) profile)" ;
+                        $smsg = "(No signons matched traditional $($profTag) profile)" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors} 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                        write-host "`n`n" ; 
                     } ;
                     $smsg = "$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ;
 
                 $sBnrS="`n#*------v Most Recent Event in series: v------" ;
-                write-host -foregroundcolor yellow "$($sBnrS)" ;
+                $smsg = "$($sBnrS)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                 $evtlast=($evts| sort createddatetime)[-1] ;
                 $dynprops = $evtlast.psobject.Properties | select -exp name |?{($_ -ne 'Status') -AND ($_ -ne 'Location') -ANd ($_ -ne 'deviceDetail')} ;
-
-                write-host -foregroundcolor white "$(($evtlast| select $dynprops | format-list|out-string).trim())" ;
-                write-host -foregroundcolor white "`nStatus details:`n$(($evtlast| select -expand Status|out-string).trim())" ;
-                write-host -foregroundcolor white "`ndeviceDetail details:`n$(($evtlast| select -expand deviceDetail|out-string).trim())" ;
-                write-host -foregroundcolor white "`nLocation details:`n$(($evtlast| select -expand location|out-string).trim())" ;
-                write-host -foregroundcolor yellow "$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
-
+                push-hostindent
+                $smsg = "$(($evtlast| select $dynprops | format-list|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $smsg = "`nStatus details:`n$(($evtlast| select -expand Status|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $smsg = "`ndeviceDetail details:`n$(($evtlast| select -expand deviceDetail|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $smsg = "`nLocation details:`n$(($evtlast| select -expand location|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                pop-hostindent 
+                $smsg = "$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                 $smsg = "`n`nresults logged to logfile:`n$($logfile)`n`n" ; 
                 write-host -foregroundcolor yellow $smsg ; 
 
-                $smsg = "`n$($sBnr.replace('=v','=^').replace('v=','^='))`n" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                $smsg = "`n$($sBnr2.replace('=v','=^').replace('v=','^='))`n" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } #Error|Warn|Debug 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
             } ;
         } else {
             $smsg="$($UPN):Not on Confirm List" ;  ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         } ;
         # ========================================
 
         $smsg= "$($sBnr.replace('=v','=^').replace('v=','^='))`n`n" ;;
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 -Indent -flatten } #Error|Warn|Debug 
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         start-sleep -Milliseconds 500 ; # 2:51 PM 10/11/2018 add a throttle pause
     } ;  # loop-E
 
     #stop-transcript ;
     #Cleanup
+    $smsg = "$($sBnr.replace('=v','=^').replace('v=','^='))" ;
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } 
+    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
     #*======^ END SUB MAIN ^======
 }
 

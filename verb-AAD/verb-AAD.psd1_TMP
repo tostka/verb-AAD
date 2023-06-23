@@ -12,7 +12,7 @@
 RootModule = 'verb-AAD.psm1'
 
 # Version number of this module.
-ModuleVersion = '2.1.0'
+ModuleVersion = '3.0.0'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -69,7 +69,7 @@ Description = 'Azure AD-related generic functions'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('add-AADUserLicense','Add-ADALType','caadCMW','caadtol','caadTOR','caadVEN','cmsolcmw','cmsolTOL','cmsolTOR','cmsolVEN','Connect-AAD','connect-AzureRM','Connect-MSOL','convert-AADUImmuntableIDToADUObjectGUID','convert-ADUObjectGUIDToAADUImmuntableID','Disconnect-AAD','get-AADBearerToken','get-AADBearerTokenHeaders','get-AADCertToken','get-AADLastSync','get-AADLicenseFullName','get-AADlicensePlanList','get-AADToken','get-AADTokenHeaders','get-aaduser','get-AADUserLicenseDetails','Get-DsRegStatus','Get-JWTDetails','Get-MsolDisabledPlansForSKU','Get-MsolUnexpectedEnabledPlansForUser','get-MsolUserLastSync','Get-MsolUserLicense','get-MsolUserLicenseDetails','Get-ServiceToken','Get-TokenCache','Initialize-AADSignErrorsHash','profile-AAD-Signons','Write-Log','get-colorcombo','Initialize-AADSignErrorsHash','Cleanup','remove-AADUserLicense','Remove-MsolUserDirectLicenses','resolve-GuestExternalAddr2UPN','search-AADSignInReports','search-GraphApiAAD','set-AADUserUsageLocation','test-AADUserIsLicensed','test-MsolUserLicenseDirectAssigned','test-MsolUserLicenseGroupAssigned','toggle-AADLicense','Wait-AADSync')
+FunctionsToExport = @('add-AADUserLicense','Add-ADALType','caadCMW','caadtol','caadTOR','caadVEN','cmsolcmw','cmsolTOL','cmsolTOR','cmsolVEN','Connect-AAD','connect-AzureRM','Connect-MSOL','convert-AADUImmuntableIDToADUObjectGUID','convert-ADUObjectGUIDToAADUImmuntableID','Disconnect-AAD','get-AADBearerToken','get-AADBearerTokenHeaders','get-AADCertToken','get-AADLastSync','get-AADLicenseFullName','get-AADlicensePlanList','get-AADToken','get-AADTokenHeaders','get-aaduser','get-AADUserLastSync','get-AADUserLicenseDetails','Get-DsRegStatus','Get-JWTDetails','Get-MsolDisabledPlansForSKU','Get-MsolUnexpectedEnabledPlansForUser','Get-MsolUserLicense','get-MsolUserLicenseDetails','Get-ServiceToken','Get-TokenCache','import-AADAppRegistrationPFX','Initialize-AADSignErrorsHash','New-AADAppAuthCertificate','New-AADAppPermissionsObject','profile-AAD-Signons','write-log','reset-HostIndent','push-HostIndent','pop-HostIndent','set-HostIndent','write-HostIndent','clear-HostIndent','get-HostIndent','get-colorcombo','Initialize-AADSignErrorsHash','Cleanup','Remove-AADAppRegistrationCBAAuth','remove-AADUserLicense','Remove-MsolUserDirectLicenses','resolve-GuestExternalAddr2UPN','search-AADSignInReports','search-GraphApiAAD','set-AADUserUsageLocation','test-AADUserIsLicensed','test-MsolUserLicenseDirectAssigned','test-MsolUserLicenseGroupAssigned','toggle-AADLicense','Wait-AADSync')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = '*'
@@ -148,3 +148,5 @@ PrivateData = @{
 # H7QkErGAOI6z+bThDpPY585B3IWMkyhLXcEQOPoZLG3tRqR1FIQh89oiglISGbBz
 # 7P/Vif1gdw2+YXi3n2BqNs7h
 # SIG # End signature block
+
+

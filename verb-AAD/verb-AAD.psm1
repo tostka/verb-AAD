@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 2.1.0
+Version     : 3.0.0
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -34,10 +34,12 @@ https://github.com/tostka/verb-AAD
 #>
 
 
-$script:ModuleRoot = $PSScriptRoot ;
-$script:ModuleVersion = (Import-PowerShellDataFile -Path (get-childitem $script:moduleroot\*.psd1).fullname).moduleversion ;
+    $script:ModuleRoot = $PSScriptRoot ;
+    $script:ModuleVersion = (Import-PowerShellDataFile -Path (get-childitem $script:moduleroot\*.psd1).fullname).moduleversion ;
+    $runningInVsCode = $env:TERM_PROGRAM -eq 'vscode' ;
 
 #*======v FUNCTIONS v======
+
 
 
 
@@ -61,6 +63,10 @@ function add-AADUserLicense {
     AddedWebsite:	
     AddedTwitter:	
     REVISIONS
+    * 3:12 PM 5/30/2023 get-AzureAdUser  immed after lic add isn't returning curr status: added 500ms delay before repoll ; rounded out pswlt support
+    * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
+    * 4:31 PM 5/17/2023  rounded out params for $pltRXO passthru
+    * 2:35 PM 8/12/2022 expanded echo on lic attempt
     * 10:30 AM 3/24/2022 add pipeline support
     2:28 PM 3/22/2022 init; confirmed functional
     .DESCRIPTION
@@ -69,6 +75,10 @@ function add-AADUserLicense {
     Array of User Userprincipal/Guids to have the specified license applied
     .PARAMETER  skuid
     Azure LicensePlan SkuID for the license to be applied to the users.
+    .PARAMETER  Credential
+    Credential to use for this connection [-credential 'account@domain.com']
+    .PARAMETER silent
+    Switch to specify suppression of all but warn/error echos.
     .PARAMETER Whatif
     Parameter to run a Test no-change pass [-Whatif switch]
     .PARAMETER Silent
@@ -91,29 +101,38 @@ function add-AADUserLicense {
     [CmdletBinding()]
     PARAM (
         # ValueFromPipeline: will cause params to match on matching type, [array] input -> [array]$param
-        [Parameter(Mandatory=$false,ValueFromPipeline=$true)]
-        [ValidateNotNullOrEmpty()]
-        [string[]]$Users, 
-        [string]$skuid,
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true,HelpMessage="User identifiers")]
+            [ValidateNotNullOrEmpty()]
+            [string[]]$Users, 
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true,HelpMessage="LicenseSkuId")]
+            [string]$skuid,
         [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
-        [ValidateNotNullOrEmpty()]
-        [string]$TenOrg = $global:o365_TenOrgDefault,
-        [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
-        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
-        [switch]$whatif,
-        [switch]$silent
+            [ValidateNotNullOrEmpty()]
+            [string]$TenOrg = $global:o365_TenOrgDefault,
+        [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
+            [System.Management.Automation.PSCredential]$Credential,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+            [switch] $silent,
+        [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
+            [switch] $whatIf
     ) ;
     BEGIN {
         ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
         
+        # downstream commands
         $pltRXO = [ordered]@{
-            Credential = $Credential 
-            verbose = $($VerbosePreference -eq 'Continue') ;
-            silent = $true ; # always silent, echo only warn/errors
-        } ; 
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+            $pltRxo.add('Silent',$silent) ;
+        } ;
+        # default connectivity cmds - force silent false
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
+        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
         #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
-        Connect-AAD @pltRXO ;         
+        Connect-AAD @pltRXOC ;         
         
         # check if using Pipeline input or explicit params:
         if ($PSCmdlet.MyInvocation.ExpectingInput) {
@@ -143,25 +162,7 @@ function add-AADUserLicense {
             } ; 
             $error.clear() ;
             TRY {
-                <# rem out search string option - if we're mandating UPN/guids, it's always going to fail the initial attempt, skip it, odds of feeding it a dname etc is low
-                $pltGAADU=[ordered]@{ SearchString = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
-                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
-                $AADUser = Get-AzureADUser @pltGAADU ; 
-                if (-not $AADUser) {
                 
-                    $smsg = "Failed: Get-AzureADUser -SearchString $($pltGAADU.searchstring)" ; 
-                    $smsg += "`nretrying as -objectid..." ; 
-                    if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
-                    $pltGAADU.remove('SearchString') ; 
-                    $pltGAADU.Add("ObjectID",$user) ; 
-                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
-                    $AADUser = Get-AzureADUser @pltGAADU ;         
-                } ; 
-                #>
                 $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
                 $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -181,7 +182,7 @@ function add-AADUserLicense {
                             whatif = $($whatif) ;
                             verbose = ($VerbosePreference -eq "Continue") ;
                         } ;
-                        $smsg = "set-AADUserUsageLocationw`n$(($spltSAADUUL|out-string).trim())" ; 
+                        $smsg = "set-AADUserUsageLocation w`n$(($spltSAADUUL|out-string).trim())" ; 
                         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                         $bRet = set-AADUserUsageLocation @spltSAADUUL ; 
@@ -261,6 +262,8 @@ function add-AADUserLicense {
                                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                                 }  ;
 
+                                # for some reason below isn't really getting updated AADU (at least not whats coming through), add a delay 
+                                start-sleep -Milliseconds 500 ; 
                                 $AADUser = Get-AzureADUser @pltGAADU ; 
                                 $report.AzureADUser = $AADUser ; 
                                 $usrPlans = $usrLics=@() ; 
@@ -289,9 +292,10 @@ function add-AADUserLicense {
                                 New-Object PSObject -Property $Report | write-output ;
                             } ;
                         } else {
-                            $smsg = "($($LicenseSkuId) has *NO* available units in Tenant $($tsku.consumedunits)/$($tsku.activeunits))"
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            $smsg = "($($SkuId.SkuPartNumber) has *NO* available units in Tenant $($tsku.Consumed)/$($tsku.Enabled))"
+                            $smsg += "`n$(($tsku|out-string).trim())" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                             $report.Success = $false ; 
                             #[PSCustomObject]$Report | write-output ;
                             New-Object PSObject -Property $Report | write-output ;
@@ -311,11 +315,12 @@ function add-AADUserLicense {
                     Break ; 
                 } ;
             } CATCH {
-                $ErrTrapd = $_ ; 
+                $ErrTrapd=$Error[0] ;
                 $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                Break ;
+                $smsg += "`n$($ErrTrapd.Exception.Message)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                BREAK ;
             } ; 
 
             $smsg = $sBnrS.replace('-v','-^').replace('v-','^-')
@@ -331,6 +336,7 @@ function add-AADUserLicense {
 }
 
 #*------^ add-AADUserLicense.ps1 ^------
+
 
 #*------v Add-ADALType.ps1 v------
 function Add-ADALType {
@@ -373,45 +379,54 @@ function Add-ADALType {
 
 #*------^ Add-ADALType.ps1 ^------
 
+
 #*------v caadCMW.ps1 v------
 function caadCMW {Connect-AAD -cred $credO365CMWCSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ caadCMW.ps1 ^------
+
 
 #*------v caadTOL.ps1 v------
 function caadtol {Connect-AAD -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ caadTOL.ps1 ^------
 
+
 #*------v caadTOR.ps1 v------
 function caadTOR {Connect-AAD -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ caadTOR.ps1 ^------
+
 
 #*------v caadVEN.ps1 v------
 function caadVEN {Connect-AAD -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ caadVEN.ps1 ^------
 
+
 #*------v cmsolCMW.ps1 v------
 function cmsolcmw {Connect-MSOL -cred $credO365CMWCSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ cmsolCMW.ps1 ^------
+
 
 #*------v cmsolTOL.ps1 v------
 function cmsolTOL {Connect-MSOL -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ cmsolTOL.ps1 ^------
 
+
 #*------v cmsolTOR.ps1 v------
 function cmsolTOR {Connect-MSOL -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ cmsolTOR.ps1 ^------
 
+
 #*------v cmsolVEN.ps1 v------
 function cmsolVEN {Connect-MSOL -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; }
 
 #*------^ cmsolVEN.ps1 ^------
+
 
 #*------v Connect-AAD.ps1 v------
 Function Connect-AAD {
@@ -433,6 +448,26 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    *3:15 PM 5/30/2023 Updates to support either -Credential, or -UserRole + -TenOrg, to support fully portable downstream credentials: 
+        - Add -UserRole & explicit -TenOrg params
+        - Drive TenOrg defaulted $global:o365_TenOrgDefault, or on $env:userdomain
+        - use the combo thru get-TenantCredential(), then set result to $Credential
+        - if using Credential, the above are backed out via get-TenantTag() on the $credential 
+        - CBA identifiers are resolve always via $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ;
+        removed some redundant & rem'd code
+    * 4:13 PM 5/22/2023 removed msal code ; updated w silent support, and full wlt; 
+    * 10:05 AM 5/19/2023 added trailing certy fn after token citations
+    * 2:59 PM 5/15/2023 simplified manual cred/tenant alignment code to simpler resolve-UserNameToUserRole  tests against token.tenantid; purged rem'd code
+    * 6:27 PM 5/12/2023 fixed logic in fault ipmo block ; revised tenant/cred align validation to use resolve-UserNameToUserRole
+    # 2:44 PM 5/10/2023 fixed typo in END block ($username vs $credential.username) ; drop the UPN support, all the resolution code is built to work with a full credential.username; could fake it, but safer not to support the UPN logon ; 
+    if you want UPN logon use connect-azureAD -accountid UPN... ; added updated fault-tolerant load module block
+    rem'd unused obso code ; MFA & CBA support updates, cross compliant with EOM310 changes & fixes: 
+    Add: -UserRole & -UserPrincipalName; spec paramsets DefaultParameterSetName='UPN' ; updated UserRole to validate using global rgx; validated vaad:get-aadtoken() continues to work fine with MSAL auth lib (uses underlying )
+    added CBA object resulution, leverages verb-Auth:resolve-UserNameToUserRole(), and switches auth types on rgx'd cred.Username.
+    updated connect-azuread to use CBA AppID etc v AccountID (UPN)
+    fixed trailing END Tenant/Cred alignmnet validator, to properly work for CBA.username (lookup the auth cert FriendlyName, from the uname, and parse out the userrole/tenorg details via resolve-UserNameToUserRole()
+    # 4:45 PM 7/7/2022 workaround msal.ps bug: always ipmo it FIRST: "Get-msaltoken : The property 'Authority' cannot be found on this object. Verify that the property exists."
+    * 1:24 PM 3/28/2022 fixed missing `n on #669; confirmed works fine with MFA, as long as get-TenantMFA properly returns $MFA -eq $true (uses -AccountID param & prompts for MAuth logon)
     * 9:57 AM 9/17/2021 added silent to CBH
     * 5:38 PM 8/17/2021 added -silent param
     # 3:20 PM 7/26/2021 updated add-pstitlebar
@@ -460,7 +495,11 @@ Function Connect-AAD {
     .PARAMETER  ProxyEnabled
     Proxyied connection support
     .PARAMETER Credential
-    Credential to be used for connection
+    Credential to use for this connection [-credential [credential obj variable]
+    .PARAMETER UserRole
+    Credential User Role spec for credential discovery (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]
+    .PARAMETER TenOrg
+        Optional Tenant Tag (wo -Credential)[-TenOrg 'XYZ']
     .PARAMETER silent
     Switch to suppress all non-error echos
     .INPUTS
@@ -469,21 +508,104 @@ Function Connect-AAD {
     None. Returns no objects or output.
     .EXAMPLE
     Connect-AAD
+    Demo connect using defaulted config (default profile driven TenOrg & UserRole spec)
     .EXAMPLE
     Connect-AAD -Credential $cred
+    Demo use of explicit credential object
+    .EXAMPLE
+    Connect-AAD -UserRole SIDCBA -TenOrg ABC -verbose  ; 
+    Demo use of UserRole (specifying a CBA variant), AND TenOrg spec, to connect (autoresolves against preconfigured credentials in profile)
     .LINK
     #>
     #Requires -Modules AzureAD
-    [CmdletBinding()] 
+    [CmdletBinding(DefaultParameterSetName='UPN')]
     [Alias('caad','raad','reconnect-AAD')]
     Param(
         [Parameter()][boolean]$ProxyEnabled = $False,
-        [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage="Credential to use for this connection [-credential [credential obj variable]")]
+            [System.Management.Automation.PSCredential]$Credential,
+            # = $global:credo365TORSID, # defer to TenOrg & UserRole resolution
+        [Parameter(Mandatory = $false, HelpMessage = "Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]")]
+            # sourced from get-admincred():#182: $targetRoles = 'SID', 'CSID', 'ESVC','CSVC','UID','ESvcCBA','CSvcCBA','SIDCBA' ; 
+            #[ValidateSet("SID","CSID","UID","B2BI","CSVC","ESVC","LSVC","ESvcCBA","CSvcCBA","SIDCBA")]
+            # pulling the pattern from global vari w friendly err
+            [ValidateScript({
+                if(-not $rgxPermittedUserRoles){$rgxPermittedUserRoles = '(SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)'} ;
+                if(-not ($_ -match $rgxPermittedUserRoles)){throw "'$($_)' doesn't match `$rgxPermittedUserRoles:`n$($rgxPermittedUserRoles.tostring())" ; } ; 
+                return $true ; 
+            })]
+            [string[]]$UserRole = @('SID','CSVC'),
+        [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
+            [ValidateNotNullOrEmpty()]
+            #[ValidatePattern("^\w{3}$")]
+            [string]$TenOrg = $global:o365_TenOrgDefault,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
-        [switch] $silent
+            [switch] $silent
     ) ;
     BEGIN {
         $verbose = ($VerbosePreference -eq "Continue") ;
+        #if(-not (get-variable rgxCertFNameSuffix -ea 0)){$rgxCertFNameSuffix = '-([A-Z]{3})$' ; } ; 
+        if(-not $rgxCertThumbprint){$rgxCertThumbprint = '[0-9a-fA-F]{40}' } ; # if it's a 40char hex string -> cert thumbprint  
+        if(-not $rgxSmtpAddr){$rgxSmtpAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ; } ; # email addr/UPN
+        if(-not $rgxDomainLogon){$rgxDomainLogon = '^[a-zA-Z][a-zA-Z0-9\-\.]{0,61}[a-zA-Z]\\\w[\w\.\- ]+$' } ; # DOMAIN\samaccountname 
+
+        #-=-=-=-=-=-=-=-=
+        if(-not $Credential){
+            if($UserRole){
+                $smsg = "Using specified -UserRole:$( $UserRole -join ',' )" ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            } else { $UserRole = @('SID','CSVC') } ;
+            if($TenOrg){
+                $smsg = "Using explicit -TenOrg:$($TenOrg)" ;
+            } else {
+                switch -regex ($env:USERDOMAIN){
+                    ([regex]('(' + (( @($TORMeta.legacyDomain,$CMWMeta.legacyDomain)  |foreach-object{[regex]::escape($_)}) -join '|') + ')')).tostring() {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
+                    $TOLMeta.legacyDomain {$TenOrg = 'TOL' }
+                    default {throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; exit ; } ;
+                } ;
+                $smsg = "Imputed `$TenOrg from logged on USERDOMAIN:$($TenOrg)" ;
+            } ;
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            $o365Cred = $null ;
+            $pltGTCred=@{TenOrg=$TenOrg ; UserRole= $UserRole; verbose=$($verbose)} ;
+            $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            $o365Cred = get-TenantCredentials @pltGTCred ;
+            if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ;
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                $Credential = $o365Cred.Cred ;
+            } else {
+                $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                break ;
+            } ;
+        } else {
+            # test-exotoken only applies if $UseConnEXO  $false
+            $TenOrg = get-TenantTag -Credential $Credential ;
+        } ;
+        # build the cred etc once, for all below:
+        $pltCAAD=[ordered]@{
+            #Credential = $Credential ;
+            verbose = $($verbose) ;
+            erroraction = 'STOP' ;
+        } ;
+        <#if((gcm connect-AzureAD).Parameters.keys -contains 'silent'){
+            $pltCAAD.add('Silent',$false) ;
+        } ;
+        #>
+        # defer to resolve-UserNameToUserRole -Credential $Credential
+        $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ;
+        if($credential.username -match $rgxCertThumbprint){
+            $certTag = $uRoleReturn.TenOrg ;
+        } ; 
+        #-=-=-=-=-=-=-=-=
+
         $smsg = "EXEC:get-TenantMFARequirement -Credential $($Credential.username)" ; 
         if($silent){} else { 
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -495,55 +617,161 @@ Function Connect-AAD {
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         } ;         
-        $TenantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
+        $TenantTag = $TenOrg = get-TenantTag -Credential $Credential ; 
         $sTitleBarTag = @("AAD") ;
         $sTitleBarTag += $TenantTag ;
         $TenantID = get-TenantID -Credential $Credential ;
+
     } ;
     PROCESS {
-        $smsg = "(Check for/install AzureAD module)" ; 
+        # workaround msal.ps bug: always ipmo it FIRST: "Get-msaltoken : The property 'Authority' cannot be found on this object. Verify that the property exists."
+        # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
+        # Note:gmo doesn't throw an error when target isn't found, have to if/then (not try/catch); 
+        # also don't if(xxx| out-null): it doesn't eval as 'true', _ever_ (capt/assign output to a vari to dump). 
+        <#
+        $modname = 'MSAL.PS' ;
+        $smsg = "(load/install $($modname) module)" ; 
         if($silent){} else { 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        } ;         Try {Get-Module AzureAD -listavailable -ErrorAction Stop | out-null } Catch {Install-Module AzureAD -scope CurrentUser ; } ;                 # installed
-        $smsg = "Import-Module -Name AzureAD -MinimumVersion '2.0.0.131'" ; 
+        } ;
+        $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; verbose=$true} ;
+        $error.clear() ;
+        $oxmo = $null ; 
+        if(-not ( $oxmo = Get-Module @pltIMod  )){
+            Try {
+                $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                Import-Module @pltIMod ;
+            } Catch {
+                if(-not ($oxmo = Get-Module @pltIMod -listavailable)){
+                    if($env:computername -match $rgxMyBoxW){$pltIMod.add('scope','CurrentUser')} else { $pltIMod.add('scope','AllUsers')} ;
+                    $smsg = "MISSING $($modname)!: Install-Module? w`n$(($pltIMod|out-string).trim())" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $pltIMod.verbose = $true ; 
+                    $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ; 
+                    if ($bRet.ToUpper() -eq "YYY") {
+                        Install-Module @pltIMod ; 
+                    } else {
+                            $smsg = "Invalid response. Exiting" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        #exit 1
+                        break ; 
+                    } ; #DoInstall
+                } ;  # IsInstalled
+            } ; # NotImportable
+        } ; # IsImported
+        #>
+        # Note:gmo doesn't throw an error when target isn't found, have to if/then (not try/catch); 
+        # also don't if(xxx| out-null): it doesn't eval as 'true', _ever_ (capt/assign output to a vari to dump). 
+        $modname = 'AzureAD' ; 
+        $smsg = "(load/install $($modname) module)" ; 
         if($silent){} else { 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        } ;  
-       Try {Get-Module AzureAD -ErrorAction Stop | out-null } Catch {Import-Module -Name AzureAD -MinimumVersion '2.0.0.131' -ErrorAction Stop  } ; # imported
+        } ;
+        $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; verbose=$true} ;
+        $error.clear() ;
+        $oxmo = $null ; 
+        if(-not ( $oxmo = Get-Module @pltIMod  )){
+            Try {
+                $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                Import-Module @pltIMod ;
+            } Catch {
+                if(-not ($oxmo = Get-Module @pltIMod -listavailable)){
+                    if($env:computername -match $rgxMyBoxW){$pltIMod.add('scope','CurrentUser')} else { $pltIMod.add('scope','AllUsers')} ;
+                    $smsg = "MISSING $($modname)!: Install-Module? w`n$(($pltIMod|out-string).trim())" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $pltIMod.verbose = $true ; 
+                    $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ; 
+                    if ($bRet.ToUpper() -eq "YYY") {
+                        Install-Module @pltIMod ; 
+                    } else {
+                            $smsg = "Invalid response. Exiting" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        #exit 1
+                        break ; 
+                    } ; #DoInstall
+                } ;  # IsInstalled
+            } ; # NotImportable
+        } ; # IsImported
+
         #try { Get-AzureADTenantDetail | out-null  } # authenticated to "a" tenant
         # with multitenants and changes between, instead we need ot test 'what tenant' we're connected to
         TRY { 
             #I'm going to assume that it's due to too many repeated req's for gAADTD
             # so lets work with & eval the local AzureSession Token instead - it's got the userid, and the tenantid, both can validate the conn, wo any queries.:
-            $token = get-AADToken -verbose:$($verbose) ; 
+            
+            #$token = get-AADToken -verbose:$($verbose) ; # this actually wraps the [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens object
+            <# Simpler to use get-aadtoken() call, which uses underlying intact obj (not ADAL or MSAL dependant); 
+            works direct as well: $global:token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens  ; 
+            can use direct connection status test as well:
+            if ($null -eq [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens){
+                Connect-AzureAD ;
+            } else {
+                $token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens ;
+                Write-Verbose "Connected to tenant: $($token.AccessToken.TenantId) with user: $($token.AccessToken.UserId)" ;
+            } ;
+            #>
+            if(-not $uRoleReturn){
+                $smsg = "resolve-UserNameToUserRole -UserName $($Credential.username)..." ; 
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; 
+                #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ; 
+            } ; 
+            $smsg = "get-AADToken..." ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            $token = get-AADToken -verbose:$($verbose) ;
+            $smsg = "convert-TenantIdToTag -TenantId $(($token.AccessToken).tenantid) (`$token.AccessToken).tenantid)" ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            # convert token.tenantid to the 3-letter TenOrg
+            $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid -verbose:$($verbose) ; 
+            #$Tenantdomain = convert-TenantIdToDomainName -TenantId ($token.AccessToken).tenantid ;
             if( ($null -eq $token) -OR ($token.count -eq 0)){
                 # not connected/authenticated
                 #Connect-AzureAD -TenantId $TenantID -Credential $Credential ; 
                 throw "" # gen an error to dump into generic CATCH block
             }elseif($token.count -gt 1){
-                write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MULTIPLE TOKENS RETURNED!`n$(( ($token.AccessToken) | ft -a  TenantId,UserId,LoginType |out-string).trim())" ; 
+                $smsg = "MULTIPLE TOKENS RETURNED!`n$(( ($token.AccessToken) | ft -a  TenantId,UserId,LoginType |out-string).trim())" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 # want to see if this winds up with a stack of parallel tokens
             } else {
                 $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ;  
+                $smsg += "`n$($urolereturn.TenOrg):$($urolereturn.UserRole)" ; 
                 if($silent){} else { 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ;
-                #if connected,verify cred-specified Tenant
-                #if($AADTenDtl.VerifiedDomains.name.contains($Credential.username.split('@')[1].tostring())){
-                if(($token.AccessToken).userid -eq $Credential.username){
-                    $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid ;                    
-                    #$smsg = "(Authenticated to AAD:$($AADTenDtl.displayname))"
-                    $smsg = "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
+                # flip to resolve-UserNameToUserRole & direct eval the $token values:
+                if( $TokenTag  -eq $uRoleReturn.TenOrg){
+                    if($credential.username -match $rgxCertThumbprint){
+                        $smsg = "(Authenticated to AAD:$($uRoleReturn.TenOrg) as $($uRoleReturn.FriendlyName))" ; 
+                    } else { 
+                        $smsg = "(Authenticated to AAD:$($uRoleReturn.TenOrg) as $(($token.AccessToken).userid))" ; 
+                    } ; 
                     if($silent){} else { 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    } ;                    
+                    } ;   
                 } else { 
-                    $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid -verbose:$($verbose) ; 
-                    $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                    if($credential.username -match $rgxCertThumbprint){
+                        $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant as $($uRoleReturn.FriendlyName)" ; 
+                    } else { 
+                        $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                    } ; 
                     if($silent){} else { 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -551,10 +779,9 @@ Function Connect-AAD {
                     Disconnect-AzureAD ; 
                     throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
                 } ; 
-                
             } ; 
 
-        }   
+        } 
         #CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException] {
         # for changing Tenant logons, we need to trigger a full credential reconnect, even if connected and not thowing AadNeedAuthenticationException
         <# 3:53 PM 8/8/2020 on a cold no-auth start, it throws up on the below
@@ -566,7 +793,11 @@ Function Connect-AAD {
         }#>
         CATCH {
             
-            if(!$Credential){
+            <#$pltCAAD=[ordered]@{
+                ErrorAction='Stop';
+            }; 
+
+            if(-not $Credential){
                 if(get-command -Name get-admincred) {
                     Get-AdminCred ;
                 } else {
@@ -581,48 +812,162 @@ Function Connect-AAD {
                             } ; 
                     } ;
                     if(!$Credential){
-                        write-host -foregroundcolor yellow "$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
+                        $smsg = "WHY$($env:USERDOMAIN) IS AN UNKNOWN DOMAIN`nPROMPTING FOR O365 CRED:" ;
                         $Credential = Get-Credential ; 
                     } ;
                 }  ;
             } ; 
 
-            $smsg = "Authenticating to AAD:$($Credential.username.split('@')[1].tostring()), w $($Credential.username)..."  ;
+            #$uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; 
+            #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ;
+            #>
+            if($credential.username -match $rgxCertThumbprint){
+                $smsg =  "(UserName:Certificate Thumbprint detected)"
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $pltCAAD.Add("CertificateThumbprint", [string]$Credential.UserName);                    
+                $pltCAAD.Add("ApplicationId", [string]$Credential.GetNetworkCredential().Password);
+                # resolve TenantID (guid) from Credential
+                if($TenantID = get-TenantID -Credential $Credential){
+                    $pltCAAD.Add("TenantId", [string]$TenantID);
+                } else { 
+                    $smsg = "UNABLE TO RESOLVE `$TENORG:$($TenOrg) TO FUNCTIONAL `$$($TenOrg)meta.o365_TenantDomain!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    throw $smsg ; 
+                    Break ; 
+                } ; 
+                if($uRoleReturn.TenOrg){
+                    $TenOrg = $uRoleReturn.TenOrg  ; 
+                    $smsg = "(using CBA:cred:$($TenOrg):$([string]$uRoleReturn.FriendlyName))" ; 
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                } else {
+                    $smsg = "Unable to resolve `$credential.username ($($credential.username))"
+                    $smsg += "`nto a usable 'UserRole' spec!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    throw $smsg ;
+                    Break ;
+                } ; 
+             } else { 
+                <#  interactive ModernAuth -UserPrincipalName isn't supported, param is -AccountId
+                    -AadAccessToken <String>
+                    Specifies a Azure Active Directory Graph access token.
+                    -AccountId <String>
+                        Specifies the ID of an account. You must specify the UPN of the user when authenticating with a user access token.
+                    -ApplicationId <String>
+                        Specifies the application ID of the service principal.
+                    -AzureEnvironmentName <EnvironmentName>
+                        Specifies the name of the Azure environment. The acceptable values for this parameter are:
+                        - AzureCloud
+                        - AzureChinaCloud
+                        - AzureUSGovernment
+                        - AzureGermanyCloud
+                        The default value is AzureCloud.
+                    -CertificateThumbprint <String>
+                        Specifies the certificate thumbprint of a digital public key X.509 certificate of a user account that has permission to perform
+                        this action.
+                    -Credential <PSCredential>
+                        Specifies a PSCredential object. For more information about the PSCredential object, type Get-Help Get-Credential.
+                        The PSCredential object provides the user ID and password for organizational ID credentials.
+                    -InformationAction <ActionPreference>
+                        Specifies how this cmdlet responds to an information event. The acceptable values for this parameter are:
+                        - Continue
+                        - Ignore
+                        - Inquire
+                        - SilentlyContinue
+                        - Stop
+                        - Suspend
+                    -InformationVariable <String>
+                        Specifies a variable in which to store an information event message.
+                    -LogLevel <LogLevel>
+                        Specifies the log level. The accdeptable values for this parameter are:
+                        - Info
+                        - Error
+                        - Warning
+                        - None
+                        The default value is Info.
+                    -MsAccessToken <String>
+                        Specifies a Microsoft Graph access token.
+                    -TenantId <String>
+                        Specifies the ID of a tenant.
+                        If you do not specify this parameter, the account is authenticated with the home tenant.
+                        You must specify the TenantId parameter to authenticate as a service principal or when using Microsoft account.
+                    -Confirm [<SwitchParameter>]
+                        Prompts you for confirmation before running the cmdlet.
+                    -WhatIf [<SwitchParameter>]
+                        Shows what would happen if the cmdlet runs. The cmdlet is not run.
+                    -LogFilePath <String>
+                        The path where the log file for this PowerShell session is written to. Provide a value here if you need to deviate from the
+                        default PowerShell log file location.
+                #>
+                <# original support for -userprincipalname ; too many dependancies for use of full $credential object
+                if ($UserPrincipalName) {
+                    #$pltCAAD.Add("UserPrincipalName", [string]$UserPrincipalName);
+                    $pltCAAD.Add("AccountId", [string]$UserPrincipalName);
+                    $smsg = "(using cred:$([string]$UserPrincipalName))" ; 
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                } elseif ($Credential -AND -not $UserPrincipalName){
+                    $pltCAAD.Add("AccountId", [string]$Credential.username);
+                    $smsg = "(using cred:$($credential.username))" ; 
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                };
+                #>
+                if ($Credential){
+                    $pltCAAD.Add("AccountId", [string]$Credential.username);
+                    $smsg = "(using cred:$($credential.username))" ; 
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                } else {
+                    $smsg = "Missing dependant -Credential!" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    Break ; 
+                } ; 
+            } 
+
+            if($uRoleReturn.UserRole -match 'CBA'){ $smsg = "Authenticating to AAD:$($uRoleReturn.TenOrg), w CBA cred:$($uRoleReturn.FriendlyName)"  }
+            else {$smsg = "Authenticating to AAD:$($uRoleReturn.TenOrg), w $($Credential.username)..."  ;} ; 
             if($silent){} else { 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ; 
-            $pltCAAD=[ordered]@{
-                    ErrorAction='Stop';
-            }; 
-            if($TenantID){
+            
+            if($TenantID -AND ($pltcaad.keys -notcontains 'TenantID')){
                 $smsg = "Forcing TenantID:$($TenantID)" ; 
                 if($silent){} else { 
                     $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                    $smsg += "`n$($urolereturn.TenOrg):$($urolereturn.UserRole)" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ;                
-                $pltCAAD.add('TenantID',$TenantID) ;
+                $pltCAAD.add('TenantID',[string]$TenantID) ;
             } 
-            if(!$MFA){
-                #Connect-AzureAD -Credential $Credential -ErrorAction Stop ;
+            if(-not $MFA){
                 $smsg = "EXEC:Connect-AzureAD -Credential $($Credential.username) (no MFA, full credential)" ; 
                 if($silent){} else { 
                     $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                    $smsg += "`n$($urolereturn.TenOrg):$($urolereturn.UserRole)" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ;                
                 if($Credential.username){$pltCAAD.add('Credential',$Credential)} ;
             } else {
-                #Connect-AzureAD -AccountID $Credential.userName ;
-                $smsg = "EXEC:Connect-AzureAD -Credential $($Credential.username) (w MFA, username & prompted pw)" ; 
-                if($silent){} else { 
-                    $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                } ;                
-
-                if($Credential.username){$pltCAAD.add('AccountId',$Credential.username)} ;
+                if($token.AccessToken.AccessToken){
+                    if($silent){} else { 
+                        $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                        $smsg += "`n$($urolereturn.TenOrg):$($urolereturn.UserRole)" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ;                
+                } ; 
+                if($pltcaad.keys -notcontains 'ApplicationId' -AND $pltcaad.keys -notcontains 'CertificateThumbprint' -AND $pltcaad.keys -notcontains 'AccountId'){
+                    # add UPN AccountID logon, if missing and non-CBA
+                    if($Credential.username -AND ($pltCAAD.keys -notcontains 'AccountId') ){$pltCAAD.add('AccountId',$Credential.username)} ;
+                } 
             } ;
 
             $smsg = "Connect-AzureAD w`n$(($pltCAAD|out-string).trim())" ; 
@@ -642,11 +987,18 @@ Function Connect-AAD {
                 } else {
                     if($silent){} else { 
                         $smsg = "(single Tenant connection returned)" 
-                        if($silent){} else { 
-                            $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                        } ;
+                        # need to reqry the token for updated status
+                        #$token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens ; # direct call option
+                        $token = get-AADToken -verbose:$($verbose) ;
+                        $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid -verbose:$($verbose) ; 
+                        if($token.AccessToken.AccessToken){
+                            if($silent){} else { 
+                                $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+                                $smsg += "`n$($urolereturn.TenOrg):$($urolereturn.UserRole)" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            } ;
+                        } ; 
                     } ; 
                 } ; 
             } CATCH {
@@ -666,7 +1018,7 @@ Function Connect-AAD {
             } ; 
             
             if($silent){} else { 
-                $smsg = "$(($AADConnection |ft -a|out-string).trim())" ;
+                $smsg = "`n$(($AADConnection |ft -a|out-string).trim())" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ; 
@@ -680,48 +1032,67 @@ Function Connect-AAD {
         } ; # CATCH-E # err indicates no authenticated connection
     } ;  # PROC-E
     END {
-        $token = get-AADToken -verbose:$($verbose) ; 
+        $smsg = "get-AADToken..." ;
+        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        $token = get-AADToken -verbose:$($verbose) ;
+        $smsg = "convert-TenantIdToTag -TenantId $(($token.AccessToken).tenantid) (`$token.AccessToken).tenantid)" ;
+        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        # convert token.tenantid to the 3-letter TenOrg
+        $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid -verbose:$($verbose) ;
+        $Tenantdomain = convert-TenantIdToDomainName -TenantId ($token.AccessToken).tenantid ;
         if( ($null -eq $token) -OR ($token.count -eq 0)){
-            # not connected/authenticated
-            #Connect-AzureAD -TenantId $TenantID -Credential $Credential ; 
-            #throw "" # gen an error to dump into generic CATCH block
-        } else { 
-            <# borked by psreadline v1/v2 breaking changes
-            if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
-                $smsg = "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
-                $Host.UI.RawUI.BackgroundColor = $PSBgColor
-                $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
+            $smsg = "NOT authenticated to any o365 Tenant AzureAD!" ; 
+            if($credential.username -match $rgxCertThumbprint){
+                $smsg = "Connecting to -Credential Tenant as $($uRoleReturn.FriendlyName)" ;
+            } else {
+                $smsg = "Connecting to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ;
             } ;
-            #>
-            if($silent){} else { 
-                $smsg = "Connected to Tenant:`n$(($token.AccessToken | ft -a TenantId,UserId,LoginType|out-string).trim())" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ $smsg = "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            } ; 
-            if(($token.AccessToken).userid -eq $Credential.username){
-                $TokenTag = convert-TenantIdToTag -TenantId $TenantId ;                    
-                $smsg = "(Authenticated to AAD:$($TokenTag) as $(($token.AccessToken).userid)" ; 
-                if($silent){} else { 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ $smsg = "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            if($silent){} else {
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ;
+            Disconnect-AzureAD ;
+            Connect-AAD -Credential $Credential -verbose:$($verbose) -Silent:$false  ; 
+        } else {
+            $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ;
+            $smsg += "`n$($urolereturn.TenOrg):$($urolereturn.UserRole)" ; 
+            if($silent){} else {
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ;
+            # flip to resolve-UserNameToUserRole & direct eval the $token values:
+            if( $TokenTag  -eq $uRoleReturn.TenOrg){
+                if($credential.username -match $rgxCertThumbprint){
+                    $smsg = "(Authenticated to AAD:$($uRoleReturn.TenOrg) as $($uRoleReturn.FriendlyName))" ;
+                } else {
+                    $smsg = "(Authenticated to AAD:$($uRoleReturn.TenOrg) as $(($token.AccessToken).userid))" ;
                 } ;
-                $TenOrg=get-TenantTag -Credential $Credential ; 
-                $sTitleBarTag = @("AAD") ;
-                $sTitleBarTag +=  $TokenTag ;# $TenOrg ;
-                Add-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");
-            } else { 
-                $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).TenantID  -verbose:$($verbose) ; 
-                $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ $smsg = "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                Disconnect-AzureAD ; 
-                throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" 
-            } ; 
+                if($silent){} else {
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ;
+            } else {
+                if($credential.username -match $rgxCertThumbprint){
+                    $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant as $($uRoleReturn.FriendlyName)" ;
+                } else {
+                    $smsg = "(Disconnecting from $($($TokenTag)) to reconn to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ;
+                } ;
+                if($silent){} else {
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ;
+                Disconnect-AzureAD ;
+                throw "AUTHENTICATED TO WRONG TENANT FOR SPECIFIED CREDENTIAL" ;
+            } ;
         } ; 
+
     } ; # END-E
 }
 
 #*------^ Connect-AAD.ps1 ^------
+
 
 #*------v connect-AzureRM.ps1 v------
 function connect-AzureRM {
@@ -841,6 +1212,7 @@ function connect-AzureRM {
 }
 
 #*------^ connect-AzureRM.ps1 ^------
+
 
 #*------v Connect-MSOL.ps1 v------
 Function Connect-MSOL {
@@ -1051,6 +1423,7 @@ Function Connect-MSOL {
 
 #*------^ Connect-MSOL.ps1 ^------
 
+
 #*------v convert-AADUImmuntableIDToADUObjectGUID.ps1 v------
 Function convert-AADUImmuntableIDToADUObjectGUID {
     <#
@@ -1141,6 +1514,7 @@ immutableID string to be converted[-immutableID 'SAMPLEINPUT']
 }
 
 #*------^ convert-AADUImmuntableIDToADUObjectGUID.ps1 ^------
+
 
 #*------v convert-ADUObjectGUIDToAADUImmuntableID.ps1 v------
 Function convert-ADUObjectGUIDToAADUImmuntableID {
@@ -1238,6 +1612,7 @@ Function convert-ADUObjectGUIDToAADUImmuntableID {
 }
 
 #*------^ convert-ADUObjectGUIDToAADUImmuntableID.ps1 ^------
+
 
 #*------v Disconnect-AAD.ps1 v------
 Function Disconnect-AAD {
@@ -1388,6 +1763,7 @@ Function Disconnect-AAD {
 
 #*------^ Disconnect-AAD.ps1 ^------
 
+
 #*------v get-AADBearerToken.ps1 v------
 function get-AADBearerToken {
     <#
@@ -1407,9 +1783,9 @@ function get-AADBearerToken {
     AddedCredit : 
     AddedWebsite: 
     AddedTwitter: 
-    # [does not contain a method named 'AcquireToken' Â· Issue #29108 Â· MicrosoftDocs/azure-docs](https://github.com/MicrosoftDocs/azure-docs/issues/29108)
+    # [does not contain a method named 'AcquireToken' · Issue #29108 · MicrosoftDocs/azure-docs](https://github.com/MicrosoftDocs/azure-docs/issues/29108)
     reports a fix:(untested, moved to native auth via certs)
-    TomBertie commented Apr 13, 2019 â€¢
+    TomBertie commented Apr 13, 2019 •
     I think I've got it working with AcquireTokenAsync by changing RESTAPI-Auth to:
     #-=-=-=-=-=-=-=-=
     Function RESTAPI-Auth {
@@ -1489,6 +1865,7 @@ At C:\usr\work\o365\scripts\Pull-AADSignInReports.ps1:434 char:8
 
 #*------^ get-AADBearerToken.ps1 ^------
 
+
 #*------v get-AADBearerTokenHeaders.ps1 v------
 Function get-AADBearerTokenHeaders {
     <#
@@ -1536,6 +1913,7 @@ Function get-AADBearerTokenHeaders {
 }
 
 #*------^ get-AADBearerTokenHeaders.ps1 ^------
+
 
 #*------v get-AADCertToken.ps1 v------
 function get-AADCertToken {
@@ -1925,6 +2303,7 @@ function get-AADCertToken {
 
 #*------^ get-AADCertToken.ps1 ^------
 
+
 #*------v get-AADLastSync.ps1 v------
 Function get-AADLastSync {
   <#
@@ -1935,6 +2314,7 @@ Function get-AADLastSync {
     Website     :	https://www.toddomation.com
     Twitter     :	@tostka
     REVISIONS   :
+    * 3:50 PM 6/21/2022 as MicrosoftOnline MSOL module is wrecked/deprecated with MFA mandates, retool this to use AAD: (Get-AzureADTenantDetail).CompanyLastDirSyncTime
     * 4:08 PM 7/24/2020 added full multi-ten cred support
     * 1:03 PM 5/27/2020 moved alias: get-MsolLastSync win func
     * 9:51 AM 2/25/2020 condenced output
@@ -1953,10 +2333,12 @@ Function get-AADLastSync {
     get-AADLastSync
     .LINK
     #>
+    #Requires -Modules AzureAD
     [CmdletBinding()]
     [Alias('get-MsolLastSync')]
     Param([Parameter()]$Credential = $global:credo365TORSID) ;
     $verbose = ($VerbosePreference -eq "Continue") ; 
+    <#
     try { Get-MsolAccountSku -ErrorAction Stop | out-null }
     catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
       "Not connected to MSOnline. Now connecting to $($credo365.username.split('@')[1])." ;
@@ -1964,7 +2346,10 @@ Function get-AADLastSync {
       if($MFA){ Connect-MsolService }
       else {Connect-MsolService -Credential $Credential ;}
     } ;
-    $LastDirSyncTime = (Get-MsolCompanyInformation).LastDirSyncTime ;
+    #>
+    Connect-AAD -Credential $Credential ;
+    #$LastDirSyncTime = (Get-MsolCompanyInformation).LastDirSyncTime ;
+    $LastDirSyncTime = (Get-AzureADTenantDetail).CompanyLastDirSyncTime ;
     New-Object PSObject -Property @{
       TimeGMT   = $LastDirSyncTime  ;
       TimeLocal = $LastDirSyncTime.ToLocalTime() ;
@@ -1972,6 +2357,7 @@ Function get-AADLastSync {
 }
 
 #*------^ get-AADLastSync.ps1 ^------
+
 
 #*------v get-AADLicenseFullName.ps1 v------
 function get-AADLicenseFullName {
@@ -2273,6 +2659,7 @@ WARNING: 12:31:24:Unable to resolve 'POWERAPPS_DEV' to this function's static li
 
 #*------^ get-AADLicenseFullName.ps1 ^------
 
+
 #*------v get-AADlicensePlanList.ps1 v------
 function get-AADlicensePlanList {
     <#
@@ -2289,6 +2676,8 @@ function get-AADlicensePlanList {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/
     REVISIONS
+    * 2:33 PM 5/17/2023 added cred/silent/pltrxo support; 
+    * 3:19 PM 5/15/2023 get-AADlicensePlanList() works w latest aad/exo-eom updates
     * 12:54 PM 3/24/2022 added addition of resolved 'friendlyname' (via verb-aad:get-AADLicenseFullName), to the datatable returned, when in NON-Raw mode
     * 4:37 PM 3/23/2022 rem'd spurious managedby param
     * 9:31 AM 3/22/2022 add: 
@@ -2306,8 +2695,10 @@ function get-AADlicensePlanList {
     Switch specifies to return the raw get-AADlicensePlanList properties, indexed on SkuID
     .PARAMETER IndexOnName
     Switch specifies to return the raw get-AADlicensePlanList properties, indexed on Name (for name -> details/skuid lookups; default is indexed on SkuID for sku->details/name lookups)
-    .PARAMETER Credential
-    Credential to be used for connection
+     .PARAMETER  Credential
+    Credential to use for this connection [-credential 'account@domain.com']
+    .PARAMETER silent
+    Switch to specify suppression of all but warn/error echos.
     .PARAMETER ShowDebug
     Parameter to display Debugging messages [-ShowDebug switch]
     .PARAMETER Whatif
@@ -2383,13 +2774,17 @@ function get-AADlicensePlanList {
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM(
-        [switch]$Raw,
-        [switch]$IndexOnName,
+        [Parameter(Mandatory=$false,HelpMessage="Switch specifies to return the raw get-AADlicensePlanList properties, indexed on SkuID")]
+            [switch]$Raw,
+        [Parameter(Mandatory=$false,HelpMessage="Switch specifies to return the raw get-AADlicensePlanList properties, indexed on Name (for name -> details/skuid lookups; default is indexed on SkuID for sku->details/name lookups)")]
+            [switch]$IndexOnName,
         [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
-        [ValidateNotNullOrEmpty()]
-        [string]$TenOrg = $global:o365_TenOrgDefault,
-        [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
-        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+            [ValidateNotNullOrEmpty()]
+            [string]$TenOrg = $global:o365_TenOrgDefault,
+        [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
+            [System.Management.Automation.PSCredential]$Credential,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+            [switch] $silent,
         [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
         [switch] $showDebug,
         [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
@@ -2406,6 +2801,17 @@ function get-AADlicensePlanList {
         $propsAADL = 'SkuId',  'SkuPartNumber',  @{name='Enabled';Expression={$_.PrepaidUnits.enabled }},  
             @{name='Consumed';Expression={$_.ConsumedUnits} }, @{name='Available';Expression={$_.PrepaidUnits.enabled - $_.ConsumedUnits} }, 
             @{name='Warning';Expression={$_.PrepaidUnits.warning} }, @{name='Suspended';Expression={$_.PrepaidUnits.suspended} } ;
+
+        # downstream commands
+        $pltRXO = [ordered]@{
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+            silent = $silent ; 
+        } ;
+        # default connectivity cmds
+        # default connectivity cmds - force silent false
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
+        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
     } ;
     PROCESS {
         $Error.Clear() ;
@@ -2420,7 +2826,7 @@ function get-AADlicensePlanList {
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $licensePlanList = $null ; 
 
-        Connect-AAD -Credential:$Credential -verbose:$($verbose) -silent ;
+        Connect-AAD @pltRXOC ; 
 
         $error.clear() ;
         TRY {
@@ -2508,6 +2914,7 @@ function get-AADlicensePlanList {
 
 #*------^ get-AADlicensePlanList.ps1 ^------
 
+
 #*------v get-AADToken.ps1 v------
 function get-AADToken {
     <#
@@ -2524,68 +2931,105 @@ function get-AADToken {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/verb-aad
     REVISIONS
+    * 2:18 PM 5/25/2023 CBH, expanded exmpl; remvd rem's 
+    * 4:21 PM 5/22/2023 added -silent, and pswlt support; 
+    * 3:29 PM 5/10/2023 tweaked verbose comments re: token status
+    * 12:59 PM 5/9/2023 added trailing test for unauth, single tenant auth, and multi-token auth.
     * 8:50 AM 3/16/2021 added extra catchblock on expired token, but found that MS had massive concurrent Auth issues, so didn't finish - isolated event, not a normal fail case
     * 12:21 PM 8/8/2020 init
     .DESCRIPTION
     get-AADToken - Retrieve and summarize [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens
+    Works with MSAL (as it's accessing the underlying class).
     .EXAMPLE
-    $token = get-AADToken ; 
-    if( ($null -eq $token) -OR ($token.count -eq 0)){
-        # not connected/authenticated
-        Connect-AzureAD ; 
-    } else { 
-        write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
-    } ; 
+    PS> $token = get-AADToken ; 
+    PS> if( ($null -eq $token) -OR ($token.count -eq 0)){
+    PS>     # not connected/authenticated
+    PS>     Connect-AzureAD ; 
+    PS> } else { 
+    PS>     write-verbose "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ; 
+    PS> } ; 
     Retrieve and evaluate status of AzureSession token
+    .EXAMPLE
+    PS> write-verbose "if it's a 40char hex string -> cert thumbprint" ; 
+    PS> if(-not $rgxCertThumbprint){$rgxCertThumbprint = '[0-9a-fA-F]{40}' } ; 
+    PS> $token = get-AADToken -verbose:$($verbose) ;
+    PS> $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid -verbose:$($verbose) ;
+    PS> $Tenantdomain = convert-TenantIdToDomainName -TenantId ($token.AccessToken).tenantid ;
+    PS> $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; 
+    PS> #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ; 
+    PS> if( ($null -eq $token) -OR ($token.count -eq 0)){
+    PS>     $smsg = "NOT authenticated to any o365 Tenant AzureAD!" ; 
+    PS>     if($credential.username -match $rgxCertThumbprint){
+    PS>         $smsg = "Connecting to -Credential Tenant as $($uRoleReturn.FriendlyName)" ;
+    PS>     } else {
+    PS>         $smsg = "Connecting to -Credential Tenant:$($Credential.username.split('@')[1].tostring()))" ;
+    PS>     } ;
+    PS>     if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+    PS> 
+    PS>     Disconnect-AzureAD ;
+    PS>     Connect-AAD -Credential $Credential -verbose:$($verbose) -Silent:$false  ; 
+    PS> } else {
+    PS>     $smsg = "Connected to Tenant:`n$((($token.AccessToken) | fl TenantId,UserId,LoginType|out-string).trim())" ;
+    PS>     $smsg += "`n$($urolereturn.TenOrg):$($urolereturn.UserRole)" ; 
+    PS>     if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+    PS> } ; 
+    Fancier demo leveraging a variety of verb-Auth mod functions for info parsing
     .LINK
     https://github.com/tostka/verb-aad
     #>
     [CmdletBinding()] 
-    Param([Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID) ;
+    PARAM(
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+            [switch] $silent
+    ) ;
     BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
         $token = $false ;
         $error.clear() ;
         TRY {
             $token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::AccessTokens ; 
-            # 3:50 PM 3/15/2021: I'm getting a token, but it's *expired*, need another test - actually MS was having massive auth issues concurrent w the error. Likely transitory
         } CATCH [System.Management.Automation.RuntimeException] {
-            # pre connect it throws this
-            <#
-                Unable to find type [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession].
-                At line:1 char:10
-                + $token = [Microsoft.Open.Azure.AD.CommonLibrary.AzureSession]::Access ...
-                +          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                    + CategoryInfo          : InvalidOperation: (Microsoft.Open....ry.AzureSession:TypeName) [], RuntimeException
-                    + FullyQualifiedErrorId : TypeNotFound
-            #>
-            write-verbose "(No authenticated connection found)"
+            $smsg = "(No authenticated connection found)" ;
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
             #$token = $false ; 
         } CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException] {
             # reflects unauthenticated
-            <#
-                At line:2 char:11
-            +  $myVar = Get-AzureADTenantDetail
-            +           ~~~~~~~~~~~~~~~~~~~~~~~
-                + CategoryInfo          : NotSpecified: (:) [Get-AzureADTenantDetail], AadNeedAuthenticationException
-                + FullyQualifiedErrorId : Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException,Microsoft.Open.AzureAD16.PowerShell.GetTenantDetails 
-            #>
-            write-verbose "(requires AAD authentication)"
+            $smsg = "(requires AAD authentication)" ;
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
         } CATCH {
             Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
             Exit #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
         } ;  
     } ; 
     END{ 
-        if($token.count -gt 1){
-            write-verbose "(returning $(($token|measure).count) tokens)" ; 
+        if( ($null -eq $token) -OR ($token.count -eq 0)){
+            $smsg = "no token: unconnected" ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+        }elseif($token.count -eq 1){
+            $smsg = "(returning $(($token|measure).count) token)" ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+        }elseif($token.count -gt 1){
+            $smsg = "(returning $(($token|measure).count) tokens)" ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
         } ; 
-        write-verbose "(Connected to tenant: $($token.AccessToken.TenantId) with user: $($token.AccessToken.UserId)" ; 
+        if($token.count -gt 0){
+            $smsg = "(Connected to tenant: $($token.AccessToken.TenantId) with user: $($token.AccessToken.UserId)" ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+        } ; 
         $token | Write-Output 
     } ;
 }
 
 #*------^ get-AADToken.ps1 ^------
+
 
 #*------v get-AADTokenHeaders.ps1 v------
 Function get-AADTokenHeaders {
@@ -2640,6 +3084,7 @@ Function get-AADTokenHeaders {
 }
 
 #*------^ get-AADTokenHeaders.ps1 ^------
+
 
 #*------v get-AADUser.ps1 v------
 function get-aaduser {
@@ -2835,26 +3280,25 @@ function get-aaduser {
 
 #*------^ get-AADUser.ps1 ^------
 
-#*------v get-AADUserLicenseDetails.ps1 v------
-Function get-AADUserLicenseDetails {
+
+#*------v get-AADUserLastSync.ps1 v------
+Function get-AADUserLastSync {
     <#
     .SYNOPSIS
-    get-AADUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD/MSOL)
+    get-AADUserLastSync - Collect last AD-AAD sync (AzureAD/MSOL)
     .NOTES
     Updated By: : Todd Kadrie
     Website:	http://tinstoys.blogspot.com
     Twitter:	http://twitter.com/tostka
-    Based on work by :Brad Wyatt
-    Website: https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     REVISIONS   :
-    * 2:02 PM 3/23/2022 convert verb-aad:get-MsolUserLicensedetails -> get-AADUserLicenseDetails (Msonline -> AzureAD module rewrite)
+    * 3:50 PM 6/21/2022 as MicrosoftOnline MSOL module is wrecked/deprecated with MFA mandates, retool this to use AAD:(get-azureaduser -obj upn@domain.com).LastDirSyncTime ; add aad requires, cmdletbinding, and alias the prior 'msol' name, for overlapping coverage
+    * 5:17 PM 8/5/2020 strong-typed Credential
+    * 4:21 PM 7/24/2020 added verbose
+    * 9:51 AM 2/25/2020 condenced output
+    * 8:50 PM 1/12/2020 expanded aliases
+    * 11:23 AM 10/18/2018 ported from get-MsolUserLastSync()
     .DESCRIPTION
-    get-AADUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD)
-    Based on the core lic hash & lookup code in Brad's "Get Friendly License Name for all Users in Office 365 Using PowerShell" script
-    .PARAMETER UPNs
-    Array of Userprincipalnames to be looked up
-    .PARAMETER ShowDebug
-    Parameter to display Debugging messages [-ShowDebug switch]
+    get-AADUserLastSync - Collect last AD-AAD sync (AzureAD/MSOL)
     .PARAMETER Credential
     Credential to be used for connection
     .INPUTS
@@ -2862,31 +3306,119 @@ Function get-AADUserLicenseDetails {
     .OUTPUTS
     Returns an object with LastDirSyncTime, expressed as TimeGMT & TimeLocal
     .EXAMPLE
-    get-AADUserLicenseDetails -UPNs fname.lname@domain.com ;
+    get-AADUserLastSync
+    .LINK
+    #>
+    #Requires -Modules AzureAD
+    [CmdletBinding()]
+    [Alias('get-MsolUserLastSync')]
+    Param(
+        [Parameter(Position = 0, Mandatory = $True, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true, HelpMessage = "MSolUser UPN")][ValidateNotNullOrEmpty()][string]$UserPrincipalName,
+        [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID
+    ) ;
+    $verbose = ($VerbosePreference -eq "Continue") ; 
+    <#try { Get-MsolAccountSku -ErrorAction Stop | out-null }
+    catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
+        write-verbose -verbose:$true "$((get-date).ToString('HH:mm:ss')):Not connected to MSOnline. Now connecting." ;
+        Connect-MsolService -credential $Credential ;
+    } ;
+    #>
+    Connect-AAD -Credential $Credential ;
+    #$LastDirSyncTime = (Get-MsolUser -UserPrincipalName $UserPrincipalName).LastDirSyncTime ;
+    # (get-azureaduser -obj UPN).LastDirSyncTime 
+    $LastDirSyncTime = (get-azureaduser -ObjectId $UserPrincipalName).LastDirSyncTime ;
+    New-Object PSObject -Property @{
+        TimeGMT   = $LastDirSyncTime  ;
+        TimeLocal = $LastDirSyncTime.ToLocalTime() ;
+    } | write-output ;
+}
+
+#*------^ get-AADUserLastSync.ps1 ^------
+
+
+#*------v get-AADUserLicenseDetails.ps1 v------
+Function get-AADUserLicenseDetails {
+    <#
+    .SYNOPSIS
+    get-AADUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD)
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2022-
+    FileName    : 
+    License     : MIT License
+    Copyright   : (c) 2022 Todd Kadrie
+    Github      : https://github.com/tostka/verb-XXX
+    Tags        : Powershell
+    AddedCredit : Brad Wyatt
+    AddedWebsite:	https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
+    AddedTwitter:	URL
+    REVISIONS   :
+    * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
+    * 8:30 AM 5/22/2023 add: 7pswl support; fixed to IndexOnName =$false ; ; removed ValueFromPipelineByPropertyName ; 
+    * 10:13 AM 5/19/2023 err suppress: test for lic assignment before trying to indexed-hash lookup; add echo on no-license status ; 
+    * 4:43 PM 5/17/2023 rounded out params for $pltRXO passthru
+    * 8:15 AM 12/21/2022 updated CBH; sub'd out showdebug for w-v
+    * 2:02 PM 3/23/2022 convert verb-aad:get-MsolUserLicensedetails -> get-AADUserLicenseDetails (Msonline -> AzureAD module rewrite)
+    .DESCRIPTION
+    get-AADUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD)
+    Originally inspired by the MSOnline/MSOL-based core lic hash & lookup code in Brad's "Get Friendly License Name for all Users in Office 365 Using PowerShell" script. Since completely rewritten for AzureAD module, expanded output details. 
+    .PARAMETER UPNs
+    Array of Userprincipalnames to be looked up
+    .PARAMETER Credential
+    Credential to be used for connection
+    .PARAMETER silent
+    Switch to specify suppression of all but warn/error echos.(unimplemented, here for cross-compat)
+    .PARAMETER ShowDebug
+    Debugging Flag (use -verbose; retained solely for legacy compat)[-showDebug]
+
+    .INPUTS
+    None. Does not accepted piped input.
+    .OUTPUTS
+    Returns objects summarizing each of the AADUser's licenses (User DisplayName, UserPrincipalName, LicAccountSkuID, LicenseFriendlyName)
+    .EXAMPLE
+    PS> get-AADUserLicenseDetails -UPNs fname.lname@domain.com ;
     Retrieve MSOL License details on specified UPN
     .EXAMPLE
-    $EXOLicDetails = get-AADUserLicenseDetails -UPNs $exombx.userprincipalname -showdebug:$($showdebug)
-    Retrieve MSOL License details on specified UPN, with showdebug specified
+    PS> $EXOLicDetails = get-AADUserLicenseDetails -UPNs $exombx.userprincipalname
+    Retrieve MSOL License details on specified UPN
     .LINK
+    https://github.com/tostka/verb-AAD
     https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     #>
-    
     Param(
-        [Parameter(Position = 0, Mandatory = $True, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true, HelpMessage = "An array of MSolUser objects")][ValidateNotNullOrEmpty()]
-        [alias('Userprincipalname')]
-        [string]$UPNs,
-        [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
-        [Parameter(HelpMessage = "Debugging Flag [-showDebug]")][switch] $showDebug
+        [Parameter(Position = 0, Mandatory = $False, ValueFromPipeline = $true, HelpMessage = "An array of MSolUser objects")][ValidateNotNullOrEmpty()]
+            [alias('Userprincipalname')]
+            [string]$UPNs,
+        [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
+            [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+            [switch] $silent,
+        [Parameter(HelpMessage = "Debugging Flag (use -verbose; retained solely for legacy compat)[-showDebug]")]
+            [switch] $showDebug
     ) ;
     ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
     $Verbose = ($VerbosePreference -eq 'Continue') ;
     
-    $Retries = 4 ;
-    $RetrySleep = 5 ;
-    #Connect-AAD ;
-    #Connect-Msol ;
-    Connect-AAD -Credential:$Credential -verbose:$($verbose) -silent ;
 
+    if(-not $DoRetries){$DoRetries = 4 } ;    # # times to repeat retry attempts
+    if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
+
+    # reconstruct RXO for pass-on
+    # downstream commands
+    $pltRXO = [ordered]@{
+        Credential = $Credential ;
+        verbose = $($VerbosePreference -eq "Continue")  ;
+    } ;
+    if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+        $pltRxo.add('Silent',$silent) ;
+    } ;
+    # default connectivity cmds - force silent false
+    $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
+    if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
+    Connect-AAD @pltRXOC ;
 
     # [Product names and service plan identifiers for licensing in Azure Active Directory | Microsoft Docs](https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference)
 
@@ -3036,19 +3568,22 @@ Function get-AADUserLicenseDetails {
         "YAMMER_MIDSIZE"                     = "Yammer"
     }
 
+    # $AADUser
     Foreach ($User in $UPNs) {
-        if ($showdebug) { write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Getting all licenses for $($User)..."  ; } ;
-
+        $smsg = "$((get-date).ToString('HH:mm:ss')):Getting all licenses for $($User)..."  ;  ;
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         $Exit = 0 ;
         Do {
             Try {
 
-                $pltGLPList=[ordered]@{ 
-                    TenOrg= $TenOrg; 
-                    IndexOnName =$true ;
-                    verbose=$($VerbosePreference -eq "Continue") ; 
-                    credential= $Credential ;
-                    #$pltRXO.credential ; 
+                $pltGLPList = [ordered]@{ 
+                    TenOrg = $TenOrg; 
+                    #IndexOnName =$true ;
+                    IndexOnName =$false ;
+                    verbose = $($VerbosePreference -eq "Continue") ; 
+                    credential = $Credential ;
+                    silent = $false ; 
                     erroraction = 'STOP' ;
                 } ;
                 $smsg = "get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ; 
@@ -3058,7 +3593,11 @@ Function get-AADUserLicenseDetails {
                 
                 #$MsolU = Get-MsolUser -UserPrincipalName $User ;
 
-                $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
+                $pltGAADU=[ordered]@{
+                    ObjectID = $user ;
+                    ErrorAction = 'STOP' ;
+                    verbose = ($VerbosePreference -eq "Continue") ;
+                } ; 
                 $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
@@ -3069,22 +3608,43 @@ Function get-AADUserLicenseDetails {
                 $Licenses = $AADUser.AssignedLicenses.skuid ; 
                 # come back as lic guids, not TENANT:guid
                 # have to be converted to suit
-                $Licenses = $Licenses |%{$skus[$_].SkuPartNumber ; } ; 
-
-                $Exit = $Retries ;
+                if($Licenses){
+                    $Licenses = $Licenses |foreach-object{$skus[$_].SkuPartNumber ; } ; 
+                } else { 
+                    $smsg = "AADU:$($AADUser.userprincipalname) *has no* .AssignedLicenses.skuid's: No assigned licenses" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                } ; 
+                $Exit = $DoRetries ;
             } Catch {
                 Start-Sleep -Seconds $RetrySleep ;
                 $Exit ++ ;
-                Write-Verbose "Failed to exec cmd because: $($Error[0])" ;
-                Write-Verbose "Try #: $Exit" ;
-                If ($Exit -eq $Retries) { Write-Warning "Unable to exec cmd!" } ;
+                $smsg = "Failed to exec cmd because: $($Error[0])" ;
+                $smsg += "`nWWTry #: $Exit" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
+                If ($Exit -eq $DoRetries) {
+                    $smsg = "Unable to exec cmd!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                } ;
             }  ;
-        } Until ($Exit -eq $Retries) ;
+        } Until ($Exit -eq $DoRetries) ;
 
         $AggregLics = @() ;
         
+        if(($Licenses|measure-object).count -eq 0){
+            $smsg = "$($AADUser.userprincipalname).AssignedLicenses.skuid is *empty*: User UN-Licensed" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+        } ; 
         Foreach ($License in $Licenses) {
-            if ($showdebug) { Write-Host "Finding $License in the Hash Table..." -ForegroundColor White }
+            $smsg = "Finding $License in the Hash Table..." ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             #$LicenseItem = $License -split ":" | Select-Object -Last 1
             #$TextLic = $Sku.Item("$LicenseItem")
             $TextLic = $sku[$License] ; 
@@ -3119,10 +3679,11 @@ Function get-AADUserLicenseDetails {
     } # if-E
 
 
-    $AggregLics | write-output ; # 11:33 AM 1/9/2019 export the aggreg, NewObject02 was never more than a single lic
+    $AggregLics | write-output ; # export the aggreg, NewObject02 was never more than a single lic
 }
 
 #*------^ get-AADUserLicenseDetails.ps1 ^------
+
 
 #*------v Get-DsRegStatus .ps1 v------
 function Get-DsRegStatus {
@@ -3196,6 +3757,7 @@ function Get-DsRegStatus {
 }
 
 #*------^ Get-DsRegStatus .ps1 ^------
+
 
 #*------v Get-JWTDetails.ps1 v------
 function Get-JWTDetails {
@@ -3342,6 +3904,7 @@ JWT Access Token updated to include the JWT Signature (sig), JWT Token Expiry (e
 
 #*------^ Get-JWTDetails.ps1 ^------
 
+
 #*------v Get-MsolDisabledPlansForSKU.ps1 v------
 Function Get-MsolDisabledPlansForSKU {
     <#
@@ -3397,6 +3960,7 @@ Function Get-MsolDisabledPlansForSKU {
 }
 
 #*------^ Get-MsolDisabledPlansForSKU.ps1 ^------
+
 
 #*------v Get-MsolUnexpectedEnabledPlansForUser.ps1 v------
 Function Get-MsolUnexpectedEnabledPlansForUser {
@@ -3459,51 +4023,6 @@ Function Get-MsolUnexpectedEnabledPlansForUser {
 
 #*------^ Get-MsolUnexpectedEnabledPlansForUser.ps1 ^------
 
-#*------v get-MsolUserLastSync.ps1 v------
-Function get-MsolUserLastSync {
-    <#
-    .SYNOPSIS
-    get-MsolUserLastSync - Collect last AD-AAD sync (AzureAD/MSOL)
-    .NOTES
-    Updated By: : Todd Kadrie
-    Website:	http://tinstoys.blogspot.com
-    Twitter:	http://twitter.com/tostka
-    REVISIONS   :
-    * 5:17 PM 8/5/2020 strong-typed Credential
-    * 4:21 PM 7/24/2020 added verbose
-    * 9:51 AM 2/25/2020 condenced output
-    * 8:50 PM 1/12/2020 expanded aliases
-    * 11:23 AM 10/18/2018 ported from get-MsolUserLastSync()
-    .DESCRIPTION
-    get-MsolUserLastSync - Collect last AD-AAD sync (AzureAD/MSOL)
-    .PARAMETER Credential
-    Credential to be used for connection
-    .INPUTS
-    None. Does not accepted piped input.
-    .OUTPUTS
-    Returns an object with LastDirSyncTime, expressed as TimeGMT & TimeLocal
-    .EXAMPLE
-    get-MsolUserLastSync
-    .LINK
-    #>
-    Param(
-        [Parameter(Position = 0, Mandatory = $True, ValueFromPipeline = $true, ValueFromPipelineByPropertyName = $true, HelpMessage = "MSolUser UPN")][ValidateNotNullOrEmpty()][string]$UserPrincipalName,
-        [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID
-    ) ;
-    $verbose = ($VerbosePreference -eq "Continue") ; 
-    try { Get-MsolAccountSku -ErrorAction Stop | out-null }
-    catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
-        write-verbose -verbose:$true "$((get-date).ToString('HH:mm:ss')):Not connected to MSOnline. Now connecting." ;
-        Connect-MsolService -credential $Credential ;
-    } ;
-    $LastDirSyncTime = (Get-MsolUser -UserPrincipalName $UserPrincipalName).LastDirSyncTime ;
-    New-Object PSObject -Property @{
-        TimeGMT   = $LastDirSyncTime  ;
-        TimeLocal = $LastDirSyncTime.ToLocalTime() ;
-    } | write-output ;
-}
-
-#*------^ get-MsolUserLastSync.ps1 ^------
 
 #*------v Get-MsolUserLicense.ps1 v------
 Function Get-MsolUserLicense {
@@ -3562,6 +4081,7 @@ Function Get-MsolUserLicense {
 }
 
 #*------^ Get-MsolUserLicense.ps1 ^------
+
 
 #*------v get-MsolUserLicenseDetails.ps1 v------
 Function get-MsolUserLicenseDetails {
@@ -3767,7 +4287,7 @@ Function get-MsolUserLicenseDetails {
         "VISIOCLIENT"                        = "Visio Pro Online"
         "VISIOONLINE_PLAN1"                  = "Visio Online Plan 1"
         "WINDOWS_STORE"                      = "Windows Store for Business"
-        "YAMMER_ENTERPRISE"                  = "Yammer for the Starship Enterprise"
+        "YAMMER_ENTERPRISE"                  = "Yammer Enterprise"
         "YAMMER_MIDSIZE"                     = "Yammer"
     }
 
@@ -3866,6 +4386,7 @@ Function get-MsolUserLicenseDetails {
 }
 
 #*------^ get-MsolUserLicenseDetails.ps1 ^------
+
 
 #*------v Get-ServiceToken.ps1 v------
 function Get-ServiceToken {
@@ -3982,6 +4503,7 @@ function Get-ServiceToken {
 
 #*------^ Get-ServiceToken.ps1 ^------
 
+
 #*------v Get-TokenCache.ps1 v------
 function Get-TokenCache {
     <#
@@ -4032,6 +4554,252 @@ function Get-TokenCache {
 }
 
 #*------^ Get-TokenCache.ps1 ^------
+
+
+#*------v import-AADAppRegistrationPFX.ps1 v------
+function import-AADAppRegistrationPFX {
+    <#
+    .SYNOPSIS
+    import-AADAppRegistrationPFX.ps1 - Import CBA-Auth-supporting PFX file(s) into Cert:\CurrentUser\My. Leverages stock PKI module Import-PfxCertificate cmdlet, but parses and populates CBA-auth-releated values, that aren't present in the stock cmdlet.
+    .NOTES
+    Version     : 0.0.
+    Author      : Todd Kadrie
+    Website     : http://www.toddomation.com
+    Twitter     : @tostka / http://twitter.com/tostka
+    CreatedDate : 2022-
+    FileName    : import-AADAppRegistrationPFX.ps1
+    License     : MIT License
+    Copyright   : (c) 2022 Todd Kadrie
+    Github      : https://github.com/tostka/powershell
+    Tags        : Powershell,AzureAD,Authentication,Certificate,CertificateAuthentication
+    AddedCredit : REFERENCE
+    AddedWebsite: URL
+    AddedTwitter: URL
+    REVISIONS
+    * 2:53 PM 4/25/2023 init version; removed verb-AAD req (avoid circ)
+    .DESCRIPTION
+    import-AADAppRegistrationPFX.ps1 - Import CBA-Auth-supporting PFX file(s) into Cert:\CurrentUser\My. Leverages stock PKI module Import-PfxCertificate cmdlet, but parses and populates CBA-auth-releated values, that aren't present in the stock cmdlet.
+    These coordinate with connect-exo() and the Auth functions to work with canned CBA authentication objects.
+    .PARAMETER Path
+    Array of PFX files to be imported[-path 'c:\pathto\file.pfx','c:\pathto\file2.ext']
+    .PARAMETER CertStoreLocation
+    Certificate store for storage of new certificate (defaults to CU\My)[-CertStoreLocation 'Cert:\LocalMachine\My']
+    .PARAMETER Whatif
+    Parameter to run a Test no-change pass [-Whatif switch]
+    .INPUTS
+    Accepts piped input
+    .OUTPUTS
+    System.PsObject array of imported or pre-imported certificate objects
+    .EXAMPLE
+    PS> $pfxs = 'C:\usr\work\o365\certs\o365ESvcCBACert-TOL.Torolab.onmicrosoft.com-NOTAFTER-20240622-0928AM.pfx','C:\usr\work\o365\certs\o365SIDCBACert-TOR.toroco.onmicrosoft.com-NOTAFTER-20240622-1547PM.pfx','C:\usr\work\o365\certs\o365CSvcCBACert-TOR.toroco.onmicrosoft.com-NOTAFTER-20240622-1530PM.pfx','C:\usr\work\o365\certs\o365ESvcCBACert-TOR.toroco.onmicrosoft.com-NOTAFTER-20240622-1314PM.pfx', 'C:\usr\work\o365\certs\o365CSvcCBACert-TOL.Torolab.onmicrosoft.com-NOTAFTER-20240622-0952AM.pfx' ; 
+    PS> $results = import-AADAppRegistrationPFX -Path $pfxs -whatif ; 
+    Demos import of a series of pfx files, with whatif, with verbose
+    .EXAMPLE
+    PS> $pfxs = 'C:\usr\work\o365\certs\o365ESvcCBACert-TOL.Torolab.onmicrosoft.com-NOTAFTER-20240622-0928AM.pfx','C:\usr\work\o365\certs\o365SIDCBACert-TOR.toroco.onmicrosoft.com-NOTAFTER-20240622-1547PM.pfx','C:\usr\work\o365\certs\o365CSvcCBACert-TOR.toroco.onmicrosoft.com-NOTAFTER-20240622-1530PM.pfx','C:\usr\work\o365\certs\o365ESvcCBACert-TOR.toroco.onmicrosoft.com-NOTAFTER-20240622-1314PM.pfx', 'C:\usr\work\o365\certs\o365CSvcCBACert-TOL.Torolab.onmicrosoft.com-NOTAFTER-20240622-0952AM.pfx' ; 
+    PS> $results = $pfxs | import-AADAppRegistrationPFX -whatif ; 
+    Pipeline demo. 
+    .LINK
+    https://github.com/tostka/verb-AAD
+    #>
+    #Requires -Modules AzureAD, PKI, verb-IO, verb-logging
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("US","GB","AU")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)]#positiveInt:[ValidateRange(0,[int]::MaxValue)]#negativeInt:[ValidateRange([int]::MinValue,0)][ValidateCount(1,3)]
+    ## [OutputType('bool')] # optional specified output type
+    [CmdletBinding()]
+    ###[Alias('Alias','Alias2')]
+    PARAM(
+        [Parameter(Mandatory = $False,Position = 0,ValueFromPipeline = $True, HelpMessage = 'Array of PFX files to be imported[-path c:\pathto\file.ext]')]
+            [Alias('PsPath')]
+            #[ValidateScript({Test-Path $_ -PathType 'Container'})]
+            [ValidateScript({Test-Path $_})]
+            [ValidateScript({$_ -match '\.pfx$'})]
+            [system.io.fileinfo[]]$Path,
+        [Parameter(HelpMessage="Certificate store for storage of new certificate (defaults to CU\My)[-CertStoreLocation 'Cert:\LocalMachine\My']")]
+            [ValidateNotNullOrEmpty()]
+            [string]$CertStoreLocation= 'Cert:\CurrentUser\My',
+        [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
+            [switch] $whatIf
+    ) ;
+    BEGIN{
+        #region CONSTANTS-AND-ENVIRO #*======v CONSTANTS-AND-ENVIRO v======
+        # function self-name (equiv to script's: $MyInvocation.MyCommand.Path) ;
+        ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+        $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+        write-verbose -verbose:$verbose "`$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+        $Verbose = ($VerbosePreference -eq 'Continue') ; 
+
+        $certprops="thumbprint","not*","subject","FriendlyName","use","HasPrivateKey" ;
+        
+        #region BANNER ; #*------v BANNER v------
+        $sBnr="#*======v  $(${CmdletName}): v======" ;
+        $smsg = $sBnr ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        #endregion BANNER ; #*------^ END BANNER ^------
+
+
+        $tMod = 'PKI' ; 
+        if(-not (get-module $tMod -ListAvailable)){
+            $smsg = "MISSING dependant $($tMod) Module! Install the module to use this script!" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+            Break ; 
+        } ; 
+
+        if ($PSCmdlet.MyInvocation.ExpectingInput) {
+            write-verbose "Data received from pipeline input: '$($InputObject)'" ; 
+        } else {
+            #write-verbose "Data received from parameter input: '$($InputObject)'" ; 
+            write-verbose "(non-pipeline - param - input)" ; 
+        } ; 
+        $oAggr = @()  ; 
+    } ;  # BEGIN-E
+    PROCESS {
+        foreach($certfile in $Path) {
+            $sBnrS = $smsg = "`n#*------v PROCESSING $($certfile): v------" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            $certlocal = $pfxcred = $certificateObject = $tthumb = $xcert = $null ; 
+
+            TRY{
+                #$certfile=$_ ; 
+                $pfxcred = $null ; 
+                $certfile | out-clipboard ; 
+
+	            if($certfile = get-childitem $certfile){
+		            $pltImport=[ordered]@{
+			            FilePath=$certfile.fullname ;
+			            Exportable=$True ;
+			            CertStoreLocation = $CertStoreLocation ;
+			            whatif=$($whatif) ;
+			            ErrorAction = 'Stop' ; 
+		            } ;
+		            if($certfile.extension -eq '.pfx'){
+			            #if(!$pfxcred){
+				            $smsg = "For PFX:$($certfile):" ; 
+                            $smsg += "`nENTER PFX PW: (use 'dummy' for User Name)`n(friendlyname copied to CB)" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                            else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+				            $pfxcred=(Get-Credential -credential dummy) ;
+				            $smsg = "WV$((get-date).ToString('HH:mm:ss')):Importing pfx to $($env:computername)..." ;
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+
+			            #} else { $smsg = "WV$((get-date).ToString('HH:mm:ss')):(using existing `$pfxcred password)" };
+			            $pltImport.Add('Password',$pfxcred.Password) ;       
+		            } ;
+
+                    # check for pre-existing
+                    $certificateObject = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 ; 
+                    $certificateObject.Import($pltImport.FilePath, $pfxcred.Password, [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::DefaultKeySet) ; 
+                    $tthumb = $certificateObject.Thumbprint ; 
+                    #if($certlocal = get-childitem "$($pltImport.CertStoreLocation)\$($tthumb)" -ea 0){
+                    if($certlocal = get-childitem -path "$($pltimport.CertStoreLocation)\$($tthumb)" -ea 0){
+                        $smsg = "Pre-imported Cert with target Thumbprint - $($tthumb) - found" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                        $smsg = "`n$(($certlocal| fl $certprops |out-string).trim())" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $oAggr += $certlocal ; 
+                    } else { 
+
+		                $smsg = "Import-PfxCertificate  w`n$(($pltImport|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+		                $error.clear() ;
+		                TRY {
+			                $certobj = Import-PfxCertificate @pltImport ;
+			                $certobj ; 
+			                if(-not $whatif){
+				                if($certlocal=get-childitem "$($pltImport.CertStoreLocation)\$($certobj.thumbprint)"){
+					                $appname = $certlocal.subject.split('.')[0].replace('CN=o365','o365_') ; 
+					                $smsg = "Updating local FriendlyName:cert:PRE w`n$(($certlocal | fl $propsCert |out-string).trim())" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+					                $certlocal.FriendlyName = $appName ;
+					                $ncert = get-childitem "$($pltImport.CertStoreLocation)\$($certobj.thumbprint)" -ea STOP ;# | fl $certprops ; 
+                                    $smsg = "`n$(($ncert| fl $certprops |out-string).trim())" ; 
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    $oAggr += $ncert ; 
+
+			                    } else { 
+                                    $smsg = "Missing installed cert:$($pltImport.CertStoreLocation)\$($certobj.thumbprint)" 
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                                } ;
+                            } else {
+                                $smsg = "(whatif)" 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            } ;
+                        
+		                } CATCH {
+			                $smsg = "FAILED PROCESSING $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+			                CONTINUE ;
+		                } ;
+                    } ; 
+	            } else { 
+                    $smsg = "Missing pfx file:$($certfile)" 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                } ;
+        
+       
+            } CATCH {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #-=-record a STATUSWARN=-=-=-=-=-=-=
+                $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                #-=-=-=-=-=-=-=-=
+                $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+            } ; 
+            
+            $smsg = "$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ; # loop-E
+    } ;  # PROC-E
+    END{
+        if($oAggr ){ 
+            $smsg = "(Returning imported cert summaries to pipeline)" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            $oAggr | write-output ;     
+        } elseif($whatif){
+            $smsg = "(whatif pass, skipping report)" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+        } else { 
+            $smsg = "No Imported Cert Summaries! Nothing To Return To Pipeline!" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        } ; 
+        $smsg = "$($sBnr.replace('=v','=^').replace('v=','^='))" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    } ;  # END-E
+}
+
+#*------^ import-AADAppRegistrationPFX.ps1 ^------
+
 
 #*------v Initialize-AADSignErrorsHash.ps1 v------
 function Initialize-AADSignErrorsHash {
@@ -4208,11 +4976,433 @@ function Initialize-AADSignErrorsHash {
 
 #*------^ Initialize-AADSignErrorsHash.ps1 ^------
 
+
+#*------v New-AADAppAuthCertificate.ps1 v------
+function New-AADAppAuthCertificate {
+    <#
+    .SYNOPSIS
+    New-AADAppAuthCertificate.ps1 - Create SelfSigned certificate (PKI) in specified -CertStoreLocation location, export same to pfx (named for DnsName with dateranges), and return a raw object version of the cert, along with the PFXPath and certificate properties to the pipeline. Objects created are suitable for Certificate-Based-Authentication of AzureADApplication objects. 
+    .NOTES
+    Version     : 0.0.
+    Author      : Todd Kadrie
+    Website     : http://www.toddomation.com
+    Twitter     : @tostka / http://twitter.com/tostka
+    CreatedDate : 2022-
+    FileName    : New-AADAppAuthCertificate.ps1
+    License     : MIT License
+    Copyright   : (c) 2022 Todd Kadrie
+    Github      : https://github.com/tostka/powershell
+    Tags        : Powershell,AzureAD,Authentication,Certificate,CertificateAuthentication
+    AddedCredit : REFERENCE
+    AddedWebsite: URL
+    AddedTwitter: URL
+    REVISIONS
+    * 3:45 PM 6/23/2023 pulled req: verb-AAD 
+    * 2:54 PM 6/13/2022 debugged, functional
+    .DESCRIPTION
+    New-AADAppAuthCertificate.ps1 - Create SelfSigned certificate (PKI) in specified -CertStoreLocation location, export same to pfx (named for DnsName with dateranges), and return a raw object version of the cert, along with the PFXPath and certificate properties to the pipeline. Objects created are suitable for Certificate-Based-Authentication of AzureADApplication objects. 
+    .PARAMETER DnsName
+    Certificate DNSName (AppFQDN)[-DnsName server.domain.com]
+    .PARAMETER CertStoreLocation
+    Certificate store for storage of new certificate[-CertStoreLocation 'Cert:\CurrentUser\My']
+    .PARAMETER Years
+    New certificate lifespan in integer years[-years 3]
+    .PARAMETER Whatif
+    Parameter to run a Test no-change pass [-Whatif switch]
+    .INPUTS
+    None. Does not accepted piped input.(.NET types, can add description)
+    .OUTPUTS
+    None. Returns no objects or output (.NET types)
+    System.Boolean
+    [| get-member the output to see what .NET obj TypeName is returned, to use here]
+    .EXAMPLE
+    PS> $pltNAAC=[ordered]@{
+    PS>     DnsName=$AppFqDN ;
+    PS>     CertStoreLocation = $certStore ;
+    PS>     EndDate=$endDate ;
+    PS>     StartDate = $startDate ; 
+    PS>     verbose = $($verbose) ; 
+    PS>     whatif = $($whatif) ;
+    PS> } ;
+    PS> $smsg = "New-AADAppAuthCertificate w`n$(($pltNAAC|out-string).trim())" ;
+    PS> if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    PS> else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS> $bRet = New-AADAppAuthCertificate @pltNAAC ; 
+    PS> if($bREt.Valid){
+    PS>     $smsg = "New-AADAppAuthCertificate returned VALID outputs`n$(($bRet|out-string).trim())" ;
+    PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    PS>     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>     $newcert = $bRet.Certificate ; 
+    PS>     $certRaw = $bRet.CertRaw ; 
+    PS>     # need to update: $pltExPfx.FilePath to a variable
+    PS>     $PfxPath = $bRet.PFXPath ; 
+    PS>     $pltNAADAppKeyCred=[ordered]@{
+                ObjectId = $application.ObjectId ;
+                CustomKeyIdentifier = "$appName" ;
+                Type = 'AsymmetricX509Cert' ;
+                Usage = 'Verify' ;
+                Value = $certRaw ;
+                StartDate = $newcert.NotBefore ;
+                EndDate = $newcert.NotAfter ;
+            } ;
+            $smsg = "New-AzureADApplicationKeyCredential w`n$(($pltNAADAppKeyCred|out-string).trim())" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            # 2:14 PM 6/9/2022 cap output, keep out of pipeline
+            $newKeyCred = New-AzureADApplicationKeyCredential @pltNAADAppKeyCred ; 
+    PS> } else { 
+    PS>     $smsg ="New-AADAppAuthCertificate returned INVALID outputs`n$(($bRet|out-string).trim())" ;
+    PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+    PS>     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+    PS>     throw $smsg ; 
+    PS>     break ; 
+    PS> } ;     
+    Splatted demo with whatif & verbose, gens cert, exports pfx, provides raw content of cert (for mounting on appreg), and runs cmd to add cert to existing AAD Registered App.
+    .LINK
+    https://github.com/tostka/verb-XXX
+    .LINK
+    https://bitbucket.org/tostka/powershell/
+    .LINK
+    [ name related topic(one keyword per topic), or http://|https:// to help, or add the name of 'paired' funcs in the same niche (enable/disable-xxx)]
+    #>
+    #Requires -Modules AzureAD, PKI, verb-IO, verb-logging
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("US","GB","AU")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)]#positiveInt:[ValidateRange(0,[int]::MaxValue)]#negativeInt:[ValidateRange([int]::MinValue,0)][ValidateCount(1,3)]
+    ## [OutputType('bool')] # optional specified output type
+    [CmdletBinding()]
+    ###[Alias('Alias','Alias2')]
+    PARAM(
+        [Parameter(Mandatory=$True,HelpMessage="Certificate DNSName (AppFQDN)[-DnsName server.domain.com]")]
+        [ValidateNotNullOrEmpty()]
+        #[Alias('ALIAS1', 'ALIAS2')]
+        [string]$DnsName,
+        [Parameter(Mandatory=$True,HelpMessage="Certificate store for storage of new certificate[-CertStoreLocation 'Cert:\CurrentUser\My']")]
+        [ValidateNotNullOrEmpty()]
+        #[Alias('ALIAS1', 'ALIAS2')]
+        [string]$CertStoreLocation,
+        [Parameter(Mandatory=$True,HelpMessage="New certificate StartDate[-StartDate '6/9/2022']")]
+        [ValidateNotNullOrEmpty()]
+        #[Alias('ALIAS1', 'ALIAS2')]
+        [datetime]$startDate, 
+        [Parameter(Mandatory=$True,HelpMessage="New certificate EndDate[-EndDate '6/9/2024']")]
+        [ValidateNotNullOrEmpty()]
+        #[Alias('ALIAS1', 'ALIAS2')]
+        [datetime]$endDate,
+        [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
+        [switch] $whatIf=$true
+    ) ;
+    #region CONSTANTS-AND-ENVIRO #*======v CONSTANTS-AND-ENVIRO v======
+    # function self-name (equiv to script's: $MyInvocation.MyCommand.Path) ;
+    ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+    $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+    write-verbose -verbose:$verbose "`$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+    $Verbose = ($VerbosePreference -eq 'Continue') ; 
+    
+    $objReturn = @{
+        Certificate = $null ; 
+        CertRaw = $null ; 
+        PFXPath = $null ; 
+        Valid = $false ; 
+    } ; 
+    
+    $smsg = "---1)ENTER CERTIFICATE PFX Password: (use 'dummy' for UserName)" ;
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    $pfxcred=(Get-Credential -credential dummy) ;
+
+    $pltNSSCert=[ordered]@{
+        DnsName=$DnsName ;
+        CertStoreLocation = $CertStoreLocation ;
+        KeyExportPolicy='Exportable' ;
+        Provider="Microsoft Enhanced RSA and AES Cryptographic Provider" ;
+        NotAfter=$endDate ;
+        KeySpec='KeyExchange' ;
+        erroraction='STOP';
+        whatif = $($whatif) ;
+    } ;
+    $smsg = "---2)New-SelfSignedCertificate w`n$(($pltNSSCert|out-string).trim())" ;
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+    # precheck for conflicting existing on same dnsname
+    if($conflicts = gci $pltNSSCert.CertStoreLocation |?{$_.subject -eq "CN=$($pltNSSCert.DnsName)"} ){
+        $smsg = "PREXISTING CERT IN $($CertStoreLocation) W MATCHING DNSNAME!`n$(($conflicts | ft -a thumbprint,subject,when*|out-string).trim())" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        $bRet=Read-Host "Enter YYY to continue. Anything else will exit" 
+        if ($bRet.ToUpper() -eq "YYY") {
+            $smsg = "Moving on" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } else {
+            $smsg = "Invalid response. Exiting"
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            Break ;# exit <asserted exit error #>
+            #exit 1
+        } # if-block end
+    } ; 
+    
+    $newcert = (New-SelfSignedCertificate @pltNSSCert); 
+    $objReturn.Certificate = $newcert ; 
+    
+    if(-not $whatif -AND $newcert){
+        $smsg = "(new cert:$($newcert.thumbprint) created)" ; 
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+
+        #$newcert.thumbprint | set-Content -Path "$(split-path $transcript)\cert-$($DnsName)-thumb-$(get-date -format 'yyyyMMdd-HHmmtt').txt" ; 
+
+        $pltExPfx=[ordered]@{
+            Cert= "$($CertStoreLocation)\$($newcert.thumbprint)"
+            FilePath="$(split-path $profile)\keys\$($DnsName)-NOTAFTER-$(get-date $pltNSSCert.notafter -format 'yyyyMMdd-HHmmtt').pfx" ;
+            Password=$pfxcred.password ;
+            erroraction='STOP';
+        } ;
+        $smsg = "---3)Export-PfxCertificate  w`n$(($pltExPfx|out-string).trim())" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        $newpfx = Export-PfxCertificate @pltExPfx ;
+        $objReturn.PFXPath = $pltExPfx.FilePath ; 
+
+        $smsg = "`n$(($newpfx|out-string).trim())" ; 
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+    
+        $smsg = "(create cert object)" ; 
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate($pltExPfx.FilePath, $pfxcred.password) ;
+        $smsg = "`ncert obj created:w`n$(($cert | ft -a handle,issuer,subject |out-string).trim())" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green $($smsg) } ;
+
+        $certRaw = [System.Convert]::ToBase64String($cert.GetRawCertData()) ;
+        $objReturn.CertRaw = $certRaw ; 
+        
+        if($objReturn.Certificate -AND $objReturn.CertRaw -AND $objReturn.PFXPath){ 
+            $smsg = "Valid Certificate, CertRaw, and PFX values: Setting Valid:`$true" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            $objReturn.Valid = $true ; 
+        } else { 
+            $smsg = "INVALID CERTIFICATE, CERTRAW, or PFX: Setting Valid:`$FALSE" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+            $objReturn.Valid = $false 
+        } ; 
+        
+        New-Object -TypeName PSObject -Property $objReturn | write-output ; 
+        
+    } else { 
+        $smsg = "`n(-whatif, skipping post-creation cert-handling code)" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    } ; 
+}
+
+#*------^ New-AADAppAuthCertificate.ps1 ^------
+
+
+#*------v New-AADAppPermissionsObject.ps1 v------
+function New-AADAppPermissionsObject {
+    <#
+    .SYNOPSIS
+    New-AADAppPermissionsObject.ps1 - Create GrantObject for AzureADApplication objects, from 'SecurityPrincipalName;[comma-delimitedpermissions]' input array.
+    .NOTES
+    Version     : 0.0.
+    Author      : Todd Kadrie
+    Website     : http://www.toddomation.com
+    Twitter     : @tostka / http://twitter.com/tostka
+    CreatedDate : 2022-
+    FileName    : New-AADAppPermissionsObject.ps1
+    License     : MIT License
+    Copyright   : (c) 2022 Todd Kadrie
+    Github      : https://github.com/tostka/powershell
+    Tags        : Powershell,AzureAD,Authentication,Certificate,CertificateAuthentication
+    AddedCredit : REFERENCE
+    AddedWebsite: URL
+    AddedTwitter: URL
+    REVISIONS
+    * 3:45 PM 6/23/2023 pulled req: verb-AAD 
+    * 2:54 PM 6/13/2022 debugged, functional
+    .DESCRIPTION
+    New-AADAppPermissionsObject.ps1 - Create GrantObject for AzureADApplication objects, from 'SecurityPrincipalName;[comma-delimitedpermissions]' input array.
+    -Permisisons parameter is an array of permissions summaries in following format, per target SecurityPrincipal:
+    [SecurityPrincipalName1];[permission1],[permission2]
+    [SecurityPrincipalName2];[permission1],[permission2]
+    for Expl:
+    # create an array of permissions
+    [array]$procPerms = "Microsoft Graph;AuditLog.Read.All,Directory.ReadWrite.All,Group.Create,Group.ReadWrite.All,GroupMember.ReadWrite.All" ; 
+    $procPerms += "Office 365 Exchange Online;Exchange.ManageAsApp,Mailbox.Migration,MailboxSettings.ReadWrite,Organization.Read.All,User.Read.All" ;
+    Above has two specs in the array:
+    - First grants against 'Microsoft Graph' svcPrincipal, the AuditLog.Read.All, Directory.ReadWrite.All, Group.Create, Group.ReadWrite.All, & GroupMember.ReadWrite.All permissions
+    - Second grants against 'Office 365 Exchange Online' svcPrincipal, the Exchange.ManageAsApp, Mailbox.Migration, MailboxSettings.ReadWrite, Organization.Read.All & User.Read.All permissions
+    
+    A "Microsoft.Open.AzureAD.Model.RequiredResourceAccess" object is built:
+    - with the svcPrincipal.AppID set to ResourceAppId
+    - and a series of "Microsoft.Open.AzureAD.Model.ResourceAccess" objects added per specified role.
+    The resulting array of RequiredResourceAccess objects is returned to the pipeline. ready for use as the RequiredResourceAccess parameter of a New-AzureADApplication pass.
+    
+    .PARAMETER Permissions
+    Array of permission grants defined as 1)SecurityPrincipal identifier, semicolon-delimited with permission tags (which are each comma-delimited between themselves)[-Permissions 'Microsoft Graph;AuditLog.Read.All,Directory.ReadWrite.All,Group.Create,Group.ReadWrite.All,GroupMember.ReadWrite.All']
+    .INPUTS
+    None. Does not accepted piped input.(.NET types, can add description)
+    .OUTPUTS
+    Returns System.Object[] System.Array with constructed permissions grant object
+    .EXAMPLE
+    PS> [array]$procPerms = "Microsoft Graph;AuditLog.Read.All,Directory.ReadWrite.All,Group.Create,Group.ReadWrite.All,GroupMember.ReadWrite.All" ; 
+    PS> $procPerms += "Office 365 Exchange ;  Online;Exchange.ManageAsApp,Mailbox.Migration,MailboxSettings.ReadWrite,Organization.Read.All,User.Read.All" ;
+    PS> $bRet = New-AADAppPermissionsObject -Permissions $procPerms -verbose ; 
+    if($bRet.GrantArray){
+    PS> $pltNAADApp=[ordered]@{
+    PS>     DisplayName = $appName ;
+    PS>     IdentifierUris = $adalUrlIdentifier ;
+    PS>     ReplyUrls = $appReplyUrl ;
+    PS>     RequiredResourceAccess = $GrantArray ;
+    PS>     ErrorAction = 'STOP' ; 
+    PS> } ;
+    PS> $smsg = "`n$((get-date).ToString('HH:mm:ss')):New-AzureADApplication w`n$(($pltNAADApp|out-string).trim())"  ;
+    PS> if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    PS> else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS> $application = New-AzureADApplication @pltNAADApp ;
+    PS> } else { 
+    PS>     throw "New-AADAppPermissionsObject failed to return populated GrantArray!" ; 
+    PS> } ; 
+    PS> Run permissions build on MS Graph & EXO, verbose, then use the permission object with splatted New-AzureADApplication cmdlet.
+    .LINK
+    https://bitbucket.org/tostka/powershell/
+    #>
+    #Requires -Modules AzureAD, PKI, verb-IO, verb-logging
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("US","GB","AU")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)]#positiveInt:[ValidateRange(0,[int]::MaxValue)]#negativeInt:[ValidateRange([int]::MinValue,0)][ValidateCount(1,3)]
+    ## [OutputType('bool')] # optional specified output type
+    [CmdletBinding()]
+    ###[Alias('Alias','Alias2')]
+    PARAM(
+        [Parameter(Mandatory=$True,HelpMessage="Array of permission grants defined as 1)SecurityPrincipal identifier, semicolon-delimited with permission tags (which are each comma-delimited between themselves)[-Permissions 'Microsoft Graph;AuditLog.Read.All,Directory.ReadWrite.All,Group.Create,Group.ReadWrite.All,GroupMember.ReadWrite.All']")]
+        [ValidateNotNullOrEmpty()]
+        #[Alias('ALIAS1', 'ALIAS2')]
+        [string[]]$Permissions,
+        [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
+        [switch] $whatIf=$true
+    ) ;
+    #region CONSTANTS-AND-ENVIRO #*======v CONSTANTS-AND-ENVIRO v======
+    # function self-name (equiv to script's: $MyInvocation.MyCommand.Path) ;
+    ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+    $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+    write-verbose -verbose:$verbose "`$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+    $Verbose = ($VerbosePreference -eq 'Continue') ; 
+    
+    $objReturn = @{
+        GrantArray = $null ; 
+        Valid = $false ; 
+    } ; 
+    
+     $smsg = "---Build Permissions Object:" ; 
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    # Add AuditLog.Read.All access
+    $pltGAADSP=[ordered]@{
+        All=$true ;
+        erroraction = 'STOP' ;
+    } ;
+    $smsg = "----4a)Get-AzureADServicePrincipal w`n$(($pltGAADSP|out-string).trim())" ; 
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+ 
+    $allSvcPrinc = Get-AzureADServicePrincipal @pltGAADSP ; 
+
+    # try to build an array of delimted strings set to loop out and build the objects
+    # syntax: "[SecPrin filterable name];[perm1],[perm2]..."
+    # Secprin & perms array are semi-colon delimited, perms are comma-delimited
+    #[array]$procPerms = "Microsoft Graph;AuditLog.Read.All,Directory.ReadWrite.All,Group.Create,Group.ReadWrite.All,GroupMember.ReadWrite.All" ; 
+    #$procPerms += "Office 365 Exchange Online;Exchange.ManageAsApp,Mailbox.Migration,MailboxSettings.ReadWrite,Organization.Read.All,User.Read.All" ;
+    $smsg = "----4b):loop-resolving following SecPrins & per-SP perms:`n$(($procPerms|out-string).trim())" ; 
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    $GrantArray = @() ; 
+    foreach($procPerm in $procPerms){
+        $SecPrinName,$roleArray = $procPerm.split(';') ; # split sp from roles
+        $rolearray = $roleArray.split(',') ; # split roles into an array
+        $smsg = "`n`n===`n`$SecPrinName:$($SecPrinName)" ;
+        $smsg += "`n`$rolearray:$($rolearray)" ; 
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        $resAccessArray = @() ; 
+        $smsg = "Resolving SecPrin:$($SecPrinName)..." ;
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        if($svcPrincipal = $allSvcPrinc | ? { $_.DisplayName -eq $SecPrinName } ){
+            $smsg = "Resolved $($SecPrinnAME)=>`n$(($svcPrincipal|out-string).trim())" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            $oRequiredResourceAccess = New-Object -TypeName "Microsoft.Open.AzureAD.Model.RequiredResourceAccess" ;
+            $oRequiredResourceAccess.ResourceAppId = $svcPrincipal.AppId ; 
+            foreach ($role in $roleArray){
+                $smsg = "`n`nResolving SP:$($svcPrincipal.displayname):$($role)..." ;
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                if($appRole = $svcPrincipal.AppRoles | ? { $_.Value -eq $role }){
+                     $smsg = "Resolved $($svcPrincipal.displayname):$($role)=>`n$(($appRole|out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $appPermission = New-Object -TypeName "Microsoft.Open.AzureAD.Model.ResourceAccess" -ArgumentList "$($appRole.Id)", "Role" ;
+                    $resAccessArray += $appPermission ;
+                } else { 
+                    $smsg = "FAILED TO RESOLVE AppRole $($role) FROM SvcPrinicpal available AppRoles!" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    break ; 
+                } ; 
+            } ;  
+            # $oRequiredResourceAccess.ResourceAccess = $appPermission, $appPermission2, $appPermission3, $appPermission4, $appPermission5, $appPermission6 ;
+            if($resAccessArray){
+                $oRequiredResourceAccess.ResourceAccess = $resAccessArray ; 
+                $GrantArray += $oRequiredResourceAccess ; 
+                $smsg = "`n$($SecPrinName) SecPrin AccessArray:`n$(($oRequiredResourceAccess|out-string).trim())" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } else { 
+                $smsg = "`$resAccessArray IS UNPOPULATED!" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                break ; 
+            } ; 
+        } else { 
+            $smsg = "FAILED TO RESOLVE SECPRIN $($SecPrinName) FROM Get-AzureADServicePrincipal FULL COLLECTION!" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+            break ; 
+        } ; 
+    } ;
+
+    $objReturn.GrantArray = $GrantArray ; 
+    
+    if($objReturn.GrantArray ){ 
+        $smsg = "Populated GrantArray: Setting Valid:`$true" ; 
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        $objReturn.Valid = $true ; 
+    } else { 
+        $smsg = "POPULATED GRANTARRAY: Setting Valid:`$FALSE" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        $objReturn.Valid = $false 
+    } ; 
+    
+    $smsg = "(Returning object to pipeline: w`n$(($objReturn|out-string).trim()))" ; 
+    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+    New-Object -TypeName PSObject -Property $objReturn | write-output ; 
+}
+
+#*------^ New-AADAppPermissionsObject.ps1 ^------
+
+
 #*------v profile-AAD-Signons.ps1 v------
 Function profile-AAD-Signons {
     <#
     .SYNOPSIS
-    profile-AAD-Signons.ps1 - profile AAD Sign-ons Activity JSON dump Splitbrain and outline remediation steps
+    profile-AAD-Signons - profile AAD Sign-ons Activity JSON dump Splitbrain and outline remediation steps
     .NOTES
     Author: Todd Kadrie
     Website:	http://www.toddomation.com
@@ -4221,6 +5411,8 @@ Function profile-AAD-Signons {
     Website:	URL
     Twitter:	URL
     REVISIONS   : 
+    * 5:09 PM 2/2/2023 updated to -indent support, latest w-l support, I believe I've now got it logging *everything*, to capture the full report into the logs.
+    * 2:41 PM 1/30/2023 fixed fundemental path-discovery breaks since moving it into verb-AAD (wasn't discovering any prior .ps1 paths; needed function discovery code spliced in). : 
     * 11:18 AM 9/16/2021 string cleaning
     * 3:04 PM 6/16/2021, shifted to standard start-log mod support, conditioned helper funcs, added test for events in target file, echo on gap
     * 11:11 AM 6/15/2021 Ren'd Build-AADSignErrorsHash() -> Initialize-AADSignErrorsHash (compliant verb) ; sync'd copy & set it to defer to the verb-AAD mod version
@@ -4232,6 +5424,30 @@ Function profile-AAD-Signons {
     * 1:01 PM 8/20/2019 v0.1.0 init vers (converted check-ExosplitBrain.ps1), subbed in write-log from verb-transcript (debug support)
     .DESCRIPTION
     profile-AAD-Signons.ps1 - profile AAD Sign-ons Activity JSON dump Splitbrain and outline remediation steps
+
+    ## Retrieve logs for a given user via AAD Portal [process in 1/30/2023 UI]
+
+    1. Edge browse: https://portal.azure.com/ 
+    2. Azure AD > Users > [search]
+    3. UL pane: click Sign-in logs
+    4. Date: Last 1 month, _Apply_ 
+    5. Columns: [x]ALL!, OK
+    6. Add-Filters:
+      - (x) Status >  'Status: None Selected' > [x]Success|Failure|Interrupted, Apply 
+      > Application: *appears* to be Client, not resource 
+      > Office 365 Exchange Online - looks like OWA?
+      > Outlook Mobile - OM (?)
+    7. Click _Download_ to pull down, export to csv/(x)json. (preserves the sub-objects!)
+      -  Ren default filename: `SignIns_2022-12-31_2023-01-30` ->
+      `TICKET-AADSignIns-UPNPREFIX-30d_2022-12-31_2023-01-30`
+    8. _Download_
+    9. Pops dlg: click _Save as_ (v Save).  
+    10. Click _Downloads_ toolbar link in Edge (far L) > find the download, click _Show in folder_ > explorer opens host folder. 
+    11. Locate file & Move to:  `d:\scripts\logs\`
+    12. Profile the resulting .json file in this script:
+    
+    PS> profile-AAD-Signons -Files [fullpath to json] ; 
+
     .PARAMETER  UPNs
     User Userprincipalnames (array)[-UPNs]
     .PARAMETER ShowDebug
@@ -4241,19 +5457,16 @@ Function profile-AAD-Signons {
     .OUTPUTS
     None. Returns no objects or output.
     .EXAMPLE
-    .\profile-AAD-Signons.ps1 -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json";
+    PS> profile-AAD-Signons -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json";
     Process a single json AAD signon log
     .EXAMPLE
-    .\profile-AAD-Signons.ps1 -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json","c:\usr\work\incid\todd.USER-SignIns__2019-07-07__2019-08-06b.csv.json" ;
+    PS> profile-AAD-Signons -Files "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json","c:\usr\work\incid\todd.USER-SignIns__2019-07-07__2019-08-06b.csv.json" ;
     Process an array of json AAD signon logs
     .LINK
     #>
-
     ### Note: vers 2: #Requires -Version 2.0
-    #Requires -Modules ActiveDirectory
-    #Requires -Version 3
-
-
+    ##Requires -Modules ActiveDirectory
+    ##Requires -Version 3
     Param(
         [Parameter(Position=0,Mandatory=$false,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Files [-file c:\path-to\file.ext]")]
         [array]$Files,
@@ -4271,21 +5484,75 @@ Function profile-AAD-Signons {
     # If using WMI calls, push any cred into WMI:
     #if ($Credential -ne $Null) {$WmiParameters.Credential = $Credential }  ;
 
+    # 2:28 PM 1/30/2023 getting fail on all path res, update to current mixed discovery
     # scriptname with extension
-    $ScriptDir=(Split-Path -parent $MyInvocation.MyCommand.Definition) + "\" ;
-    $ScriptBaseName = (Split-Path -Leaf ((&{$myInvocation}).ScriptName))  ;
-    $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName) ;
+    #if ($PSScriptRoot -eq "") {
+    if( -not (get-variable -name PSScriptRoot -ea 0) -OR ($PSScriptRoot -eq '')){
+        if ($psISE) { $ScriptName = $psISE.CurrentFile.FullPath } 
+        elseif($psEditor){
+            if ($context = $psEditor.GetEditorContext()) {$ScriptName = $context.CurrentFile.Path } 
+        } elseif ($host.version.major -lt 3) {
+            $ScriptName = $MyInvocation.MyCommand.Path ;
+            $PSScriptRoot = Split-Path $ScriptName -Parent ;
+            $PSCommandPath = $ScriptName ;
+        } else {
+            if ($MyInvocation.MyCommand.Path) {
+                $ScriptName = $MyInvocation.MyCommand.Path ;
+                $PSScriptRoot = Split-Path $MyInvocation.MyCommand.Path -Parent ;
+            } else {throw "UNABLE TO POPULATE SCRIPT PATH, EVEN `$MyInvocation IS BLANK!" } ;
+        };
+        if($ScriptName){
+            $ScriptDir = Split-Path -Parent $ScriptName ;
+            $ScriptBaseName = split-path -leaf $ScriptName ;
+            $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($ScriptName) ;
+        } ; 
+    } else {
+        if($PSScriptRoot){$ScriptDir = $PSScriptRoot ;}
+        else{
+            write-warning "Unpopulated `$PSScriptRoot!" ; 
+            $ScriptDir=(Split-Path -parent $MyInvocation.MyCommand.Definition) + "\" ;
+        }
+        if ($PSCommandPath) {$ScriptName = $PSCommandPath } 
+        else {
+            $ScriptName = $myInvocation.ScriptName
+            $PSCommandPath = $ScriptName ;
+        } ;
+        $ScriptBaseName = (Split-Path -Leaf ((& { $myInvocation }).ScriptName))  ;
+        $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName) ;
+    } ;
+    if(!$ScriptDir){
+        write-host "Failed `$ScriptDir resolution on PSv$($host.version.major): Falling back to $MyInvocation parsing..." ; 
+        $ScriptDir=(Split-Path -parent $MyInvocation.MyCommand.Definition) + "\" ;
+        $ScriptBaseName = (Split-Path -Leaf ((&{$myInvocation}).ScriptName))  ; 
+        $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName) ;     
+    } else {
+        if(-not $PSCommandPath ){
+            $PSCommandPath  = $ScriptName ; 
+            if($PSCommandPath){ write-host "(Derived missing `$PSCommandPath from `$ScriptName)" ; } ;
+        } ; 
+        if(-not $PSScriptRoot  ){
+            $PSScriptRoot   = $ScriptDir ; 
+            if($PSScriptRoot){ write-host "(Derived missing `$PSScriptRoot from `$ScriptDir)" ; } ;
+        } ; 
+    } ; 
+    if(-not ($ScriptDir -AND $ScriptBaseName -AND $ScriptNameNoExt)){ 
+        throw "Invalid Invocation. Blank `$ScriptDir/`$ScriptBaseName/`ScriptNameNoExt" ; 
+        BREAK ; 
+    } ; 
+
+    $smsg = "`$ScriptDir:$($ScriptDir)" ;
+    $smsg += "`n`$ScriptBaseName:$($ScriptBaseName)" ;
+    $smsg += "`n`$ScriptNameNoExt:$($ScriptNameNoExt)" ;
+    $smsg += "`n`$PSScriptRoot:$($PSScriptRoot)" ;
+    $smsg += "`n`$PSCommandPath:$($PSCommandPath)" ;  ;
+    write-host $smsg ; 
     $ComputerName = $env:COMPUTERNAME ;
     $smtpFrom = (($scriptBaseName.replace(".","-")) + "@toro.com") ;
     #$smtpSubj= ("Daily Rpt: "+ (Split-Path $transcript -Leaf) + " " + [System.DateTime]::Now) ;
     $smtpSubj= "Proc Rpt:$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
     $smtpTo=$TORMeta['NotificationAddr1'] ;
     $sQot = [char]34 ; $sQotS = [char]39 ;
-    $NoProf=[bool]([Environment]::GetCommandLineArgs() -like '-noprofile'); # if($NoProf){# do this};
-    $MyBox="LYN-3V6KSY1","TIN-BYTEIII","TIN-BOX","TINSTOY","LYN-8DCZ1G2" ;
-    $DomainWork = "TORO";
-    $DomHome = "REDBANK";
-    $DomLab="TORO-LAB";
+
     #$ProgInterval= 500 ; # write-progress wait interval in ms
     # 12:23 PM 2/20/2015 add gui vb prompt support
     #[System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic') | Out-Null ;
@@ -4295,195 +5562,671 @@ Function profile-AAD-Signons {
 
     #*======v FUNCTIONS v======
 
-    #*------v Function Write-Log v-----
-    if(test-path function:Write-Log){
-        "(deferring to `$script:Write-Log())" ;
-    } else {
-        "(using default verb-logging:Write-Log())" ;
-        function Write-Log {
-            <#
-            .SYNOPSIS
-            Write-Log.ps1 - Write-Log writes a message to a specified log file with the current time stamp, and write-verbose|warn|error's the matching msg.
-            .NOTES
-            Author: Jason Wasser @wasserja
-            Website:	https://www.powershellgallery.com/packages/MrAADAdministration/1.0/Content/Write-Log.ps1
-            Twitter:	@wasserja
-            Updated By: Todd Kadrie
-            Website:	http://www.toddomation.com
-            Twitter:	@tostka, http://twitter.com/tostka
-            Additional Credits: REFERENCE
-            Website:	URL
-            Twitter:	URL
-            REVISIONS   :
-            * 11:34 AM 8/26/2019 fixed missing noecho parameter desig in comment help
-            * 9:31 AM 2/15/2019:Write-Log: added Level:Debug support, and broader init
-                block example with $whatif & $ticket support, added -NoEcho to suppress console
-                echos and just use it for writing logged output
-            * 8:57 PM 11/25/2018 Write-Log:shifted copy to verb-logging, added defer to scope $script versions
-            * 2:30 PM 10/18/2018 added -useHost to have it issue color-keyed write-host commands vs write-(warn|error|verbose)
-                switched timestamp into the function (as $echotime), rather than redundant code in the $Message contstruction.
-            * 10:18 AM 10/18/2018 cleanedup, added to pshelp, put into OTB fmt, added trailing semis, parame HelpMessages, and -showdebug param
-            * Code simplification and clarification - thanks to @juneb_get_help  ;
-            * Added documentation.
-            * Renamed LogPath parameter to Path to keep it standard - thanks to @JeffHicks  ;
-            * Revised the Force switch to work as it should - thanks to @JeffHicks  ;
-
-            To Do:  ;
-            * Add error handling if trying to create a log file in a inaccessible location.
-            * Add ability to write $Message to $Verbose or $Error pipelines to eliminate  ;
-                duplicates.
-            .DESCRIPTION
-            The Write-Log function is designed to add logging capability to other scripts.
-            In addition to writing output and/or verbose you can write to a log file for  ;
-            later debugging.
-            .PARAMETER Message  ;
-            Message is the content that you wish to add to the log file.
-            .PARAMETER Path  ;
-            The path to the log file to which you would like to write. By default the function will create the path and file if it does not exist.
-            .PARAMETER Level  ;
-            Specify the criticality of the log information being written to the log defaults Info: (Error|Warn|Info)  ;
-            .PARAMETER useHost  ;
-            Switch to use write-host rather than write-[verbose|warn|error] [-useHost]
-            .PARAMETER NoEcho
-            Switch to suppress console echos (e.g log to file only [-NoEcho]
-            .PARAMETER NoClobber  ;
-            Use NoClobber if you do not wish to overwrite an existing file.
-            .PARAMETER ShowDebug
-            Parameter to display Debugging messages [-ShowDebug switch]
-            .INPUTS
-            None. Does not accepted piped input.
-            .OUTPUTS
-            Writes output to the specified Path.
-            .EXAMPLE
-            Write-Log -Message 'Log message'   ;
-            Writes the message to c:\Logs\PowerShellLog.log.
-            .EXAMPLE
-            Write-Log -Message 'Restarting Server.' -Path c:\Logs\Scriptoutput.log
-            Writes the content to the specified log file and creates the path and file specified.
-            .EXAMPLE
-            Write-Log -Message 'Folder does not exist.' -Path c:\Logs\Script.log -Level Error  ;
-            Writes the message to the specified log file as an error message, and writes the message to the error pipeline.
-            .EXAMPLE
-            # init content in script context ($MyInvocation is blank in function scope)
-            $logfile = join-path -path $ofile -childpath "$([system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName))-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-LOG.txt"  ;
-            $logging = $True ;
-            # ...
-            $sBnr="#*======v `$tmbx:($($Procd)/$($ttl)):$($tmbx) v======" ;
-            $smsg="$($sBnr)" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } ; #Error|Warn
-            Example that uses a variable and the -useHost switch, to trigger write-host use
-            .EXAMPLE
-            $transcript = join-path -path (Split-Path -parent $MyInvocation.MyCommand.Definition) -ChildPath "logs" ;
-            if(!(test-path -path $transcript)){ "Creating missing log dir $($transcript)..." ; mkdir $transcript  ; } ;
-            $transcript=join-path -path $transcript -childpath "$([system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName))"  ;
-            $transcript+= "-Transcript-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-trans-log.txt"  ;
-            # add log file variant as target of Write-Log:
-            $logfile=$transcript.replace("-Transcript","-LOG").replace("-trans-log","-log")
-            if($whatif){
-                $logfile=$logfile.replace("-BATCH","-BATCH-WHATIF") ;
-                $transcript=$transcript.replace("-BATCH","-BATCH-WHATIF") ;
-            } else {
-                $logfile=$logfile.replace("-BATCH","-BATCH-EXEC") ;
-                $transcript=$transcript.replace("-BATCH","-BATCH-EXEC") ;
-            } ;
-            if($Ticket){
-                $logfile=$logfile.replace("-BATCH","-$($Ticket)") ;
-                $transcript=$transcript.replace("-BATCH","-$($Ticket)") ;
-            } else {
-                $logfile=$logfile.replace("-BATCH","-nnnnnn") ;
-                $transcript=$transcript.replace("-BATCH","-nnnnnn") ;
-            } ;
-            $logging = $True ;
-
-            $sBnr="#*======v START PASS:$($ScriptBaseName) v======" ;
-            $smsg= "$($sBnr)" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } ; #Error|Warn
-            More complete boilerplate including $whatif & $ticket
-            .LINK
-            https://gallery.technet.microsoft.com/scriptcenter/Write-Log-PowerShell-999c32d0  ;
-            #>
-            [CmdletBinding()]
-            Param (
-                [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, HelpMessage = "Message is the content that you wish to add to the log file")]
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        #region WriteLogS ;#*======v Write-Log SIMPLIFIED (psb-psWriteLog.cbp) v======
+if(-not(get-command write-log -ea 0)){
+    #*------v Function write-log v------
+    <# write-log includable version, does FULL RANGE of levels, but has stripped down comments and details
+    - Call: 
+    write-verbose 'define log before first call:'
+    $logfile = "c:\scripts\logs\$($env:COMPUTERNAME)-Exzd-check-$(get-date -format 'yyyyMMdd-HHmmtt')-trans-log.txt" ; 
+    $smsg = "Unable to locate IIS logs through WebAdmin module!" ;
+    write-Log -message $smsg -Path $logfile -useHost -Level Warn ;
+    - syntax matches 7pswlt, aside from _ name prefix7ah
+    - can be unwrapped wo issues (no comments within).
+    - works well where start/stop-transcript aren't supported but you want to capture results into a file (Remote invoke-command, enter-pssession etc)
+    Native indent support relies on setting the $env:HostIndentSpaces to target indent. 
+    Also leverages following verb-io funcs: (life cycle: (init indent); (mod indent); write-log -indent; (clear indent e-vari))
+    (reset-HostIndent), (push-HostIndent,pop-HostIndent,set-HostIndent), write-log -indent, (clear-HostIndent).
+    #>
+    function write-log  {
+        [CmdletBinding()]
+        Param (
+            [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true, 
+                HelpMessage = "Message is the content that you wish to add to the log file")]
                 [ValidateNotNullOrEmpty()][Alias("LogContent")]
-                [string]$Message,
-                [Parameter(Mandatory = $false, HelpMessage = "The path to the log file to which you would like to write. By default the function will create the path and file if it does not exist.")][Alias('LogPath')]
+                [Alias('Message')] 
+                [System.Object]$Object,
+            [Parameter(Mandatory = $false, 
+                HelpMessage = "The path to the log file to which you would like to write. By default the function will create the path and file if it does not exist.")]
+                [Alias('LogPath')]
                 [string]$Path = 'C:\Logs\PowerShellLog.log',
-                [Parameter(Mandatory = $false, HelpMessage = "Specify the criticality of the log information being written to the log defaults Info: (Error|Warn|Info)")][ValidateSet("Error", "Warn", "Info", "Debug")]
+            [Parameter(Mandatory = $false, 
+                HelpMessage = "Specify the criticality of the log information being written to the log (defaults Info): (Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success)[-level Info]")]
+                [ValidateSet('Error','Warn','Info','H1','H2','H3','H4','H5','Debug','Verbose','Prompt','Success')]
                 [string]$Level = "Info",
-                [Parameter(HelpMessage = "Switch to use write-host rather than write-[verbose|warn|error] [-useHost]")]
+            [Parameter(
+                HelpMessage = "Switch to use write-host rather than write-[verbose|warn|error] [-useHost]")]
                 [switch] $useHost,
-                [Parameter(HelpMessage = "Switch to suppress console echos (e.g log to file only [-NoEcho]")]
+            [Parameter(
+                HelpMessage="Specifies the background color. There is no default. The acceptable values for this parameter are:
+        (Black | DarkBlue | DarkGreen | DarkCyan | DarkRed | DarkMagenta | DarkYellow | Gray | DarkGray | Blue | Green | Cyan | Red | Magenta | Yellow | White)")]
+                [System.ConsoleColor]$BackgroundColor,
+            [Parameter(
+                HelpMessage="Specifies the text color. There is no default. The acceptable values for this parameter are:
+    (Black | DarkBlue | DarkGreen | DarkCyan | DarkRed | DarkMagenta | DarkYellow | Gray | DarkGray | Blue | Green | Cyan | Red | Magenta | Yellow | White)")]
+                [System.ConsoleColor]$ForegroundColor,
+            [Parameter(
+                HelpMessage="The string representations of the input objects are concatenated to form the output. No spaces or newlines are inserted between
+    the output strings. No newline is added after the last output string.")]
+                [System.Management.Automation.SwitchParameter]$NoNewline,
+            [Parameter(
+                HelpMessage = "Switch to use write-HostIndent-type code for console echos(see get-help write-HostIndent)[-useHost]")]
+                [Alias('in')]
+                [switch] $Indent,
+             [Parameter(
+                HelpMessage = "Switch to strip empty lines when using -Indent (which auto-splits multiline Objects)[-Flatten]")]
+                #[Alias('flat')]
+                [switch] $Flatten,
+            [Parameter(
+                HelpMessage="Specifies a separator string to insert between objects displayed by the host.")]
+            [System.Object]$Separator,
+            [Parameter(
+                HelpMessage="Character to use for padding (defaults to a space).[-PadChar '-']")]
+            [string]$PadChar = ' ',
+            [Parameter(
+                HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrment 8]")]
+            [int]$PadIncrment = 4,
+            [Parameter(
+                    HelpMessage = "Switch to suppress console echos (e.g log to file only [-NoEcho]")]
                 [switch] $NoEcho,
-                [Parameter(Mandatory = $false, HelpMessage = "Use NoClobber if you do not wish to overwrite an existing file.")]
+            [Parameter(Mandatory = $false, 
+                HelpMessage = "Use NoClobber if you do not wish to overwrite an existing file.")]
                 [switch]$NoClobber,
-                [Parameter(HelpMessage = "Debugging Flag [-showDebug]")]
-                [switch] $showDebug
-            )  ;
-
-            Begin {
-                $VerbosePreference = 'Continue'  ; # Set VerbosePreference to Continue so that verbose messages are displayed.
-            }  ;
-            Process {
-                # If the file already exists and NoClobber was specified, do not write to the log.
+            [Parameter(
+                HelpMessage = "Debugging Flag [-showDebug]")]
+                [switch] $showDebug,
+            [Parameter(
+                HelpMessage = "Switch to output a demo display of each Level, and it's configured color scheme (requires specification of a 'dummy' message string to avoid an error).[-Demo]")]
+                [switch] $demo
+        )  ;
+        BEGIN {
+            ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+            $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+            write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+            $Verbose = ($VerbosePreference -eq 'Continue') ;     
+            $pltWH = @{ Object = $null ; } ; 
+            if ($PSBoundParameters.ContainsKey('BackgroundColor')) {$pltWH.add('BackgroundColor',$BackgroundColor) ; } ;
+            if ($PSBoundParameters.ContainsKey('ForegroundColor')) { $pltWH.add('ForegroundColor',$ForegroundColor) ;} ;
+            if ($PSBoundParameters.ContainsKey('NoNewline')) {$pltWH.add('NoNewline',$NoNewline) ; } ;
+            if($Indent){
+                if ($PSBoundParameters.ContainsKey('Separator')) {$pltWH.add('Separator',$Separator) ; } ;
+                if (-not ([int]$CurrIndent = (Get-Item -Path Env:HostIndentSpaces -erroraction SilentlyContinue).Value ) ){[int]$CurrIndent = 0 ; } ; 
+                write-verbose "$($CmdletName): Discovered `$env:HostIndentSpaces:$($CurrIndent)" ; 
+            } ; 
+            if($host.Name -eq 'Windows PowerShell ISE Host' -AND $host.version.major -lt 3){
+                $pltError=@{foregroundcolor='yellow';backgroundcolor='darkred'};
+                $pltWarn=@{foregroundcolor='DarkMagenta';backgroundcolor='yellow'};
+                $pltInfo=@{foregroundcolor='gray';backgroundcolor='darkblue'};
+                $pltH1=@{foregroundcolor='black';backgroundcolor='darkyellow'};
+                $pltH2=@{foregroundcolor='darkblue';backgroundcolor='gray'};
+                $pltH3=@{foregroundcolor='black';backgroundcolor='darkgray'};
+                $pltH4=@{foregroundcolor='gray';backgroundcolor='DarkCyan'};
+                $pltH5=@{foregroundcolor='cyan';backgroundcolor='DarkGreen'};
+                $pltDebug=@{foregroundcolor='red';backgroundcolor='black'};
+                $pltVerbose=@{foregroundcolor='darkgray';backgroundcolor='black'};
+                $pltPrompt=@{foregroundcolor='DarkMagenta';backgroundcolor='darkyellow'};
+                $pltSuccess=@{foregroundcolor='Blue';backgroundcolor='green'};
+            } else {
+                $pltError=@{foregroundcolor='yellow';backgroundcolor='darkred'};
+                $pltWarn=@{foregroundcolor='DarkMagenta';backgroundcolor='yellow'};
+                $pltInfo=@{foregroundcolor='gray';backgroundcolor='darkblue'};
+                $pltH1=@{foregroundcolor='black';backgroundcolor='darkyellow'};
+                $pltH2=@{foregroundcolor='darkblue';backgroundcolor='gray'};
+                $pltH3=@{foregroundcolor='black';backgroundcolor='darkgray'};
+                $pltH4=@{foregroundcolor='gray';backgroundcolor='DarkCyan'};
+                $pltH5=@{foregroundcolor='cyan';backgroundcolor='DarkGreen'};
+                $pltDebug=@{foregroundcolor='red';backgroundcolor='black'};
+                $pltVerbose=@{foregroundcolor='darkgray';backgroundcolor='black'};
+                $pltPrompt=@{foregroundcolor='DarkMagenta';backgroundcolor='darkyellow'};
+                $pltSuccess=@{foregroundcolor='Blue';backgroundcolor='green'};
+            } ; 
+            if ($PSCmdlet.MyInvocation.ExpectingInput) {
+                write-verbose "Data received from pipeline input: '$($InputObject)'" ; 
+            } else {
+                write-verbose "(non-pipeline - param - input)" ; 
+            } ; 
+        }  ;
+        PROCESS {
+                if($Flatten){
+                    if($object.gettype().name -eq 'FormatEntryData'){
+                        write-verbose "skip split/flatten on these (should be pre-out-string'd before write-logging)" ; 
+                    } else { 
+                        [string[]]$Object = [string[]]$Object.Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries) ;
+                    } ; 
+                } else { 
+                    [string[]]$Object = [string[]]$Object.ToString().Split([Environment]::NewLine) 
+                } ; 
                 if ((Test-Path $Path) -AND $NoClobber) {
                     Write-Error "Log file $Path already exists, and you specified NoClobber. Either delete the file or specify a different name."  ;
                     Return  ;
-                }
-                elseif (!(Test-Path $Path)) {
-                    # create the file including the path when missing.
+                } elseif (!(Test-Path $Path)) {
                     Write-Verbose "Creating $Path."  ;
                     $NewLogFile = New-Item $Path -Force -ItemType File  ;
-                }
-                else {
-                    # Nothing to see here yet.
-                }  ;
-
+                } else { }  ;
                 $FormattedDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"  ;
-                $EchoTime = "$((get-date).ToString('HH:mm:ss')):" ;
-
-                # Write message to error, warning, or verbose pipeline and specify $LevelText
+                $EchoTime = "$((get-date).ToString('HH:mm:ss')): " ;
+                $pltWH.Object = $EchoTime ; 
+                $pltColors = @{} ; 
                 switch ($Level) {
-                    'Error' {
-                        if ($useHost) {
-                            write-host -foregroundcolor red ($EchoTime + $Message)   ;
+                    'Error' {$LevelText = 'ERROR: ' ; $pltColors = $pltErr ; 
+                        if ($useHost) {} else {if (!$NoEcho) { Write-Error ($smsg + $Object) } } ;}
+                    'Warn' { $LevelText = 'WARNING: ' ; $pltColors = $pltWarn ; 
+                        if ($useHost) {} else {if (!$NoEcho) { Write-Warning ($smsg + $Object) } } ;}
+                    'Info' {$LevelText = 'INFO: ' ;  $pltColors = $pltInfo ; }
+                    'H1' { $LevelText = '# ' ; $pltColors = $pltH1 ; }
+                    'H2' {$LevelText = '## ' ; $pltColors = $pltH2 ;  }
+                    'H3' {$LevelText = '### ' ; $pltColors = $pltH3 ; }
+                    'H4' {$LevelText = '#### ' ; $pltColors = $pltH4 ; }
+                    'H5' { $LevelText = '##### ' ;  $pltColors = $pltH5 ; }
+                    'Debug' {$LevelText = 'DEBUG: ' ; $pltColors = $pltDebug ; 
+                        if ($useHost) {} else {if (!$NoEcho) { Write-Degug $smsg } }  ; }
+                    'Verbose' {
+                        $LevelText = 'VERBOSE: ' ; $pltColors = $pltVerbose ; 
+                        if ($useHost) {}else {if (!$NoEcho) { Write-Verbose ($smsg) } } ;  }
+                    'Prompt' {$LevelText = 'PROMPT: ' ; $pltColors = $pltPrompt ; }
+                    'Success' {$LevelText = 'SUCCESS: ' ; $pltColors = $pltSuccess ; }
+                } ;
+                if($pltColors.foregroundcolor){
+                if(-not ($pltWH.keys -contains 'foregroundcolor')){
+                    $pltWH.add('foregroundcolor',$pltColors.foregroundcolor) ; 
+                } elseif($pltWH.foregroundcolor -eq $null){
+                    $pltWH.foregroundcolor = $pltColors.foregroundcolor ; 
+                } ; 
+            } ; 
+            if($pltColors.backgroundcolor){
+                if(-not ($pltWH.keys -contains 'backgroundcolor')){
+                    $pltWH.add('backgroundcolor',$pltColors.backgroundcolor) ; 
+                } elseif($pltWH.backgroundcolor -eq $null){
+                    $pltWH.backgroundcolor = $pltColors.backgroundcolor ; 
+                } ; 
+            } ; 
+                if ($useHost) {
+                    if(-not $Indent){
+                        if($Level -match '(Debug|Verbose)' ){$pltWH.Object += "$($LevelText) ($($Object))" ;
+                        } else { $pltWH.Object += "$($LevelText) $($Object)" ; } ; 
+                        $smsg = "write-host w`n$(($pltWH|out-string).trim())" ; 
+                        write-host @pltwh ; 
+                    } else { 
+                        write-verbose 'indent support' ; 
+                        foreach ($obj in $object){
+                            $pltWH.Object = $EchoTime ; 
+                            if($Level -match '(Debug|Verbose)' ){
+                                if($obj.length -gt 0){ $pltWH.Object += "$($LevelText) ($($obj))" ;
+                                } else { $pltWH.Object += "$($LevelText)" ;} ; 
+                            } else {$pltWH.Object += "$($LevelText) $($obj)" ;} ; 
+                            Write-Host -NoNewline $($PadChar * $CurrIndent)  ; 
+                            write-host @pltwh ; 
+                        } ; 
+                    } ; 
+                } 
+                "$FormattedDate $LevelText : $Object" | Out-File -FilePath $Path -Append  ;
+        }  ; 
+    } ; 
+    #*------^ Write-Log.ps1 ^------
+} ; 
+<# VERS: * 2:58 PM 2/2/2023 updated fr prim vers
+11:47 AM 1/17/2023 rearranged comments
+#>
+#endregion  ; #*======^ Write-Log SIMPLIFIED (psb-psWriteLog.cbp) ^======
+
+    #region HostIndentS ; #*======v HostIndent SIMPLIFIED (psb-psHostIndent.cbp) v======
+    if(-not(get-command HostIndent -ea 0)){
+        #*------v Function HostIndent v------
+        <# HostIndent includable version of core cmdlets, has stripped down comments and details
+        - Call: 
+        write-verbose 'define log before first call:'
+        $smsg = "Unable to locate IIS logs through WebAdmin module!" ;
+        HostIndent -message $smsg ;
+        - can be unwrapped wo issues (no comments within).
+        - works well where you have complicated console output, but verb-io isn't supported (or verb-logging, for write-log)
+        Native indent support relies on setting the $env:HostIndentSpaces to target indent. 
+        Also leverages following verb-io funcs: (life cycle: (init indent); (mod indent); Write-HostIndent; (clear indent e-vari))
+        (reset-HostIndent), (push-HostIndent,pop-HostIndent,set-HostIndent),Write-HostIndent,  (clear-HostIndent),
+        Write-HostIndent -ForegroundColor Gray "($Domain)" -verbose ;
+        #>
+        #*------v Function reset-HostIndent v------
+        function reset-HostIndent {
+            <# * 2:01 PM 2/1/2023 add: -PID param
+            #>
+            [CmdletBinding()]
+            [Alias('r-hi')]
+            PARAM(
+                [Parameter(
+                    HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrement 8]")]
+                [int]$PadIncrement = 4,
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ; 
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;     
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $HISName = "Env:HostIndentSpaces$($PID)" ; 
+                } else { 
+                    $HISName = "Env:HostIndentSpaces" ; 
+                } ; 
+            
+                if(($smsg = Get-Item -Path "Env:HostIndentSpaces$($PID)" -erroraction SilentlyContinue).value){
+                  write-verbose $smsg ; 
+                } ; 
+                if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                    [int]$CurrIndent = 0 ; 
+                } ; 
+                $pltSV=[ordered]@{
+                    Path = $HISName 
+                    Value = 0; 
+                    Force = $true ; 
+                    erroraction = 'STOP' ;
+                } ;
+                $smsg = "$($CmdletName): Set 1 lvl:Set-Variable w`n$(($pltSV|out-string).trim())" ; 
+                write-verbose $smsg  ;
+                TRY{
+                    Set-Item @pltSV #-verbose ; 
+                } CATCH {
+                    $smsg = $_.Exception.Message ;
+                    write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    BREAK ;
+                } ;
+            } ;  
+        } ; 
+        #*------^ END Function reset-HostIndent ^------
+    } ; 
+    if(-not(get-command push-HostIndent -ea 0)){
+        #*------v Function push-HostIndent v------
+        function push-HostIndent {
+            <#
+            * 2:01 PM 2/1/2023 add: -PID param
+            #>
+            [CmdletBinding()]
+            [Alias('push-hi')]
+            PARAM(
+                [Parameter(
+                    HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrement 8]")]
+                [int]$PadIncrement = 4,
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ;
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;
+                write-verbose "$($CmdletName): Using `$PadIncrement:`'$($PadIncrement)`'" ;
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $HISName = "Env:HostIndentSpaces$($PID)" ;
+                } else {
+                    $HISName = "Env:HostIndentSpaces" ;
+                } ;
+                if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                    [int]$CurrIndent = 0 ;
+                } ;
+                write-verbose "$($CmdletName): Discovered `$$($HISName):$($CurrIndent)" ;
+                $pltSV=[ordered]@{
+                    Path = $HISName ;
+                    Value = [int](Get-Item -Path $HISName -erroraction SilentlyContinue).Value + $PadIncrement;
+                    Force = $true ;
+                    erroraction = 'STOP' ;
+                } ;
+                $smsg = "$($CmdletName): Set 1 lvl:Set-Variable w`n$(($pltSV|out-string).trim())" ;
+                write-verbose $smsg  ;
+                TRY{
+                    #Set-Variable @pltSV -verbose ;
+                    Set-Item @pltSV #-verbose ;
+                } CATCH {
+                    $smsg = $_.Exception.Message ;
+                    write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    BREAK ;
+                } ;
+            } ; 
+        } ;
+        #*------^ END Function push-HostIndent ^------
+    } ; 
+    if(-not(get-command pop-HostIndent -ea 0)){
+        #*------v Function pop-HostIndent v------
+        function pop-HostIndent {
+            <#
+            * 2:01 PM 2/1/2023 add: -PID param
+            #>
+            [CmdletBinding()]
+            [Alias('pop-hi')]
+            PARAM(
+                [Parameter(
+                    HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrement 8]")]
+                    [int]$PadIncrement = 4,
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ; 
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;     
+                write-verbose "$($CmdletName): Using `$PadIncrement:`'$($PadIncrement)`'" ; 
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $HISName = "Env:HostIndentSpaces$($PID)" ;
+                } else {
+                    $HISName = "Env:HostIndentSpaces" ;
+                } ;
+                if(($smsg = Get-Item -Path "Env:HostIndentSpaces$($PID)" -erroraction SilentlyContinue).value){
+                  write-verbose $smsg ; 
+                } ; 
+            
+                if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                    [int]$CurrIndent = 0 ; 
+                } ; 
+                write-verbose "$($CmdletName): Discovered `$$($HISName):$($CurrIndent)" ;  
+                if(($NewIndent = $CurrIndent - $PadIncrement) -lt 0){
+                    write-warning "$($CmdletName): `$HostIndentSpaces has reached 0/left margin (limiting to 0)" ; 
+                    $NewIndent = 0 ; 
+                } ; 
+                $pltSV=[ordered]@{
+                    Path = $HISName ; 
+                    Value = $NewIndent ; 
+                    Force = $true ; 
+                    erroraction = 'STOP' ;
+                } ;
+                $smsg = "$($CmdletName): Set 1 lvl:Set-Variable w`n$(($pltSV|out-string).trim())" ; 
+                write-verbose $smsg  ;
+                TRY{
+                    #Set-Variable @pltSV -verbose ; 
+                    Set-Item @pltSV #-verbose ; 
+                } CATCH {
+                    $smsg = $_.Exception.Message ;
+                    write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    BREAK ;
+                } ;
+            } ; 
+        } ; 
+        #*------^ END Function pop-HostIndent ^------
+    } ; 
+    if(-not(get-command set-HostIndent -ea 0)){
+        #*------v Function set-HostIndent v------
+        function set-HostIndent {
+            <#
+            * 2:01 PM 2/1/2023 add: -PID param
+            #>
+            [CmdletBinding()]
+            [Alias('pop-hi')]
+            PARAM(
+                [Parameter(Position=0,
+                    HelpMessage="Number of spaces to set write-hostIndent current indent (`$scop:HostIndentpaces) to.[-Spaces 8]")]
+                    [int]$Spaces,
+                [Parameter(
+                    HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrement 8]")]
+                [int]$PadIncrement = 4,
+                [Parameter(
+                    HelpMessage="Mathematical rounding logic to use for calculating nearest multiple of PadIncrement (RoundUp|RoundDown|AwayFromZero|Midpoint, default:RoundUp)[-Rounding awayfromzero]")]
+                    [ValidateSet('RoundUp','RoundDown','AwayFromZero','Midpoint')]
+                    [string]$Rounding = 'RoundUp',
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ;
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;
+                write-verbose "$($CmdletName): Using `$PadIncrement:`'$($PadIncrement)`'" ;
+                switch($Rounding){
+                    'RoundUp' {
+                        # always round up (to next higher multiple)
+                        $Spaces = ([system.math]::ceiling($Spaces/$PadIncrement))*$PadIncrement  ;
+                        write-verbose "Rounding:Roundup specified: Rounding to: $($Spaces)" ;
                         }
-                        else {
-                            if (!$NoEcho) { Write-Error ($EchoTime + $Message) } ;
-                        } ;
-                        $LevelText = 'ERROR:'  ;
-                    }
-                    'Warn' {
-                        if ($useHost) {
-                            write-host -foregroundcolor yellow ($EchoTime + $Message)    ;
+                    'RoundDown' {
+                        # always round down (to next lower multiple)
+                        $Spaces = ([system.math]::floor($Spaces/$PadIncrement))*$PadIncrement  ;
+                        write-verbose "Rounding:RoundDown specified: Rounding to: $($Spaces)" ;
                         }
-                        else {
-                            if (!$NoEcho) { Write-Warning ($EchoTime + $Message) } ;
-                        } ;
-                        $LevelText = 'WARNING:'  ;
+                    'AwayFromZero' {
+                        # traditional school: 'when remainder is 5 round up'
+                        $Spaces = ([system.math]::round($_/$PadIncrement,0,1))*$PadIncrement  ;
+                        write-verbose "Rounding:AwayFromZero specified: Rounding to: $($Spaces)" ;
                     }
-                    'Info' {
-                        if ($useHost) {
-                            write-host -foregroundcolor green ($EchoTime + $Message)   ;
-                        }
-                        else {
-                            if (!$NoEcho) { Write-Verbose ($EchoTime + $Message) } ;
-                        } ;
-                        $LevelText = 'INFO:'  ;
-                    }
-                    'Debug' {
-                        if (!$NoEcho) { Write-Debug -Verbose:$true ($EchoTime + $Message) }  ;
-                        $LevelText = 'DEBUG:'  ;
+                    'Midpoint' {
+                        # default programatic/banker's rounding: if midpoint 5, round to the *nearest even number*'
+                        $Spaces = ([system.math]::round($_/$PadIncrement))*$PadIncrement  ;
+                        write-verbose "Rounding:Midpoint specified: Rounding to: $($Spaces)" ;
                     }
                 } ;
-
-                # Write log entry to $Path
-                "$FormattedDate $LevelText $Message" | Out-File -FilePath $Path -Append  ;
-            }  ; # PROC-E
-            End {
-            }  ;
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $HISName = "Env:HostIndentSpaces$($PID)" ;
+                } else {
+                    $HISName = "Env:HostIndentSpaces" ;
+                } ;
+                if(($smsg = Get-Item -Path "Env:HostIndentSpaces$($PID)" -erroraction SilentlyContinue).value){
+                  write-verbose $smsg ; 
+                } ; 
+            
+                if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                    [int]$CurrIndent = 0 ;
+                } ;
+                write-verbose "$($CmdletName): Discovered `$$($HISName):$($CurrIndent)" ;
+                $pltSV=[ordered]@{
+                    Path = $HISName ;
+                    Value = $Spaces;
+                    Force = $true ;
+                    erroraction = 'STOP' ;
+                } ;
+                $smsg = "$($CmdletName): Set 1 lvl:Set-Variable w`n$(($pltSV|out-string).trim())" ;
+                write-verbose $smsg  ;
+                TRY{
+                    Set-Item @pltSV #-verbose ;
+                } CATCH {
+                    $smsg = $_.Exception.Message ;
+                    write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    BREAK ;
+                } ;
+            } ;  
         } ;
-    } ; #*------^ END Function Write-Log ^------
+        #*------^ END Function set-HostIndent ^------
+    } ; 
+    if(-not(get-command write-HostIndent -ea 0)){
+        #*------v Function write-HostIndent v------
+        function write-HostIndent {
+            <#
+                    * 2:01 PM 2/1/2023 add: -PID param
+                    #>
+            [CmdletBinding()]
+            [Alias('w-hi')]
+            PARAM(
+                [Parameter(
+                    HelpMessage="Specifies the background color. There is no default. The acceptable values for this parameter are:
+            (Black | DarkBlue | DarkGreen | DarkCyan | DarkRed | DarkMagenta | DarkYellow | Gray | DarkGray | Blue | Green | Cyan | Red | Magenta | Yellow | White)")]
+                    [System.ConsoleColor]$BackgroundColor,
+                [Parameter(
+                    HelpMessage="Specifies the text color. There is no default. The acceptable values for this parameter are:
+        (Black | DarkBlue | DarkGreen | DarkCyan | DarkRed | DarkMagenta | DarkYellow | Gray | DarkGray | Blue | Green | Cyan | Red | Magenta | Yellow | White)")]
+                    [System.ConsoleColor]$ForegroundColor,
+                [Parameter(
+                    HelpMessage="The string representations of the input objects are concatenated to form the output. No spaces or newlines are inserted between
+        the output strings. No newline is added after the last output string.")]
+                    [System.Management.Automation.SwitchParameter]$NoNewline,
+                [Parameter(Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,
+                    HelpMessage="Objects to display in the host")]
+                    [System.Object]$Object,
+                [Parameter(
+                    HelpMessage="Specifies a separator string to insert between objects displayed by the host.")]
+                    [System.Object]$Separator,
+                [Parameter(
+                    HelpMessage="Character to use for padding (defaults to a space).[-PadChar '-']")]
+                    [string]$PadChar = ' ',
+                [Parameter(
+                    HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrment 8]")]
+                [int]$PadIncrment = 4,
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ; 
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;     
+                $pltWH = @{} ; 
+                if ($PSBoundParameters.ContainsKey('BackgroundColor')) {
+                    $pltWH.add('BackgroundColor',$BackgroundColor) ; 
+                } ;
+                if ($PSBoundParameters.ContainsKey('ForegroundColor')) {
+                    $pltWH.add('ForegroundColor',$ForegroundColor) ; 
+                } ;
+                if ($PSBoundParameters.ContainsKey('NoNewline')) {
+                    $pltWH.add('NoNewline',$NoNewline) ; 
+                } ;
+                if ($PSBoundParameters.ContainsKey('Separator')) {
+                    $pltWH.add('Separator',$Separator) ; 
+                } ;
+                write-verbose "$($CmdletName): Using `$PadChar:`'$($PadChar)`'" ; 
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $HISName = "Env:HostIndentSpaces$($PID)" ;
+                } else {
+                    $HISName = "Env:HostIndentSpaces" ;
+                } ;
+                if(($smsg = Get-Item -Path "Env:HostIndentSpaces$($PID)" -erroraction SilentlyContinue).value){
+                  write-verbose $smsg ; 
+                } ; 
+            
+                if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                    [int]$CurrIndent = 0 ; 
+                } ; 
+                write-verbose "$($CmdletName): Discovered `$$($HISName):$($CurrIndent)" ; 
+                $Object = $Object.Split([Environment]::NewLine)
+                foreach ($obj in $object){
+                    Write-Host -NoNewline $($PadChar * $CurrIndent)  ; 
+                    write-host @pltWH -object $obj ; 
+                } ; 
+
+            } ; 
+        } ; 
+        #*------^ END Function write-HostIndent ^------
+    } ; 
+    if(-not(get-command clear-HostIndent -ea 0)){
+        #*------v Function clear-HostIndent v------
+        function clear-HostIndent {
+            <#
+            * 2:00 PM 2/2/2023 typo fix: (trailing block-comment end unmatched)
+            #>
+            [CmdletBinding()]
+            [Alias('c-hi')]
+            PARAM(
+                [Parameter(
+                    HelpMessage="Number of spaces to pad by default (defaults to 4).[-PadIncrement 8]")]
+                [int]$PadIncrement = 4,
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ; 
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;     
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $HISName = "Env:HostIndentSpaces$($PID)" ;
+                } else {
+                    $HISName = "Env:HostIndentSpaces" ;
+                } ;
+                if(($smsg = Get-Item -Path "Env:HostIndentSpaces$($PID)" -erroraction SilentlyContinue).value){
+                  write-verbose $smsg ; 
+                } ; 
+            
+                if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                    [int]$CurrIndent = 0 ; 
+                } ; 
+                $pltSV=[ordered]@{
+                    Path = $HISName ; 
+                    Force = $true ; 
+                    erroraction = 'STOP' ;
+                } ;
+                $smsg = "$($CmdletName): Set 1 lvl:Set-Variable w`n$(($pltSV|out-string).trim())" ; 
+                write-verbose $smsg  ;
+                TRY{
+                    Clear-Item @pltSV #-verbose ; 
+                } CATCH {
+                    $smsg = $_.Exception.Message ;
+                    write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    BREAK ;
+                } ;
+            } ;  
+        } ; 
+        #*------^ END Function clear-HostIndent ^------
+    } ; 
+    if(-not(get-command get-HostIndent -ea 0)){
+
+    #*------v Function get-HostIndent v------
+        function get-HostIndent {
+            <#
+                * 2:13 PM 2/3/2023 init
+            #>
+            [CmdletBinding()]
+            [Alias('s-hi')]
+            PARAM(
+                [Parameter(
+                    HelpMessage="Switch to use the `$PID in the `$env:HostIndentSpaces name (Env:HostIndentSpaces`$PID)[-usePID]")]
+                    [switch]$usePID
+            ) ;
+            BEGIN {
+                ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+                write-verbose "$($CmdletName): `$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;
+                if($usePID){
+                    $smsg = "-usePID specified: `$Env:HostIndentSpaces will be suffixed with this process' `$PID value!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $HISName = "Env:HostIndentSpaces$($PID)" ;
+                } else {
+                    $HISName = "Env:HostIndentSpaces" ;
+                } ;
+                write-verbose "$($CmdletName): Discovered `$$($HISName):$($CurrIndent)" ; 
+                $smsg = "$($CmdletName): get $($HISName) value)" ; 
+                write-verbose $smsg  ;
+                TRY{
+                    if (-not ([int]$CurrIndent = (Get-Item -Path $HISName -erroraction SilentlyContinue).Value ) ){
+                        [int]$CurrIndent = 0 ; 
+                    } ; 
+                    $CurrIndent | write-output ; 
+                } CATCH {
+                    $smsg = $_.Exception.Message ;
+                    write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    $false  | write-output ; 
+                    BREAK ;
+                } ;
+            } ;  # BEG-E
+        } ;
+        #*------^ END Function get-HostIndent ^------
+    } ; 
+    <# VERS: 2:17 PM 2/3/2023 add get-hostindent(); updates ; 2:28 PM 2/2/2023 init
+    #>
+    #endregion HostIndentS ; #*------^ END  ^------#*======^ HostIndent SIMPLIFIED (psb-psHostIndent.cbp) ^======
 
     #*------v Function get-colorcombo v------
     function get-colorcombo {
@@ -4553,7 +6296,7 @@ Function profile-AAD-Signons {
     } ; #*------^ END Function get-colorcombo() ^------
 
     if(!(get-command Initialize-AADSignErrorsHash -ea 0)){
-        #*------v Initialize-AADSignErrorsHash.ps1 v------
+        #*------v Initialize-AADSignErrorsHash v------
         function Initialize-AADSignErrorsHash {
             <#
             .SYNOPSIS
@@ -4725,7 +6468,7 @@ Function profile-AAD-Signons {
             $AADSignOnError.add("530021", "Application does not meet the conditional access approved app requirements.") ;
             $AADSignOnError | write-output ;
         }
-        #*------^ Initialize-AADSignErrorsHash.ps1 ^------
+        #*------^ Initialize-AADSignErrorsHash ^------
     }
 
     #-------v Function Cleanup v-------
@@ -4749,7 +6492,10 @@ Function profile-AAD-Signons {
             #$Logname= (join-path -path (join-path -path $scriptDir -childpath "logs") -childpath ($scriptNameNoExt + "-" + $timeStampNow + "-ISEtrans.log")) ;
             # 2:02 PM 9/21/2018 missing $timestampnow, hardcode
             $Logname=(join-path -path (join-path -path $scriptDir -childpath "logs") -childpath ($scriptNameNoExt + "-" + (get-date -format 'yyyyMMdd-HHmmtt') + "-ISEtrans.log")) ;
-            write-host "`$Logname: $Logname";
+            $smsg = "H`$Logname: $Logname";
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
             Start-iseTranscript -logname $Logname ;
             #Archive-Log $Logname ;
             # 1:23 PM 4/23/2015 standardize processing file so that we can send a link to open the transcript for review
@@ -4805,6 +6551,7 @@ Function profile-AAD-Signons {
     } #*------^ END Function Cleanup ^------
 
 
+
     #*======^ END FUNCTIONS ^======
 
     #*======v SUB MAIN v======
@@ -4812,6 +6559,8 @@ Function profile-AAD-Signons {
     # 9:38 AM 8/29/2019 some errors say open a ticket with: Correlation ID, Request ID, and Error code, added to both prop sets
     $failprops = "createdDateTime", "userPrincipalName", "appDisplayName", "resourceDisplayName", "clientAppUsed", "ipAddress", "deviceDetail", "location","riskState","riskLevelAggregated","riskLevelDuringSignIn","riskDetail","riskEventTypes","riskLevel","status","correlationId","originalRequestId","status.errorCode" ;
     $recentevtprops = "createdDateTime", "userPrincipalName", "appDisplayName", "resourceDisplayName", "clientAppUsed", "ipAddress", "deviceDetail", "location", "riskState", "riskLevelAggregated", "riskLevelDuringSignIn", "riskDetail", "riskEventTypes", "riskLevel", "status","correlationId","originalRequestId" ;
+    #aad serviceprincipal useful reporting fields
+    $prpAADSvcP = 'AppDisplayName','DisplayName','ObjectId','PublisherName','AppOwnerTenantId','Homepage','LogoutUrl','ReplyUrls' ; 
 
     $AADSignOnError = Initialize-AADSignErrorsHash ;
 
@@ -4827,18 +6576,23 @@ Function profile-AAD-Signons {
     # 12:15 PM 9/12/2018 remove dupes
     $reqMods=$reqMods| select -Unique ;
     #>
-    $ofile = join-path -path (Split-Path -parent $MyInvocation.MyCommand.Definition) -ChildPath "logs" ;
+    #$ofile = join-path -path (Split-Path -parent $MyInvocation.MyCommand.Definition) -ChildPath "logs" ;
+    $ofile = join-path -path $ScriptDir -ChildPath "logs" ;
     if(!(test-path -path $ofile)){ "Creating missing log dir $($ofile)..." ; mkdir $ofile  ; } ;
 
-    $transcript= join-path -path $ofile -childpath "$([system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName))-Transcript-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-trans-log.txt"  ;
+    #$transcript= join-path -path $ofile -childpath "$([system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName))-Transcript-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-trans-log.txt"  ;
+    $transcript= join-path -path $ofile -childpath "$($ScriptNameNoExt)-Transcript-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-trans-log.txt"  ;
     # 10:21 AM 10/18/2018 add log file variant as target of Write-Log:
-    $logfile = join-path -path $ofile -childpath "$([system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName))-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-LOG.txt"  ;
+    #$logfile = join-path -path $ofile -childpath "$([system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName))-BATCH-$(get-date -format 'yyyyMMdd-HHmmtt')-LOG.txt"  ;
+    $logfile = $transcript.replace("-trans-log.txt","-log.txt");
     $logging = $True ;
-    $smsg= "#*======v START PASS:$($ScriptBaseName) v======" ;
-    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    #$smsg= "#*======v START PASS:$($ScriptBaseName) v======" ;
+    #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } #Error|Warn|Debug 
+    #else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    $smsg = $sBnr="#*======v  $(${CmdletName}): v======" ;
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } 
     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-
-
+    
     #start-TranscriptLog $Transcript
 
 
@@ -4859,11 +6613,16 @@ Function profile-AAD-Signons {
 
     $rgxSID="^S-\d-\d+-(\d+-){1,14}\d+$" ;
 
-    write-host -foregroundcolor green "Net:$(($Files|measure).count) Json Files" ;
+    $smsg = "H5Net:$(($Files|measure).count) Json Files" ;
     $ttl=($Files|measure).count ;
     $Procd=0 ;
     foreach ($File in $Files){
         $Procd++ ;
+        reset-HostIndent ; 
+
+        #Connect-AzureAD ; 
+        connect-aad ; 
+
         # 9:20 AM 2/25/2019 Tickets will be an array of nnn's to match the mbxs, so use $Procd-1 as the index for tick# in the array
 
         # build outfile on the $file fullname
@@ -4871,12 +6630,12 @@ Function profile-AAD-Signons {
         # $ofileobj=gci "c:\usr\work\incid\9999-USER-SignIns__2019-07-21__2019-08-20.json" ;
         $logfile = $ofileobj.fullname.replace(".json","-parsed-json-rpt.txt") ;
 
-        $sBnr="#*======v `$File:($($Procd)/$($ttl)):$($File) v======" ;
+        $sBnr2="#*======v `$File:($($Procd)/$($ttl)):$($File) v======" ;
         $smsg="$($sBnr)" ;
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent } #Error|Warn|Debug 
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $smsg="Processing output into: $($logfile)" ;
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent } #Error|Warn|Debug 
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
         $bConfirmDo=$true ;
@@ -4901,62 +6660,198 @@ Function profile-AAD-Signons {
                 $fltrDesc = "(`$_.status.signinstatus -eq 'Failure')" ;
                 #$colors = (get-colorcombo -random) ;
 
+                push-HostIndent ; 
+
                 $smsg = "`n`n==Json Parsing AAD Sign-ins`nin file:$($File)`n`n$((($EVTS|measure).count|out-string).trim()) events found in file`n" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $colors = (get-colorcombo -random) ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
+                write-host "`n`n" ;
 
                 $smsg = "`n`n==ALL Grouped Status.signinstatus (if populated):`n$(($EVTS.status.signinstatus | group| sort count -des | format-table -auto count,name|out-string).trim())`t" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==ALL Grouped Status.errorCode :`n$(($EVTS.status.errorCode | group| sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                write-host "`n`n" ; 
 
-                $smsg = "`n`n==ALL Grouped Appdisplaynames:`n$(($EVTS | group appDisplayName | sort count -des | format-table -auto count,name|out-string).trim())" ;
+                $grpd = $EVTS | group appDisplayName | sort count -des ; 
+                $smsg = "`n`n==ALL Grouped Appdisplaynames:`n$(($grpd | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                # stock desc for Office365 Shell WCSS-Client
+                $hsO365ShellWCssClient = @"
+Office 365 Shell WCSS-Client: Browser code that runs whenever a user navigates to (most) Office365 applications in the browser.  
+The shell, also known as the suite header, is shared code that loads as part of almost all Office365 workloads, 
+including SharePoint, OneDrive, Outlook, Yammer, and many more.
+"@ ; 
+                # Office Online Core SSO, likewise
+                $hsOfficeOnlineCoreSSO = @"
+The Microsoft Office Online Single-Sign-on application. 
+(avoids repeated logon prompts by using a single authentication token for all Office applications)
+"@ ; 
+                # OfficeHome, which is the www.office.com page
+                $hsOfficeHome = @"
+OfficeHome: The www.office.com page
+"@ ; 
+                # Windows Sign In
+                $hsWindowsSignIn = @"
+Windows Sign In: A user has logged into an Azure joined windows 10 device with the password or Windows hello, 
+"@ ; 
+                # Microsoft Account Controls V2
+                $hsMicrosoftAccountControlsV2 = @"
+Microsoft Account Controls V2: mysignins.microsoft.com
+"@ ; 
+                #
+                $hsMicrosoft365SupportService = @"
+Microsoft 365 Support Service: Authentication in Microsoft Office applications.
+"@ ; 
+
+                # DynPull the above unique names ; 
+                push-hostindent  ; 
+
+                write-host "`n`n" ; 
+
+                $smsg = "`nExpanding the above AppdisplayNames..." ; 
+                $colors = (get-colorcombo -random) ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt -Indent -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                foreach($apd in ($grpd | select -expand name)){
+                    write-host "`n`n" ; 
+                    $smsg = "`n==Get-AzureADServicePrincipal $($apd):" ; 
+                    $colors = (get-colorcombo -random) ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    
+                    switch($apd){
+                        'Office365 Shell WCSS-Client'{
+                            # doesn't traditionally return on SP qry, has a stock def per internal MS support 
+                            $smsg = $hsO365ShellWCssClient ;
+                            $bFound = $true ; 
+                        } ; 
+                        'Office Online Core SSO'{
+                            # doesn't traditionally return on SP qry, has a stock def per internal MS support 
+                            $smsg = $hsOfficeOnlineCoreSSO ;
+                            $bFound = $true ; 
+                        } 
+                        'OfficeHome'{
+                            # doesn't traditionally return on SP qry, has a stock def per internal MS support 
+                            $smsg = $hsOfficeHome ;
+                            $bFound = $true ; 
+                        } ; 
+                        'Windows Sign In'{
+                            # doesn't traditionally return on SP qry, has a stock def per internal MS support 
+                            # [Azure AD Signin logs -- User on an average locks the laptop or PC 10+ times, so every time user logs back, will the sign in log be recorded for 10times? - Microsoft Q&A - learn.microsoft.com/](https://learn.microsoft.com/en-us/answers/questions/451777/azure-ad-signin-logs-user-on-an-average-locks-the)
+                            $smsg = $hsWindowsSignIn ;
+                            $bFound = $true ; 
+                        } ; 
+                        'Microsoft Account Controls V2'{
+                            # doesn't traditionally return on SP qry, has a stock def per internal MS support 
+                            # [Azure AD Signin logs -- User on an average locks the laptop or PC 10+ times, so every time user logs back, will the sign in log be recorded for 10times? - Microsoft Q&A - learn.microsoft.com/](https://learn.microsoft.com/en-us/answers/questions/451777/azure-ad-signin-logs-user-on-an-average-locks-the)
+                            $smsg = $hsMicrosoftAccountControlsV2 ;
+                            $bFound = $true ; 
+                        } ; 
+                        'Microsoft 365 Support Service'{
+                            # doesn't traditionally return on SP qry, has a stock def per internal MS support 
+                            # [Azure AD Signin logs -- User on an average locks the laptop or PC 10+ times, so every time user logs back, will the sign in log be recorded for 10times? - Microsoft Q&A - learn.microsoft.com/](https://learn.microsoft.com/en-us/answers/questions/451777/azure-ad-signin-logs-user-on-an-average-locks-the)
+                            $smsg = $hsMicrosoft365SupportService ;
+                            $bFound = $true ; 
+                        } ; 
+                        default{
+                            $bFound = $false ; 
+                            if($AADSP = Get-AzureADServicePrincipal -Filter "DisplayName eq '$($apd)'"){
+                                $bFound = $true ; 
+                        
+                                $smsg = $(($AADSP | ft -a  $prpAADSvcP[0..3]|out-string).trim()) ; 
+                                $smsg += "`n$(($AADSP |  fl  $prpAADSvcP[4..7] |out-string).trim())" ; 
+                        
+                        
+                            } else { 
+                                $smsg = "No match returned on `$apd:$($apd)" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                            } ; 
+                        }
+                    } ; 
+                    
+                    if($bFound){
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                        else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    } ; 
+                }  ; 
+                pop-hostindent  ; 
+
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==ALL Grouped Resourcedisplayname :`n$(($EVTS | group resourceDisplayName | sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==ALL Grouped Clientappused:`n$(($EVTS | group clientAppUsed | sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==ALL Grouped devicedetail.operatingsystem:`n$((($evts|?{$_.deviceDetail}).devicedetail.operatingsystem | group| sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==resourcedisplayname:'office 365 exchange online'`nGrouped on devicedetail.operatingsystem:`n$((($evts |?{$_.resourcedisplayname -eq 'office 365 exchange online'}).devicedetail.operatingsystem | group| sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==resourcedisplayname:'office 365 exchange online'`nGrouped on deviceDetail.browser:`n$((($evts |?{$_.resourcedisplayname -eq 'office 365 exchange online'}).deviceDetail.browser | group| sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                
+                write-host "`n`n" ; 
 
                 $smsg = "`n`n==resourcedisplayname:'office 365 exchange online'`nGrouped Clientappused:`n$((($evts |?{$_.resourcedisplayname -eq 'office 365 exchange online'}).Clientappused | group| sort count -des | format-table -auto count,name|out-string).trim())" ;
                 $colors = (get-colorcombo -random) ;
-                write-host @colors "$($smsg)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
 
-
+                pop-HostIndent ; 
 
                 #$smsg= "`n`n==resourcedisplayname:'office 365 exchange online'`nDumped where non-zero status.errorcode:`n`n$(($evts |?{$_.resourcedisplayname -eq 'office 365 exchange online'} | ?{$_.status.errorCode -ne 0} | fl createdDateTime, userPrincipalName, appDisplayName, resourceDisplayName, clientAppUsed, ipAddress, deviceDetail, location,risk*,status|out-string).trim())`n`n" ;
 
                 # 8:32 AM 8/21/2019 profile fails
                 if ($evtsfail = $evts | ? { $_.status.errorcode -ne '0' } ) {
-
+                    
                     $smsg = "`n`n==FAILED (errorcode -ne 0) EVTS FOUND. PROFILING...`n`n " ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor YELLOW "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -4968,57 +6863,67 @@ Function profile-AAD-Signons {
                     # collect clientAppUsed
                     $ClientAppUseds = $evtsfail | select -unique clientAppUsed | select -expand clientAppUsed ;
 
+                    push-hostindent 
+
                     <#
-                    #>foreach ($resDname in $resDnames) {
+                    foreach ($resDname in $resDnames) {
                         $smsg = "`n`n--Profiling resourceDisplayNames:$($resDname)..`n`n " ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent } #Error|Warn|Debug 
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     }
                     #>
                     $smsg = "`n`n==FAILED Grouped Appdisplaynames:`n$(($evtsfail | group appDisplayName | sort count -des | format-table -auto count,name|out-string).trim())" ;
                     $colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    
+                    write-host "`n`n" ; 
 
                     $smsg = "`n`n==FAILED Grouped Resourcedisplayname :`n$(($evtsfail | group resourceDisplayName | sort count -des | format-table -auto count,name|out-string).trim())" ;
                     $colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
-
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    write-host "`n`n" ; 
                     $smsg = "`n`n==FAILED Grouped Clientappused:`n$(($evtsfail | group clientAppUsed | sort count -des | format-table -auto count,name|out-string).trim())" ;
                     $colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
-
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    write-host "`n`n" ; 
                     $smsg = "`n`n==FAILED Grouped devicedetail.operatingsystem:`n$((($evtsfail|?{$_.deviceDetail}).devicedetail.operatingsystem | group| sort count -des | format-table -auto count,name|out-string).trim())" ;
                     $colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
-
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    write-host "`n`n" ; 
                     # geo profile
                     $smsg = "`n`n==FAILED Grouped location.city:`n$(($evtsfail.location.city | group| sort count -des | format-table -auto count,name|out-string|out-string).trim())" ;
                     $colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                     $smsg = "`n`n==FAILED Grouped location.state:`n$(($evtsfail.location.state | group| sort count -des | format-table -auto count,name|out-string|out-string).trim())" ;
-                    #$colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     $smsg = "`n`n==FAILED Grouped location.countryOrRegion:`n$(($evtsfail.location.countryOrRegion | group| sort count -des | format-table -auto count,name|out-string|out-string).trim())" ;
-                    #$colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    
+                    write-host "`n`n" ; 
 
                     # status details
                     $smsg = "`n`n==FAILED Grouped status.failurereason:`n$(($evtsfail.status.failurereason | group| sort count -des | format-table -auto count,name|out-string|out-string).trim())" ;
                     $colors = (get-colorcombo -random) ;
-                    write-host @colors "$($smsg)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
 
                     <#
                     #$smsg = "`n`n==resourcedisplayname:'office 365 exchange online'`nDumped where non-zero status.errorcode:`n`n" ;
                     $smsg = "`n`n==Dumped Failures (status.errorcode -ne 0):`n`n" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } ; #Error|Warn|Debug
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent } ; #Error|Warn|Debug
 
                     #$dumpevts = $evtsfail | ? { $_.resourcedisplayname -eq 'office 365 exchange online' }  ;
                     $dumpevts = $evtsfail | sort Resourcedisplayname, Appdisplaynames, Clientappused  ;
@@ -5026,15 +6931,15 @@ Function profile-AAD-Signons {
                         $sBnrS = "`n#*------v $($devt.createdDateTime): v------"
                         $smsg = "$($sBnrS)`n$(($devt| fl $failprops |out-string).trim())`b$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
                         # "riskState","riskLevelAggregated","riskLevelDuringSignIn","riskDetail","riskEventTypes","riskLevel"
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } ; #Error|Warn|Debug
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent } ; #Error|Warn|Debug
                     } ;
-                    #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } ; #Error|Warn|Debug
+                    #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent } ; #Error|Warn|Debug
                     #>
-
+                    pop-hostindent 
                 }
                 else {
                     $smsg = "`n`n==(no fail/errorcode <> 0 evts found" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ;
 
@@ -5102,7 +7007,16 @@ Function profile-AAD-Signons {
 
                     } ;
                     $sBnrS = "`n#*------v $($profTag) SignOns Profiled  - $(($evtsProfiled|measure).count) events: : v------`n" ;
-                    write-host -foregroundcolor yellow "$($sBnrS)`n$($fltrDesc)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    write-host "`n`n" ; 
+
+                    $smsg = $fltrDesc ;
+                    $colors = (get-colorcombo -random) ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                    else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    
                     if ($evtsProfiled ) {
 
                         if ($profTag -match '(FAIL|ErrNon0)') {
@@ -5115,11 +7029,43 @@ Function profile-AAD-Signons {
                                 foreach ($evt in $evtsProfiled) {
                                     $iDumpd++ ;
                                     write-host -foregroundcolor gray " - v Failure #$($iDumpd)/$($ittl) v -" ;
-                                    write-host -foregroundcolor white "$(($evt| fl $failprops|out-string).trim())" ;
-                                    write-host -foregroundcolor cyan "`nSTATUS:`n$(($evt| select -exp status|out-string).trim())" ;
-                                    write-host -foregroundcolor cyan "`nDEVICEDETAIL:`n$(($evt| select -exp devicedetail|out-string).trim())" ;
-                                    write-host -foregroundcolor darkgray "`nLOCATION:`n$(($evt | select -exp location|out-string).trim())" ;
-                                    write-host -foregroundcolor gray " - ^ Failure #$($iDumpd)/$($ittl)) ^ -" ;
+                                    $smsg =" - v Failure #$($iDumpd)/$($ittl) v -" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -foregroundcolor gray -indent -flatten} 
+                                    else{ write-host -foregroundcolor gray "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                                    push-hostindent 
+
+                                    $smsg = "$(($evt| fl $failprops|out-string).trim())" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten }  
+                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                    write-host "`n`n" ; 
+
+                                    $smsg ="`nSTATUS:`n$(($evt| select -exp status|out-string).trim())" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -foregroundcolor cyan -indent -flatten} 
+                                    else{ write-host -foregroundcolor cyan "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                                    push-hostindent 
+                                    write-host "`n`n" ; 
+
+                                    $smsg = "`nDEVICEDETAIL:`n$(($evt| select -exp devicedetail|out-string).trim())" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -foregroundcolor cyan -indent -flatten} 
+                                    else{ write-host -foregroundcolor cyan "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                                    write-host "`n`n" ; 
+
+                                    $smsg = "`nLOCATION:`n$(($evt | select -exp location|out-string).trim())" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -foregroundcolor darkgray -indent -flatten} 
+                                    else{ write-host -foregroundcolor darkgray "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    write-host "`n`n" ; 
+
+                                    $smsg = " - ^ Failure #$($iDumpd)/$($ittl)) ^ -" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -foregroundcolor gray -indent -flatten} 
+                                    else{ write-host -foregroundcolor gray "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                    pop-hostindent 
+                                    pop-hostindent 
+                                    write-host "`n`n" ; 
                                 } ;
                             }
                             else {
@@ -5127,217 +7073,571 @@ Function profile-AAD-Signons {
                             }
                         }
                         else {
-                            $colors = (get-colorcombo -random) ;
+
                             $smsg = "$($profTag) SignOns grouped status.signInStatus" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                             $ret = $evtsProfiled.status.signInStatus | group | sort count -des | format-table -auto count, name ;
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"  ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
+                                write-host "`n`n" ; 
                             } else {
+                                push-hostindent 
                                 $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
+                                write-host "`n`n" ; 
                             };
 
-                            $colors = (get-colorcombo -random) ;
                             $smsg = "$($profTag) SignOns grouped status.errorCode"
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            write-host "`n`n" ; 
+
                             $ret=$evtsProfiled.status.errorCode | group | sort count -des
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"  ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
+                                write-host "`n`n" ; 
                             } else {
+                                push-hostindent 
                                 $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
+                                write-host "`n`n" ; 
                             } ;
                             if ($errorcodes = $evtsProfiled.status.errorCode | group | select name) {
                                 foreach ($ec in $errorcodes) {
                                     $errstring = $aadsignonerror["$($ec.name)"] ;
                                     $smsg = "ErrorCode:$($ec.name):$($errstring)" ;
-                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                                 } ;
-                                "`n" ;
-                            }
-                            else {
-                                "(no errorcodes to group)"
-                            }
 
-                            $colors = (get-colorcombo -random) ;
+                            } else {
+                                $smsg ="(no errorcodes to group)" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            }
+                            write-host "`n`n" ; 
+
                             $smsg = "$($profTag) SignOns grouped status.failureReason" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            
                             $ret = $evtsProfiled.status.failureReason | group | sort count -des | format-table -auto count, name ;
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"  ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                            }
-                            else {
+                                pop-hostindent 
+                            }else {
+                                push-hostindent 
                                 $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten }  #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
-                            #write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):CMDLET w`n$((|out-string).trim())" ;
+                            write-host "`n`n" ; 
 
-                            $colors = (get-colorcombo -random) ;
                             $smsg = "`n$($profTag) SignOns grouped location.countryOrRegion" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                             $ret = $evtsProfiled | select -exp location | group countryOrRegion | sort count -des | format-table -auto count, name ;
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"  ;
-                                write-host $smsg ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
-                            }
-                            else {
-                                $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                pop-hostindent 
+                            }else {
+                                push-hostindent 
+                                $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
+                            write-host "`n`n" ; 
 
                             $smsg = "$($profTag) SignOns grouped location.state" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                             $ret = $evtsProfiled | select -exp location | group state | sort count -desc | format-table -auto count, name ;
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"  ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             }
                             else {
+                                push-hostindent 
                                 $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
+                            write-host "`n`n" ; 
 
-                            $colors = (get-colorcombo -random) ;
                             $smsg = "`n$($profTag) SignOns grouped ipAddress" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                             $ret = $evtsProfiled | group ipAddress | sort Name | format-table -auto count, name ;
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"  ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             }
                             else {
+                                push-hostindent 
                                 $smsg = ($ret | format-table -auto count, name|out-string).trim() ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
+                            write-host "`n`n" ; 
 
-                            $colors = (get-colorcombo -random) ;
                             $smsg = "`n$($profTag) SignOns grouped deviceDetail.browser" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                             $ret = ($evtsProfiled.deviceDetail.browser | group $_ | sort count -des | format-table -auto count, name |out-string).trim();
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                            }
-                            else {
+                                pop-hostindent 
+                            }else {
+                                push-hostindent 
                                 $smsg = ($ret | format-table -auto count, name |out-string).trim();
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
+                            write-host "`n`n" ; 
 
-                            $colors = (get-colorcombo -random) ;
                             $smsg = "`n$($profTag) SignOns grouped devicedetail.operatingsystem" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
-                            write-host @colors
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                             $ret = ($evtsProfiled.devicedetail.operatingsystem | group $_ | sort count -des | format-table -auto count, name | out-string).trim();
                             if (!$ret) {
+                                push-hostindent
                                 $smsg = "(unpopulated field across data series)`n"
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten} #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             }
                             else {
-                                $smsg = $ret | format-table -auto count, name ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                push-hostindent
+                                #$smsg = $ret | format-table -auto count, name ;
+                                # do the splat output, above is breaking split
+                                $smsg = $(($ret | format-table -auto count, name|out-string).trim()) ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
+                            write-host "`n`n" ; 
 
-                            $colors = (get-colorcombo -random) ;
                             $smsg = "$($profTag) SignOns grouped deviceDetail.displayname" ;
-                            write-host @colors "$($smsg)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -Level Info -NoEcho } ; #Error|Warn|Debug
-                            write-host @colors
+                            $colors = (get-colorcombo -random) ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors -flatten } 
+                            else{ write-host @colors  "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                             $ret = ($evtsProfiled.deviceDetail.displayname | group $_ | sort count -des |out-string).trim();
                             if (!$ret) {
+                                push-hostindent 
                                 $smsg = "(unpopulated field across data series)`n"
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             }
                             else {
-                                $smsg = $ret | format-table -auto count, name ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                push-hostindent
+                                #$smsg = $ret | format-table -auto count, name ;
+                                # do the splat output, above is breaking split
+                                $smsg = $(($ret | format-table -auto count, name|out-string).trim()) ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                pop-hostindent 
                             };
+                            write-host "`n`n" ; 
 
-                            $sBnrSx = "`n#*------v Most Recent $($profTag) Event: v------" ;
-                            write-host -foregroundcolor yellow "$($sBnrSx)" ;
+                            $smsg = $sBnrSx = "`n#*------v Most Recent $($profTag) Event: v------" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            push-hostindent 
                             $evtlast = ($evtsProfiled | sort createddatetime)[-1] ;
-                            write-host -foregroundcolor white "$(($evtlast| format-list $recentevtprops |out-string).trim())" ;
-                            write-host -foregroundcolor white "`nStatus details:`n$(($evtlast| select -expand Status|out-string).trim())" ;
-                            write-host -foregroundcolor white "`nLocation details:`n$(($evtlast| select -expand location|out-string).trim())" ;
-                            write-host -foregroundcolor yellow "$($sBnrSx.replace('-v','-^').replace('v-','^-'))" ;
+                            $smsg = "$(($evtlast| format-list $recentevtprops |out-string).trim())" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            write-host "`n`n" ; 
 
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            $smsg = "`nStatus details:`n$(($evtlast| select -expand Status|out-string).trim())" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            $smsg = "`nLocation details:`n$(($evtlast| select -expand location|out-string).trim())" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            pop-hostindent
+                            $smsg = "$($sBnrSx.replace('-v','-^').replace('v-','^-'))" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                             
                         } ;
 
-                    }
-                    else {
-                        write-host @colors "(No signons matched traditional $($profTag) profile)" ;
+                    } else {
+                        #write-host @colors "(No signons matched traditional $($profTag) profile)" ;
+                        $smsg = "(No signons matched traditional $($profTag) profile)" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent @colors} 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                        write-host "`n`n" ; 
                     } ;
                     $smsg = "$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ;
 
                 $sBnrS="`n#*------v Most Recent Event in series: v------" ;
-                write-host -foregroundcolor yellow "$($sBnrS)" ;
+                $smsg = "$($sBnrS)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                 $evtlast=($evts| sort createddatetime)[-1] ;
                 $dynprops = $evtlast.psobject.Properties | select -exp name |?{($_ -ne 'Status') -AND ($_ -ne 'Location') -ANd ($_ -ne 'deviceDetail')} ;
+                push-hostindent
+                $smsg = "$(($evtlast| select $dynprops | format-list|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $smsg = "`nStatus details:`n$(($evtlast| select -expand Status|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $smsg = "`ndeviceDetail details:`n$(($evtlast| select -expand deviceDetail|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $smsg = "`nLocation details:`n$(($evtlast| select -expand location|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT -Indent -flatten } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                pop-hostindent 
+                $smsg = "$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $smsg = "`n`nresults logged to logfile:`n$($logfile)`n`n" ; 
+                write-host -foregroundcolor yellow $smsg ; 
 
-                write-host -foregroundcolor white "$(($evtlast| select $dynprops | format-list|out-string).trim())" ;
-                write-host -foregroundcolor white "`nStatus details:`n$(($evtlast| select -expand Status|out-string).trim())" ;
-                write-host -foregroundcolor white "`ndeviceDetail details:`n$(($evtlast| select -expand deviceDetail|out-string).trim())" ;
-                write-host -foregroundcolor white "`nLocation details:`n$(($evtlast| select -expand location|out-string).trim())" ;
-                write-host -foregroundcolor yellow "$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
-
-
-                $smsg = "`n$($sBnr.replace('=v','=^').replace('v=','^='))`n" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                $smsg = "`n$($sBnr2.replace('=v','=^').replace('v=','^='))`n" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } #Error|Warn|Debug 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
             } ;
         } else {
             $smsg="$($UPN):Not on Confirm List" ;  ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info -Indent -flatten } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         } ;
         # ========================================
 
         $smsg= "$($sBnr.replace('=v','=^').replace('v=','^='))`n`n" ;;
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 -Indent -flatten } #Error|Warn|Debug 
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         start-sleep -Milliseconds 500 ; # 2:51 PM 10/11/2018 add a throttle pause
     } ;  # loop-E
 
     #stop-transcript ;
     #Cleanup
+    $smsg = "$($sBnr.replace('=v','=^').replace('v=','^='))" ;
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } 
+    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
     #*======^ END SUB MAIN ^======
 }
 
 #*------^ profile-AAD-Signons.ps1 ^------
+
+
+#*------v Remove-AADAppRegistrationCBAAuth.ps1 v------
+function Remove-AADAppRegistrationCBAAuth {
+    <#
+    .SYNOPSIS
+    Remove-AADAppRegistrationCBAAuth.ps1 - Remove AAD-Application that uses Certificate-Based-Auth (CBA): 1) remove any AzureADApplicationKeyCredential certs; 2)Remove the App itself; 3) Remove any local SelfSigned certificate (PKI) in specified -CertStoreLocation location
+    .NOTES
+    Version     : 0.0.
+    Author      : Todd Kadrie
+    Website     : http://www.toddomation.com
+    Twitter     : @tostka / http://twitter.com/tostka
+    CreatedDate : 2022-
+    FileName    : Remove-AADAppRegistrationCBAAuth.ps1
+    License     : MIT License
+    Copyright   : (c) 2022 Todd Kadrie
+    Github      : https://github.com/tostka/powershell
+    Tags        : Powershell,AzureAD,Authentication,Certificate,CertificateAuthentication
+    AddedCredit : REFERENCE
+    AddedWebsite: URL
+    AddedTwitter: URL
+    REVISIONS
+    * 3:45 PM 6/23/2023 pulled req: verb-AAD 
+    * 3:26 PM 6/22/2022 added chk for preexisting cred$TenOrg var, its freestanding, added cred & tenorg handling; debugs functional
+    * 4:48 PM 6/20/2022 fixed pfxpath typo; added serviceprincipal check and sketched in removal (if remove-aadapp doesn't get it too) ; added verbose to aad removal cmds; fixed typo #146, $pfxpath spec; typo in the trailing if/then block
+    * 2:54 PM 6/13/2022 debugged, functional
+    .DESCRIPTION
+    Remove-AADAppRegistrationCBAAuth.ps1 - Remove AAD-Application that uses Certificate-Based-Auth (CBA): 1) remove any AzureADApplicationKeyCredential certs; 2)Remove the App itself; 3) Remove any local SelfSigned certificate (PKI) in specified -CertStoreLocation location.
+    .PARAMETER TenOrg
+    Tenant Tag (3-letter abbrebiation)[-TenOrg 'XYZ']
+    .PARAMETER DisplayName
+    Certificate DisplayName (AppFQDN)[-DisplayName server.domain.com]
+    .PARAMETER CertStoreLocation
+    Certificate store for storage of new certificate[-CertStoreLocation 'Cert:\CurrentUser\My']
+    .PARAMETER ObjectID
+    New certificate lifespan in integer ObjectID[-ObjectID 3]
+    .PARAMETER Whatif
+    Parameter to run a Test no-change pass [-Whatif switch]
+    .INPUTS
+    None. Does not accepted piped input.(.NET types, can add description)
+    .OUTPUTS
+    None. Returns no objects or output (.NET types)
+    System.Object
+    .EXAMPLE
+    PS> $results = remove-AADAppRegistrationCBAAuth -DisplayName 'Application Dname' -TenOrg 'XYZ' -verbose -whatif ; 
+    Demos removal via displayname, whatif, with verbose
+    .EXAMPLE
+    PS> $results = remove-AADAppRegistrationCBAAuth -ObjectID '[guid]' -TenOrg 'XYZ' -whatif ; 
+    Demos removal via AzureADApplication ObjectID, whatif
+    .LINK
+    https://github.com/tostka/verb-AAD    
+    #>
+    #Requires -Modules AzureAD, PKI, verb-IO, verb-logging
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("US","GB","AU")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)]#positiveInt:[ValidateRange(0,[int]::MaxValue)]#negativeInt:[ValidateRange([int]::MinValue,0)][ValidateCount(1,3)]
+    ## [OutputType('bool')] # optional specified output type
+    [CmdletBinding()]
+    ###[Alias('Alias','Alias2')]
+    PARAM(
+        [Parameter(Mandatory=$True,HelpMessage="Tenant Tag (3-letter abbrebiation)[-TenOrg 'XYZ']")]
+        [ValidateNotNullOrEmpty()]
+        [string]$TenOrg = 'TOR',
+        [Parameter(HelpMessage="Target AzureADApplication DisplayName[-DisplayName 'application displayname]")]
+        #[Alias('ALIAS1', 'ALIAS2')]
+        [string]$DisplayName,
+        [Parameter(HelpMessage="Certificate store for storage of new certificate (defaults to CU\My)[-CertStoreLocation 'Cert:\LocalMachine\My']")]
+        [ValidateNotNullOrEmpty()]
+        #[Alias('ALIAS1', 'ALIAS2')]
+        [string]$CertStoreLocation= 'Cert:\CurrentUser\My',
+        [Parameter(HelpMessage="Target AzureADApplication ObjectID[-ObjectID '[guid]']")]
+        [ValidateNotNullOrEmpty()]
+        #[Alias('ALIAS1', 'ALIAS2')]
+        [string]$ObjectID, 
+        [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
+        [switch] $whatIf
+    ) ;
+    #region CONSTANTS-AND-ENVIRO #*======v CONSTANTS-AND-ENVIRO v======
+    # function self-name (equiv to script's: $MyInvocation.MyCommand.Path) ;
+    ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+    $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+    write-verbose -verbose:$verbose "`$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+    $Verbose = ($VerbosePreference -eq 'Continue') ; 
+    
+    $objReturn = @{
+        Certificate = @(); 
+        Application= $null ; 
+        #PFXPath = $null ; 
+        Success = $false ; 
+    } ; 
+    TRY{
+        # no EXO, but we need AAD creds
+        if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'SID','CSVC' -verbose:$($verbose))){
+            # make it script scope, so we don't have to predetect & purge before using new-variable
+            if(Get-Variable -Name cred$($tenorg) -scope Script -ea 0){
+                Set-Variable -Name cred$($tenorg) -scope Script -Value $o365Cred.cred ;
+            } else { 
+                New-Variable -Name cred$($tenorg) -scope Script -Value $o365Cred.cred ;
+            } ; 
+            $smsg = "Resolved $($Tenorg) `$o365cred:$($o365Cred.cred.username) (assigned to `$cred$($tenorg))" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } else {
+            #-=-record a STATUSERROR=-=-=-=-=-=-=
+            $statusdelta = ";ERROR"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+            if(gv passstatus -scope Script){$script:PassStatus += $statusdelta } ;
+            if(gv -Name PassStatus_$($tenorg) -scope Script){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+            #-=-=-=-=-=-=-=-=
+            $smsg = "Unable to resolve $($tenorg) `$o365Cred value!"
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            throw "Unable to resolve $($tenorg) `$o365Cred value!`nEXIT!"
+            BREAK ;
+        } ;
+
+
+        $pltRXO = @{
+            Credential = (Get-Variable -name cred$($tenorg) ).value ;
+            verbose = $($verbose) ; silent = $false ;} ; 
+
+        Connect-AAD @pltRXO ; 
+
+        if($DisplayName){
+            $smsg = "Get-AzureADApplication -SearchString $($displayname)" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            $tApp = Get-AzureADApplication -SearchString $displayname -ea STOP -verbose:$($verbose); 
+        } elseif ($ObjectID){
+            $smsg = "Get-AzureADApplication -ObjectID $($ObjectID)" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            $tApp = Get-AzureADApplication -ObjectID $ObjectID -ea STOP -verbose:$($verbose); 
+        } ; 
+        
+        if($tApp){
+            $smsg = "matched AADApp:`n$(($tApp|out-string).trim())" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
+            $objReturn.Application = $tApp.ObjectID ; 
+            $tKCs = $tApp | get-AzureADApplicationKeyCredential -ea STOP ;
+            foreach($tkc in $tkcs){
+                $objReturn.Certificate += $tkc.thumbprint ; 
+                $smsg = "remove-AzureADApplicationKeyCredential:`n$(($tkc|out-string).trim())" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                if(!$whatif){
+                    remove-AzureADApplicationKeyCredential -objectid $tapp.objectid -keyid $tkc.keyid -ErrorAction 'STOP' -verbose ;
+                } else {
+                    $smsg = "(-whatif)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
+                }; 
+            } ;
+            if(!$whatif){
+                $smsg = "Remove-AzureADApplication :`n$(($tapp|out-string).trim())" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $tapp | Remove-AzureADApplication -ErrorAction 'STOP' -verbose ; 
+                # check for Get-AzureADServicePrincipal -All $true | Where-Object {$_.AppId -eq $appId} ;
+                if($tsp = Get-AzureADServicePrincipal -All $true | Where-Object {$_.AppId -eq $tapp.AppID}){
+                    $smsg = "SvcPrin: Remove-AzureADServicePrincipal:`n$(($tsp|out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $tsp | Remove-AzureADServicePrincipal -ErrorAction 'STOP' -verbose ;   
+                } ; 
+            } else {
+                $smsg = "(-whatif)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
+            }; 
+            $appfqdnName = ($tapp.displayname.ToCharArray() |?{$_ -match '[a-zA-Z0-9-]'}) -join '' ; 
+            
+            if($objReturn.Certificate = gci "$CertStoreLocation\*" | ? friendlyname -eq $tapp.displayname ){
+                $smsg = "Matched cert by FriendlyName:$($appfqdnName)" ;    
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
+            } elseif($objReturn.Certificate =  gci "$CertStoreLocation\*" |? subject -like "CN=$($appfqdnName)*"){
+                $smsg = "Matched cert by AppFqDN string:$($appfqdnName)" ;    
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
+            } ; 
+            if($objReturn.Certificate){
+                $smsg = "Remove-Item:`n$(($objReturn.Certificate|out-string).trim())" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $objReturn.Certificate| remove-item -whatif:$($whatif) -ErrorAction 'STOP' -verbose ;
+
+                # check for pfx built around the found cert:
+                #  C:\Users\USER\Documents\WindowsPowerShell\keys\o365SIDCBACert-XYZ.TENDOMAIN.onmicrosoft.com-NOTAFTER-20240616-1118AM.pfx
+                # dnsname == $appFqDN = "$(($appName.ToCharArray() |?{$_ -match '[a-zA-Z0-9-]'}) -join '').$($TenantDomain)" ;
+                # FilePath="$(split-path $profile)\keys\$($DnsName)-NOTAFTER-$(get-date $pltNSSCert.notafter -format 'yyyyMMdd-HHmmtt').pfx" ;
+                $pfxPath = gci -path "$(split-path $profile)\keys\$($objReturn.Certificate.subjectname.name.replace('CN=',''))-NOTAFTER-$(get-date $objReturn.Certificate.notafter -format 'yyyyMMdd-HHmmtt').pfx" -ea SilentlyContinue ;
+                if($pfxPath){
+                    $smsg = "Remove-Item:`n$(($pfxPath|out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $pfxPath.FullName | remove-item -whatif:$($whatif) -ErrorAction 'STOP' -verbose ;
+                } ; 
+            } ; 
+        } else {
+            $smsg = "Nomatch GAADApp:$($displayname)" 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        } ;      
+    } CATCH {
+        $ErrTrapd=$Error[0] ;
+        $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        #-=-record a STATUSWARN=-=-=-=-=-=-=
+        $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+        if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+        if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+        #-=-=-=-=-=-=-=-=
+        $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+    } ; 
+    
+    if($objReturn.Certificate -And $objReturn.Application ){ 
+        $smsg = "Valid Certificate, Application: Setting Success:`$true" ; 
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        $objReturn.Success = $true ; 
+    }elseif($whatif){
+        $smsg = "(-whatif:not setting `$objReturn.Success:$true)" ; 
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        $objReturn.Success = $true ; 
+    } else { 
+        $smsg = "INVALID AADApplication/CERTIFICATE removal attempt: Setting Success:`$FALSE" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        $objReturn.Success = $false 
+    } ; 
+    New-Object -TypeName PSObject -Property $objReturn | write-output ;     
+}
+
+#*------^ Remove-AADAppRegistrationCBAAuth.ps1 ^------
+
 
 #*------v remove-AADUserLicense.ps1 v------
 function remove-AADUserLicense {
@@ -5359,6 +7659,9 @@ function remove-AADUserLicense {
     AddedWebsite:	
     AddedTwitter:	
     REVISIONS
+    * 3:25 PM 5/24/2023 rem'd purge; flip the set echo to wlt
+    * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
+    4:48 PM 5/17/2023rounded out params for $pltRXO passthru ; $TenOrg = $global:o365_TenOrgDefault, ; fixed half-written port from add-aaduserlic (record removals vs adds) ; 
     * 10:30 AM 3/24/2022 add pipeline support
     * 4:08 PM 3/22/2022 init; simple conversion of add-AADUserLicense; verified functional
     .DESCRIPTION
@@ -5368,11 +7671,11 @@ function remove-AADUserLicense {
     .PARAMETER  skuid
     Azure LicensePlan SkuID for the license to be applied to the users.
     .PARAMETER Credential
-    Credentials [-Credentials [credential object]
+    Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]
+    .PARAMETER silent
+    Switch to specify suppression of all but warn/error echos.(unimplemented, here for cross-compat)
     .PARAMETER Whatif
     Parameter to run a Test no-change pass [-Whatif switch]
-    .PARAMETER Silent
-    Suppress all but error, warn or verbose outputs
     .EXAMPLE
     PS> $lplistn = get-AADlicensePlanList -IndexOnName ; 
     PS> $skuid = $lplistn['EXCHANGESTANDARD'].skuid ; 
@@ -5403,21 +7706,29 @@ function remove-AADUserLicense {
         [ValidateNotNullOrEmpty()]
         [string]$TenOrg = $global:o365_TenOrgDefault,
         [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]")]
-        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
-        [switch]$whatif,
-        [switch]$silent
+            [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+            [switch] $silent,
+        [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
+            [switch] $whatIf
     ) ;
     BEGIN {
         ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
         
+        # downstream commands
         $pltRXO = [ordered]@{
-            Credential = $Credential 
-            verbose = $($VerbosePreference -eq 'Continue') ;
-            silent = $true ; # always silent, echo only warn/errors
-        } ; 
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+            $pltRxo.add('Silent',$silent) ;
+        } ;
+        # default connectivity cmds - force silent false
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
+        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
         #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
-        Connect-AAD @pltRXO ; 
+        Connect-AAD @pltRXOC ; 
         
         # check if using Pipeline input or explicit params:
         if ($PSCmdlet.MyInvocation.ExpectingInput) {
@@ -5447,25 +7758,7 @@ function remove-AADUserLicense {
             } ; 
             $error.clear() ;
             TRY {
-                <# rem out search string option - if we're mandating UPN/guids, it's always going to fail the initial attempt, skip it, odds of feeding it a dname etc is low
-                $pltGAADU=[ordered]@{ SearchString = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
-                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
-                $AADUser = Get-AzureADUser @pltGAADU ; 
-                if (-not $AADUser) {
                 
-                    $smsg = "Failed: Get-AzureADUser -SearchString $($pltGAADU.searchstring)" ; 
-                    $smsg += "`nretrying as -objectid..." ; 
-                    if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
-                    $pltGAADU.remove('SearchString') ; 
-                    $pltGAADU.Add("ObjectID",$user) ; 
-                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
-                    $AADUser = Get-AzureADUser @pltGAADU ;         
-                } ; 
-                #>
                 $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
                 $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -5482,12 +7775,16 @@ function remove-AADUserLicense {
                         $spltSAADUUL = [ordered]@{ 
                             ObjectID = $AADUser.UserPrincipalName ;
                             UsageLocation = "US" ;
+                            Credential = $pltRXO.Credential ; 
+                            verbose = $pltRXO.verbose  ; 
+                            silent = $false ; 
                             whatif = $($whatif) ;
-                            verbose = ($VerbosePreference -eq "Continue") ;
                         } ;
                         $smsg = "set-AADUserUsageLocationw`n$(($spltSAADUUL|out-string).trim())" ; 
-                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                         $bRet = set-AADUserUsageLocation @spltSAADUUL ; 
                         if($bRet.Success){
                             $smsg = "set-AADUserUsageLocation updated UsageLocation:$($bRet.AzureADuser.UsageLocation)" ; 
@@ -5550,9 +7847,11 @@ function remove-AADUserLicense {
                             verbose = $($VerbosePreference -eq "Continue") ;
                         } ;
                         $smsg = "Set-AzureADUserLicense w`n$(($pltSAADUL|out-string).trim())" ; 
-                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-
+                        $smsg += "`naddLicenses:$(($pltSAADUL.AssignedLicenses.addLicenses|out-string).trim())" ; 
+                        $smsg += "`nremoveLicenses:$(($pltSAADUL.AssignedLicenses.removeLicenses|out-string).trim())" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                         if (-not $whatif) {
                             Set-AzureADUserLicense @pltSAADUL ;
                                 
@@ -5564,7 +7863,8 @@ function remove-AADUserLicense {
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         }  ;
-
+                        # refreshing aadu, but for some reason when returned, it's not up to date (replication latency?)
+                        start-sleep -Milliseconds 500 ; 
                         $AADUser = Get-AzureADUser @pltGAADU ; 
                         $report.AzureADUser = $AADUser ; 
                         $usrPlans = $usrLics=@() ; 
@@ -5602,11 +7902,12 @@ function remove-AADUserLicense {
                     Break ; 
                 } ;
             } CATCH {
-                $ErrTrapd = $_ ; 
+                $ErrTrapd=$Error[0] ;
                 $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                Break ;
+                $smsg += "`n$($ErrTrapd.Exception.Message)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                BREAK ;
             } ; 
 
             $smsg = $sBnrS.replace('-v','-^').replace('v-','^-')
@@ -5622,6 +7923,7 @@ function remove-AADUserLicense {
 }
 
 #*------^ remove-AADUserLicense.ps1 ^------
+
 
 #*------v Remove-MsolUserDirectLicenses.ps1 v------
 Function Remove-MsolUserDirectLicenses{
@@ -5730,6 +8032,7 @@ Function Remove-MsolUserDirectLicenses{
 
 #*------^ Remove-MsolUserDirectLicenses.ps1 ^------
 
+
 #*------v resolve-GuestExternalAddr2UPN.ps1 v------
 Function resolve-GuestExternalAddr2UPN {
     <#
@@ -5818,6 +8121,7 @@ Function resolve-GuestExternalAddr2UPN {
 }
 
 #*------^ resolve-GuestExternalAddr2UPN.ps1 ^------
+
 
 #*------v search-AADSignInReports.ps1 v------
 Function search-AADSignInReports {
@@ -6363,6 +8667,7 @@ Function search-AADSignInReports {
 
 #*------^ search-AADSignInReports.ps1 ^------
 
+
 #*------v search-GraphApiAAD.ps1 v------
 function search-GraphApiAAD {
     <#
@@ -6608,6 +8913,7 @@ function search-GraphApiAAD {
 
 #*------^ search-GraphApiAAD.ps1 ^------
 
+
 #*------v set-AADUserUsageLocation.ps1 v------
 function set-AADUserUsageLocation {
     <#
@@ -6628,6 +8934,11 @@ function set-AADUserUsageLocation {
     AddedWebsite:	
     AddedTwitter:	URL
     REVISIONS
+    * 3:26 PM 5/30/2023 rouneded out pswlt
+    * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
+    * 12:01 PM 5/22/2023 add: missing w-o for sucess on report; also test $aad.usageloc actually updated; updated cbh ; 
+    * 9:55 AM 5/19/2023 CBH, added full call example context
+    * 1:44 PM 5/17/2023 rounded out params for $pltRXO passthru
     * 10:30 AM 3/24/2022 add pipeline support
     2:31 PM 3/22/2022 init, simple subset port of set-aaduserLicense() ; 
     .DESCRIPTION
@@ -6644,6 +8955,38 @@ function set-AADUserUsageLocation {
     PS> $bRet = set-AADUserUsageLocation -users 'upn@domain.com','upn2@domain.com' -usageLocation 'US' -verbose ;
     PS> $bRet | %{if($_.Success){write-host "$($_.AzureADUser.userprincipalname):Success"} else { write-warning "$($_.AzureADUser.userprincipalname):FAILURE" } ; 
     Add US UsageLocation to the array of user UPNs specified in -users, with verbose output
+    .EXAMPLE
+    PS>  if (-not $AADUser.UsageLocation) {
+    PS>      $smsg = "AADUser: MISSING USAGELOCATION, FORCING" ;
+    PS>      if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+    PS>      else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>      $spltSAADUUL = [ordered]@{
+    PS>          Users = $AADUser.UserPrincipalName ;
+    PS>          UsageLocation = "US" ;
+    PS>          whatif = $($whatif) ;
+    PS>          Credential = $pltRXO.Credential ;
+    PS>          verbose = $pltRXO.verbose  ;
+    PS>          silent = $false ;
+    PS>      } ;
+    PS>      $smsg = "set-AADUserUsageLocationw`n$(($spltSAADUUL|out-string).trim())" ;
+    PS>      if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+    PS>      else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+    PS>      $bRet = set-AADUserUsageLocation @spltSAADUUL ;
+    PS>      if($bRet.Success){
+    PS>          $smsg = "set-AADUserUsageLocation updated UsageLocation:$($bRet.AzureADuser.UsageLocation)" ;
+    PS>          if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+    PS>          else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+    PS>          $AADUser = $bRet.AzureADuser ;
+    PS>      } else {
+    PS>          $smsg = "set-AADUserUsageLocation: FAILED TO UPDATE USAGELOCATION!" ;
+    PS>          if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+    PS>          else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>          if(-not $whatif){
+    PS>              BREAK;
+    PS>          }
+    PS>      } ;
+    PS>  } ;
+    Fully rounded out call example, with post testing. 
     .LINK
     https://github.com/tostka/verb-AAD
     #>
@@ -6654,29 +8997,38 @@ function set-AADUserUsageLocation {
     [CmdletBinding()]
     PARAM (
         # ValueFromPipeline: will cause params to match on matching type, [array] input -> [array]$param
-        [Parameter(Mandatory=$false,ValueFromPipeline=$true)]
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true,HelpMessage="User Identifiers[-Users 'UPN']")]
         [ValidateNotNullOrEmpty()]
-        [string[]]$Users, 
-        [string]$UsageLocation = 'US',
+            [string[]]$Users, 
+        [Parameter(Mandatory=$false,HelpMessage="Microsoft UsageLocation code[-UsageLocation 'US']")]
+            [string]$UsageLocation = 'US',
         [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
-        [ValidateNotNullOrEmpty()]
-        [string]$TenOrg = $global:o365_TenOrgDefault,
-        [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
-        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
-        [switch]$whatif,
-        [switch]$silent
+            [ValidateNotNullOrEmpty()]
+            [string]$TenOrg = $global:o365_TenOrgDefault,
+        [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
+            [System.Management.Automation.PSCredential]$Credential,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+            [switch] $silent,
+        [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
+            [switch] $whatIf
     ) ;
     BEGIN {
         ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
        
-       $pltRXO = [ordered]@{
-            Credential = $Credential 
-            verbose = $($VerbosePreference -eq 'Continue') ;
-            silent = $true ; # always silent, echo only warn/errors
-        } ; 
+        # downstream commands
+        $pltRXO = [ordered]@{
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+            $pltRxo.add('Silent',$silent) ;
+        } ;
+        # default connectivity cmds - force silent false
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
+        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
         #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
-        Connect-AAD @pltRXO ;         
+        Connect-AAD @pltRXOC ;         
         
         # check if using Pipeline input or explicit params:
         if ($PSCmdlet.MyInvocation.ExpectingInput) {
@@ -6706,25 +9058,6 @@ function set-AADUserUsageLocation {
             $error.clear() ;
             TRY {
 
-                <# rem out search string option - if we're mandating UPN/guids, it's always going to fail the initial attempt, skip it, odds of feeding it a dname etc is low
-                $pltGAADU=[ordered]@{ SearchString = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
-                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
-                $AADUser = Get-AzureADUser @pltGAADU ; 
-                if (-not $AADUser) {
-                
-                    $smsg = "Failed: Get-AzureADUser -SearchString $($pltGAADU.searchstring)" ; 
-                    $smsg += "`nretrying as -objectid..." ; 
-                    if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
-                    $pltGAADU.remove('SearchString') ; 
-                    $pltGAADU.Add("ObjectID",$user) ; 
-                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
-                    $AADUser = Get-AzureADUser @pltGAADU ;         
-                } ; 
-                #>
                 $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
                 $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -6756,13 +9089,20 @@ function set-AADUserUsageLocation {
                                     $smsg = "POST:Confirming UsageLocation -eq US:$($AADUser.UsageLocation)" ; 
                                     if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                    
-                                    $Report = @{
-                                        AzureADUser = $AADUser ; 
-                                        FixedUsageLocation = $true ; 
-                                        Success = $true ; 
-                                    } ; 
-
+                                    if($AADUser.UsageLocation -eq $spltSAADU.UsageLocation){
+                                        $Report = @{
+                                            AzureADUser = $AADUser ; 
+                                            FixedUsageLocation = $true ; 
+                                            Success = $true ; 
+                                        } ; 
+                                    } else { 
+                                         $Report = @{
+                                            AzureADUser = $AADUser ; 
+                                            FixedUsageLocation = $false ; 
+                                            Success = $false ; 
+                                        } ; 
+                                    } ;
+                                    $Report | write-output ; 
                                 } CATCH {
                                   $ErrTrapd=$_ ;
                                   $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
@@ -6808,11 +9148,12 @@ function set-AADUserUsageLocation {
                     Break ; 
                 } ;
             } CATCH {
-                $ErrTrapd = $_ ; 
+                $ErrTrapd=$Error[0] ;
                 $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                Break ;
+                $smsg += "`n$($ErrTrapd.Exception.Message)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                BREAK ;
             } ; 
 
             $smsg = $sBnrS.replace('-v','-^').replace('v-','^-')
@@ -6828,6 +9169,7 @@ function set-AADUserUsageLocation {
 }
 
 #*------^ set-AADUserUsageLocation.ps1 ^------
+
 
 #*------v test-AADUserIsLicensed.ps1 v------
 function test-AADUserIsLicensed {
@@ -6868,7 +9210,6 @@ function test-AADUserIsLicensed {
      Param(
         [Parameter(Position=0,Mandatory=$True,HelpMessage="Either Msoluser object or UserPrincipalName for user[-User upn@domain.com|`$msoluserobj ]")]
         [Microsoft.Open.AzureAD.Model.User]$User
-        #[switch]$silent # removed, there's no echos enabled
     )
     BEGIN {
         #${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
@@ -6892,6 +9233,7 @@ function test-AADUserIsLicensed {
 }
 
 #*------^ test-AADUserIsLicensed.ps1 ^------
+
 
 #*------v test-MsolUserLicenseDirectAssigned.ps1 v------
 Function test-MsolUserLicenseDirectAssigned {
@@ -6978,6 +9320,7 @@ Function test-MsolUserLicenseDirectAssigned {
 
 #*------^ test-MsolUserLicenseDirectAssigned.ps1 ^------
 
+
 #*------v test-MsolUserLicenseGroupAssigned.ps1 v------
 Function test-MsolUserLicenseGroupAssigned {
     <#
@@ -7060,6 +9403,7 @@ Function test-MsolUserLicenseGroupAssigned {
 }
 
 #*------^ test-MsolUserLicenseGroupAssigned.ps1 ^------
+
 
 #*------v toggle-AADLicense.ps1 v------
 function toggle-AADLicense{
@@ -7521,6 +9865,7 @@ function toggle-AADLicense{
 
 #*------^ toggle-AADLicense.ps1 ^------
 
+
 #*------v Wait-AADSync.ps1 v------
 Function Wait-AADSync {
     <#
@@ -7539,6 +9884,7 @@ Function Wait-AADSync {
     Tags        : Powershell
     Updated By: : Todd Kadrie
     REVISIONS   :
+    * 2:05 PM 12/13/2022 recoded for AzureAD backend (with msol deprecated; shouldn't have used aad in the name, initially, with msol as the backend).
     * 4:22 PM 7/24/2020 added verbose
     * 12:14 PM 5/27/2020 moved alias:wait-msolsync win the func
     * 10:27 AM 2/25/2020 bumped polling interval to 30s
@@ -7561,6 +9907,7 @@ Function Wait-AADSync {
     [Alias('Wait-MSolSync')]
     Param([Parameter()]$Credential = $global:credo365TORSID) ;
     $verbose = ($VerbosePreference -eq "Continue") ; 
+    <# MSOL original
     try { Get-MsolAccountSku -ErrorAction Stop | out-null }
     catch [Microsoft.Online.Administration.Automation.MicrosoftOnlineException] {
         "Not connected to MSOnline. Now connecting." ;
@@ -7571,20 +9918,43 @@ Function Wait-AADSync {
     Do { Connect-AAD  ; write-host "." -NoNewLine ; Start-Sleep -m (1000 * 30) ; Connect-MSOL } Until ((Get-MsolCompanyInformation).LastDirSyncTime -ne $DirSyncLast) ;
     write-host -foregroundcolor yellow "]`n$((get-date).ToString('HH:mm:ss')):AD->AAD REPLICATED!" ;
     write-host "`a" ; write-host "`a" ; write-host "`a" ;
+    #>
+    
+    try { $AADTenDtl = Get-AzureADTenantDetail -ErrorAction Stop } # authenticated to "a" tenant
+    catch { 
+        write-host "(Not connected to AzureAD. Now connecting)" ;
+        Connect-AAD ;
+        $AADTenDtl = Get-AzureADTenantDetail -ErrorAction Stop ; 
+    } ;
+    $DirSyncLast = $AADTenDtl.CompanyLastDirSyncTime ; 
+    write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):Waiting for next AAD Dirsync:`n(prior:$($DirSyncLast.ToLocalTime()))`n[" ;
+
+    Do { 
+        Connect-AAD -silent  ;
+        write-host "." -NoNewLine ;
+        Start-Sleep -m (1000 * 30) ;
+    } Until ((Get-AzureADTenantDetail).CompanyLastDirSyncTime -ne $DirSyncLast) ;
+    write-host -foregroundcolor yellow "]`n$((get-date).ToString('HH:mm:ss')):AD->AAD REPLICATED!" ;
+    write-host "`a" ;
+    write-host "`a" ;
+    write-host "`a" ;
 }
 
 #*------^ Wait-AADSync.ps1 ^------
 
+
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,convert-AADUImmuntableIDToADUObjectGUID,convert-ADUObjectGUIDToAADUImmuntableID,Disconnect-AAD,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADLicenseFullName,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,get-aaduser,get-AADUserLicenseDetails,Get-DsRegStatus,Get-JWTDetails,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,get-MsolUserLastSync,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,Initialize-AADSignErrorsHash,profile-AAD-Signons,Write-Log,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,remove-AADUserLicense,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,set-AADUserUsageLocation,test-AADUserIsLicensed,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,toggle-AADLicense,Wait-AADSync -Alias *
+Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,convert-AADUImmuntableIDToADUObjectGUID,convert-ADUObjectGUIDToAADUImmuntableID,Disconnect-AAD,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADLicenseFullName,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,get-aaduser,get-AADUserLastSync,get-AADUserLicenseDetails,Get-DsRegStatus,Get-JWTDetails,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,import-AADAppRegistrationPFX,Initialize-AADSignErrorsHash,New-AADAppAuthCertificate,New-AADAppPermissionsObject,profile-AAD-Signons,write-log,reset-HostIndent,push-HostIndent,pop-HostIndent,set-HostIndent,write-HostIndent,clear-HostIndent,get-HostIndent,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,Remove-AADAppRegistrationCBAAuth,remove-AADUserLicense,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,set-AADUserUsageLocation,test-AADUserIsLicensed,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,toggle-AADLicense,Wait-AADSync -Alias *
+
+
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU2uWH+wnKbx/qgZQsPlGwLsCK
-# HWegggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvh/k7wV3GtbpKv9igUj1pJcH
+# 2r+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -7599,9 +9969,9 @@ Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,ca
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBS+p4li
-# R6ouaW8hMoDl20J8FaHBRDANBgkqhkiG9w0BAQEFAASBgICVdRRGcAtEFSUZeyet
-# nH/Py79d0H3ZL1DgNA99C7qAy27xGkyGMejc4PlKM9DJ9Gn3hjNjr6wFHF0dyU+5
-# EfZROj3qaNaUjSfxJVC3NF75u0EMOeBJdTnr/P6u1fK4iwWYS92NXhEcnB9EOiIx
-# kk8x7msGtwDQKPadcXZV83BS
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRKEK2z
+# Nr9KJ6FbZX3iTqNdsUFafjANBgkqhkiG9w0BAQEFAASBgGQmundiMmGMdI4y5Sc0
+# Ky6igQvlk5UaLsJb3BrJN61eJRf+mi7tTfRzAZQQ2xv7kSd49CAjibE1huLo/bjv
+# WHqqwKESp8qMU9kUV476ge49utiB+3+1vzdCy6yJkq60oX66CxMRc3isdg+KayrH
+# GXZG2jZBmFg6RjlKzEieKYk7
 # SIG # End signature block

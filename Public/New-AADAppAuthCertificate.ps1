@@ -20,6 +20,7 @@ function New-AADAppAuthCertificate {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:45 PM 6/23/2023 pulled req: verb-AAD 
     * 2:54 PM 6/13/2022 debugged, functional
     .DESCRIPTION
     New-AADAppAuthCertificate.ps1 - Create SelfSigned certificate (PKI) in specified -CertStoreLocation location, export same to pfx (named for DnsName with dateranges), and return a raw object version of the cert, along with the PFXPath and certificate properties to the pipeline. Objects created are suitable for Certificate-Based-Authentication of AzureADApplication objects. 
@@ -87,7 +88,7 @@ function New-AADAppAuthCertificate {
     .LINK
     [ name related topic(one keyword per topic), or http://|https:// to help, or add the name of 'paired' funcs in the same niche (enable/disable-xxx)]
     #>
-    #Requires -Modules AzureAD, PKI, verb-AAD, verb-IO, verb-logging
+    #Requires -Modules AzureAD, PKI, verb-IO, verb-logging
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("US","GB","AU")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)]#positiveInt:[ValidateRange(0,[int]::MaxValue)]#negativeInt:[ValidateRange([int]::MinValue,0)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]

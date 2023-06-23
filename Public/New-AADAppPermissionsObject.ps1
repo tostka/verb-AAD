@@ -20,6 +20,7 @@ function New-AADAppPermissionsObject {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:45 PM 6/23/2023 pulled req: verb-AAD 
     * 2:54 PM 6/13/2022 debugged, functional
     .DESCRIPTION
     New-AADAppPermissionsObject.ps1 - Create GrantObject for AzureADApplication objects, from 'SecurityPrincipalName;[comma-delimitedpermissions]' input array.
@@ -68,7 +69,7 @@ function New-AADAppPermissionsObject {
     .LINK
     https://bitbucket.org/tostka/powershell/
     #>
-    #Requires -Modules AzureAD, PKI, verb-AAD, verb-IO, verb-logging
+    #Requires -Modules AzureAD, PKI, verb-IO, verb-logging
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("US","GB","AU")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)]#positiveInt:[ValidateRange(0,[int]::MaxValue)]#negativeInt:[ValidateRange([int]::MinValue,0)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
