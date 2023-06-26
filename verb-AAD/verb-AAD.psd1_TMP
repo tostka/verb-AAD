@@ -12,7 +12,7 @@
 RootModule = 'verb-AAD.psm1'
 
 # Version number of this module.
-ModuleVersion = '3.0.0'
+ModuleVersion = '4.0.0'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -148,5 +148,7 @@ PrivateData = @{
 # H7QkErGAOI6z+bThDpPY585B3IWMkyhLXcEQOPoZLG3tRqR1FIQh89oiglISGbBz
 # 7P/Vif1gdw2+YXi3n2BqNs7h
 # SIG # End signature block
+
+
 
 

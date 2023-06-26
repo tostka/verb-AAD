@@ -1,0 +1,486 @@
+﻿2023-06-26 14:25:54 INFO:  : #*======v VERB-dev.psm1:verb-aad v======
+2023-06-26 14:25:56 INFO:  : NON-Republish pass detected:
+MERGE parm specified as well:`n-Merge Public|Internal|Classes include subdirs module content into updated .psm1
+-Sign updated files.
+-Uninstall/Remove existing profile module
+-Copy new module to profile
+-Confirm: Get-Module -ListAvailable
+-Check/Update existing Psd1 Version
+-Publish-Module
+-Remove existing installed profile module
+-Test Install-Module
+-Test Import-Module
+2023-06-26 14:25:56 INFO:  : -Merge specified...
+2023-06-26 14:25:56 INFO:  : ConvertTo-ModuleMergedTDO w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+ModuleName                     verb-aad                                                                                                    
+ModuleSourcePath               {c:\sc\verb-aad\Public, c:\sc\verb-aad\Internal}                                                            
+ModuleDestinationPath          c:\sc\verb-aad\verb-aad                                                                                     
+RequiredVersion                4.0.0                                                                                                       
+LogSpec                        {logging, logfile, transcript}                                                                              
+NoAliasExport                                                                                                                              
+ErrorAction                    Stop                                                                                                        
+showdebug                      False                                                                                                       
+whatif                         False
+2023-06-26 14:25:56 INFO:  : ConvertTo-ModuleMergedTDO w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+ModuleName                     verb-aad                                                                                                    
+ModuleSourcePath               {c:\sc\verb-aad\Public, c:\sc\verb-aad\Internal}                                                            
+ModuleDestinationPath          c:\sc\verb-aad\verb-aad                                                                                     
+RequiredVersion                4.0.0                                                                                                       
+LogSpec                        {logging, logfile, transcript}                                                                              
+NoAliasExport                                                                                                                              
+ErrorAction                    Stop                                                                                                        
+showdebug                      False                                                                                                       
+whatif                         False
+2023-06-26 14:25:59 INFO:  : (NON-dyn psm1 detected - purging existing non-CBH content...)
+2023-06-26 14:26:00 INFO:  : Initialize-PSModuleDirectories w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+ModuleSourcePath               {c:\sc\verb-aad\Public, c:\sc\verb-aad\Internal}                                                            
+ModuleDestinationPath          c:\sc\verb-aad\verb-aad                                                                                     
+ErrorAction                    Stop                                                                                                        
+whatif                         False
+2023-06-26 14:26:00 INFO:  : 
+#*------v (1/2):C:\sc\verb-aad\Public v------
+2023-06-26 14:26:00 INFO:  : Processing 52 $ComponentScripts files through Remove-AuthenticodeSignature...
+2023-06-26 14:26:00 INFO:  : Processing (1/52):C:\sc\verb-aad\Public\add-AADUserLicense.ps1...
+2023-06-26 14:26:00 INFO:  : Processing (2/52):C:\sc\verb-aad\Public\Add-ADALType.ps1...
+2023-06-26 14:26:00 INFO:  : Processing (3/52):C:\sc\verb-aad\Public\caadCMW.ps1...
+2023-06-26 14:26:00 INFO:  : Processing (4/52):C:\sc\verb-aad\Public\caadTOL.ps1...
+2023-06-26 14:26:01 INFO:  : Processing (5/52):C:\sc\verb-aad\Public\caadTOR.ps1...
+2023-06-26 14:26:01 INFO:  : Processing (6/52):C:\sc\verb-aad\Public\caadVEN.ps1...
+2023-06-26 14:26:01 INFO:  : Processing (7/52):C:\sc\verb-aad\Public\cmsolCMW.ps1...
+2023-06-26 14:26:01 INFO:  : Processing (8/52):C:\sc\verb-aad\Public\cmsolTOL.ps1...
+2023-06-26 14:26:01 INFO:  : Processing (9/52):C:\sc\verb-aad\Public\cmsolTOR.ps1...
+2023-06-26 14:26:01 INFO:  : Processing (10/52):C:\sc\verb-aad\Public\cmsolVEN.ps1...
+2023-06-26 14:26:01 INFO:  : Processing (11/52):C:\sc\verb-aad\Public\Connect-AAD.ps1...
+2023-06-26 14:26:02 INFO:  : Processing (12/52):C:\sc\verb-aad\Public\connect-AzureRM.ps1...
+2023-06-26 14:26:02 INFO:  : Processing (13/52):C:\sc\verb-aad\Public\Connect-MSOL.ps1...
+2023-06-26 14:26:02 INFO:  : Processing (14/52):C:\sc\verb-aad\Public\convert-AADUImmuntableIDToADUObjectGUID.ps1...
+2023-06-26 14:26:02 INFO:  : Processing (15/52):C:\sc\verb-aad\Public\convert-ADUObjectGUIDToAADUImmuntableID.ps1...
+2023-06-26 14:26:02 INFO:  : Processing (16/52):C:\sc\verb-aad\Public\Disconnect-AAD.ps1...
+2023-06-26 14:26:02 INFO:  : Processing (17/52):C:\sc\verb-aad\Public\get-AADBearerToken.ps1...
+2023-06-26 14:26:02 INFO:  : Processing (18/52):C:\sc\verb-aad\Public\get-AADBearerTokenHeaders.ps1...
+2023-06-26 14:26:02 INFO:  : Processing (19/52):C:\sc\verb-aad\Public\get-AADCertToken.ps1...
+2023-06-26 14:26:02 INFO:  : Processing (20/52):C:\sc\verb-aad\Public\get-AADLastSync.ps1...
+2023-06-26 14:26:02 INFO:  : Processing (21/52):C:\sc\verb-aad\Public\get-AADLicenseFullName.ps1...
+2023-06-26 14:26:02 INFO:  : Processing (22/52):C:\sc\verb-aad\Public\get-AADlicensePlanList.ps1...
+2023-06-26 14:26:03 INFO:  : Processing (23/52):C:\sc\verb-aad\Public\get-AADToken.ps1...
+2023-06-26 14:26:03 INFO:  : Processing (24/52):C:\sc\verb-aad\Public\get-AADTokenHeaders.ps1...
+2023-06-26 14:26:03 INFO:  : Processing (25/52):C:\sc\verb-aad\Public\get-AADUser.ps1...
+2023-06-26 14:26:03 INFO:  : Processing (26/52):C:\sc\verb-aad\Public\get-AADUserLastSync.ps1...
+2023-06-26 14:26:03 INFO:  : Processing (27/52):C:\sc\verb-aad\Public\get-AADUserLicenseDetails.ps1...
+2023-06-26 14:26:03 INFO:  : Processing (28/52):C:\sc\verb-aad\Public\Get-DsRegStatus .ps1...
+2023-06-26 14:26:03 INFO:  : Processing (29/52):C:\sc\verb-aad\Public\Get-JWTDetails.ps1...
+2023-06-26 14:26:03 INFO:  : Processing (30/52):C:\sc\verb-aad\Public\Get-MsolDisabledPlansForSKU.ps1...
+2023-06-26 14:26:04 INFO:  : Processing (31/52):C:\sc\verb-aad\Public\Get-MsolUnexpectedEnabledPlansForUser.ps1...
+2023-06-26 14:26:04 INFO:  : Processing (32/52):C:\sc\verb-aad\Public\Get-MsolUserLicense.ps1...
+2023-06-26 14:26:04 INFO:  : Processing (33/52):C:\sc\verb-aad\Public\get-MsolUserLicenseDetails.ps1...
+2023-06-26 14:26:04 INFO:  : Processing (34/52):C:\sc\verb-aad\Public\Get-ServiceToken.ps1...
+2023-06-26 14:26:04 INFO:  : Processing (35/52):C:\sc\verb-aad\Public\Get-TokenCache.ps1...
+2023-06-26 14:26:04 INFO:  : Processing (36/52):C:\sc\verb-aad\Public\import-AADAppRegistrationPFX.ps1...
+2023-06-26 14:26:04 INFO:  : Processing (37/52):C:\sc\verb-aad\Public\Initialize-AADSignErrorsHash.ps1...
+2023-06-26 14:26:05 INFO:  : Processing (38/52):C:\sc\verb-aad\Public\New-AADAppAuthCertificate.ps1...
+2023-06-26 14:26:05 INFO:  : Processing (39/52):C:\sc\verb-aad\Public\New-AADAppPermissionsObject.ps1...
+2023-06-26 14:26:05 INFO:  : Processing (40/52):C:\sc\verb-aad\Public\profile-AAD-Signons.ps1...
+2023-06-26 14:26:07 INFO:  : Processing (41/52):C:\sc\verb-aad\Public\Remove-AADAppRegistrationCBAAuth.ps1...
+2023-06-26 14:26:07 INFO:  : Processing (42/52):C:\sc\verb-aad\Public\remove-AADUserLicense.ps1...
+2023-06-26 14:26:07 INFO:  : Processing (43/52):C:\sc\verb-aad\Public\Remove-MsolUserDirectLicenses.ps1...
+2023-06-26 14:26:07 INFO:  : Processing (44/52):C:\sc\verb-aad\Public\resolve-GuestExternalAddr2UPN.ps1...
+2023-06-26 14:26:07 INFO:  : Processing (45/52):C:\sc\verb-aad\Public\search-AADSignInReports.ps1...
+2023-06-26 14:26:08 INFO:  : Processing (46/52):C:\sc\verb-aad\Public\search-GraphApiAAD.ps1...
+2023-06-26 14:26:08 INFO:  : Processing (47/52):C:\sc\verb-aad\Public\set-AADUserUsageLocation.ps1...
+2023-06-26 14:26:08 INFO:  : Processing (48/52):C:\sc\verb-aad\Public\test-AADUserIsLicensed.ps1...
+2023-06-26 14:26:08 INFO:  : Processing (49/52):C:\sc\verb-aad\Public\test-MsolUserLicenseDirectAssigned.ps1...
+2023-06-26 14:26:08 INFO:  : Processing (50/52):C:\sc\verb-aad\Public\test-MsolUserLicenseGroupAssigned.ps1...
+2023-06-26 14:26:08 INFO:  : Processing (51/52):C:\sc\verb-aad\Public\toggle-AADLicense.ps1...
+2023-06-26 14:26:09 INFO:  : Processing (52/52):C:\sc\verb-aad\Public\Wait-AADSync.ps1...
+2023-06-26 14:26:09 INFO:  : 
+#*------v (2/2):C:\sc\verb-aad\Internal v------
+2023-06-26 14:26:09 INFO:  : Processing 0 $ComponentScripts files through Remove-AuthenticodeSignature...
+2023-06-26 14:26:09 INFO:  : (Updating Psm1 Export-ModuleMember -Function to reflect Public modules)
+2023-06-26 14:26:09 INFO:  : Adding:FooterBlock...
+2023-06-26 14:26:09 INFO:  : confirm-ModuleBuildSync w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+ModPsdPath                     c:\sc\verb-aad\verb-aad\verb-aad.psd1_TMP                                                                   
+RequiredVersion                4.0.0                                                                                                       
+NoTest                         True                                                                                                        
+whatif                         False                                                                                                       
+verbose                        False
+2023-06-26 14:26:09 INFO:  : (test-path confirms $ModPsm1 & $ModTestPs1)
+2023-06-26 14:26:09 INFO:  : Import-PowerShellDataFile w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Path                           c:\sc\verb-aad\verb-aad\verb-aad.psd1_TMP                                                                   
+ErrorAction                    Stop                                                                                                        
+verbose                        False
+2023-06-26 14:26:09 INFO:  : (resolved Module attributes:
+$ModuleName:	verb-aad
+$ModRoot:	c:\sc\verb-aad
+$ModPsd1:	c:\sc\verb-aad\verb-aad\verb-aad.psd1_TMP
+$ModPsm1:	c:\sc\verb-aad\verb-aad\verb-aad.psm1_TMP
+$ModTestPs1:	c:\sc\verb-aad\Tests\verb-aad.tests.ps1
+$psd1Vers:	3.0.0
+$psd1guid:	647915ee-f880-4c69-b2b5-881abda1aa86)
+2023-06-26 14:26:09 INFO:  : confirm-ModulePsd1Version w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Path                           c:\sc\verb-aad\verb-aad\verb-aad.psd1_TMP                                                                   
+RequiredVersion                4.0.0                                                                                                       
+whatif                         False                                                                                                       
+verbose                        False
+2023-06-26 14:26:09 WARNING:  : In:c:\sc\verb-aad\verb-aad\verb-aad.psd1_TMP
+Version present:(3.0.0)
+*does not* properly match:4.0.0
+FORCING MATCHING UPDATE!
+2023-06-26 14:26:09 INFO:  : $objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Version                        4.0.0                                                                                                       
+Valid                          False
+2023-06-26 14:26:09 INFO:  : (SET:$objReport.Valid = $true ;)
+2023-06-26 14:26:09 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Version                        4.0.0                                                                                                       
+Valid                          True
+2023-06-26 14:26:09 INFO:  : #*======^ confirm-ModulePsd1Version: c:\sc\verb-aad\verb-aad\verb-aad.psd1_TMP ^======
+2023-06-26 14:26:09 INFO:  : (confirm-ModulePsd1Version:Success)
+2023-06-26 14:26:09 INFO:  : confirm-ModulePsm1Version w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Path                           c:\sc\verb-aad\verb-aad\verb-aad.psm1_TMP                                                                   
+RequiredVersion                4.0.0                                                                                                       
+whatif                         False                                                                                                       
+verbose                        False
+2023-06-26 14:26:09 WARNING:  : In:c:\sc\verb-aad\verb-aad\verb-aad.psm1_TMP
+Version present:(3.0.0)
+*does not* properly match:4.0.0
+FORCING MATCHING UPDATE!
+2023-06-26 14:26:12 INFO:  : $objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Version                        4.0.0                                                                                                       
+Valid                          False
+2023-06-26 14:26:12 INFO:  : (SET:$objReport.Valid = $true ;)
+2023-06-26 14:26:12 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Version                        4.0.0                                                                                                       
+Valid                          True
+2023-06-26 14:26:12 INFO:  : #*======^ confirm-ModulePsm1Version: c:\sc\verb-aad\verb-aad\verb-aad.psm1_TMP ^======
+2023-06-26 14:26:12 INFO:  : (confirm-ModulePsm1Version:Success)
+2023-06-26 14:26:12 INFO:  : (-NoTest: skipping confirm-ModuleTestPs1Guid)
+2023-06-26 14:26:12 INFO:  : $objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Manifest                       c:\sc\verb-aad\verb-aad\verb-aad.psd1_TMP                                                                   
+Module                         c:\sc\verb-aad\verb-aad\verb-aad.psm1_TMP                                                                   
+Pester                         (SKIPPED)                                                                                                   
+Guid                           (SKIPPED)                                                                                                   
+Version                        4.0.0                                                                                                       
+Valid                          False
+2023-06-26 14:26:12 INFO:  : (SET:$objReport.Valid = $true ;)
+2023-06-26 14:26:12 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Manifest                       c:\sc\verb-aad\verb-aad\verb-aad.psd1_TMP                                                                   
+Module                         c:\sc\verb-aad\verb-aad\verb-aad.psm1_TMP                                                                   
+Pester                         (SKIPPED)                                                                                                   
+Guid                           (SKIPPED)                                                                                                   
+Version                        4.0.0                                                                                                       
+Valid                          True
+2023-06-26 14:26:13 INFO:  : #*======^ confirm-ModuleBuildSync:  ^======
+2023-06-26 14:26:13 INFO:  : (confirm-ModuleBuildSync:Success)
+2023-06-26 14:26:13 INFO:  : Test-ModuleTMPFiles w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+ModuleNamePSM1Path             c:\sc\verb-aad\verb-aad\verb-aad.psm1_TMP                                                                   
+verbose                        False
+2023-06-26 14:26:13 INFO:  : #*======v Test-ModuleTMPFiles: c:\sc\verb-aad\verb-aad\verb-aad.psm1_TMP v======
+2023-06-26 14:26:13 INFO:  : 
+Psm1:c:\sc\verb-aad\verb-aad\verb-aad.psm1_TMP
+Psd1:c:\sc\verb-aad\verb-aad\verb-aad.psd1_TMP
+2023-06-26 14:26:13 INFO:  : Test-ModuleManifest:PASSED
+2023-06-26 14:26:13 INFO:  : Creating Testable c:\sc\verb-aad\verb-aad\2954b55e-4a2d-489f-ac07-6b9354eaa0ae.psm1
+ to validate c:\sc\verb-aad\verb-aad\verb-aad.psm1_TMP will Import-Module
+2023-06-26 14:26:13 INFO:  : Ipmo: PASSED
+2023-06-26 14:26:13 INFO:  : (remove-module -name c:\sc\verb-aad\verb-aad\2954b55e-4a2d-489f-ac07-6b9354eaa0ae.psm1 -force)
+2023-06-26 14:26:13 INFO:  : (remove-item -path c:\sc\verb-aad\verb-aad\2954b55e-4a2d-489f-ac07-6b9354eaa0ae.psm1 -ErrorAction SilentlyContinue ; 
+2023-06-26 14:26:13 INFO:  : (remove-item -path c:\sc\verb-aad\verb-aad\2954b55e-4a2d-489f-ac07-6b9354eaa0ae.psd1 -ErrorAction SilentlyContinue ; 
+2023-06-26 14:26:13 INFO:  : $objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Manifest                       2954b55e-4a2d-489f-ac07-6b9354eaa0ae                                                                        
+Module                         2954b55e-4a2d-489f-ac07-6b9354eaa0ae                                                                        
+Valid                          False
+2023-06-26 14:26:13 INFO:  : (SET:$objReport.Valid = $true ;)
+2023-06-26 14:26:14 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Manifest                       2954b55e-4a2d-489f-ac07-6b9354eaa0ae                                                                        
+Module                         2954b55e-4a2d-489f-ac07-6b9354eaa0ae                                                                        
+Valid                          True
+2023-06-26 14:26:14 INFO:  : #*======^ Test-ModuleTMPFiles: c:\sc\verb-aad\verb-aad\verb-aad.psm1_TMP ^======
+2023-06-26 14:26:14 INFO:  : #*======^ ConvertTo-ModuleMergedTDO: ^======
+2023-06-26 14:26:14 INFO:  : (Test-ModuleManifest:PASSED)
+2023-06-26 14:26:14 INFO:  : Checking sync of Psd1 module guid to the Pester Test Script: c:\sc\verb-aad\Tests\verb-aad.tests.ps1
+2023-06-26 14:26:14 INFO:  : confirm-ModuleBuildSync w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+ModPsdPath                     C:\sc\verb-aad\verb-aad\verb-aad.psd1                                                                       
+RequiredVersion                4.0.0                                                                                                       
+whatif                         False                                                                                                       
+verbose                        False
+2023-06-26 14:26:14 INFO:  : (test-path confirms $ModPsm1 & $ModTestPs1)
+2023-06-26 14:26:14 INFO:  : Import-PowerShellDataFile w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Path                           C:\sc\verb-aad\verb-aad\verb-aad.psd1                                                                       
+ErrorAction                    Stop                                                                                                        
+verbose                        False
+2023-06-26 14:26:14 INFO:  : (resolved Module attributes:
+$ModuleName:	verb-aad
+$ModRoot:	c:\sc\verb-aad
+$ModPsd1:	C:\sc\verb-aad\verb-aad\verb-aad.psd1
+$ModPsm1:	C:\sc\verb-aad\verb-aad\verb-aad.psm1
+$ModTestPs1:	c:\sc\verb-aad\Tests\verb-aad.tests.ps1
+$psd1Vers:	4.0.0
+$psd1guid:	647915ee-f880-4c69-b2b5-881abda1aa86)
+2023-06-26 14:26:14 INFO:  : confirm-ModulePsd1Version w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Path                           C:\sc\verb-aad\verb-aad\verb-aad.psd1                                                                       
+RequiredVersion                4.0.0                                                                                                       
+whatif                         False                                                                                                       
+verbose                        False
+2023-06-26 14:26:14 INFO:  : (Version already updated to match)
+2023-06-26 14:26:14 INFO:  : $objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Version                        4.0.0                                                                                                       
+Valid                          False
+2023-06-26 14:26:14 INFO:  : (SET:$objReport.Valid = $true ;)
+2023-06-26 14:26:14 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Version                        4.0.0                                                                                                       
+Valid                          True
+2023-06-26 14:26:14 INFO:  : #*======^ confirm-ModulePsd1Version: C:\sc\verb-aad\verb-aad\verb-aad.psd1 ^======
+2023-06-26 14:26:14 INFO:  : (confirm-ModulePsd1Version:Success)
+2023-06-26 14:26:14 INFO:  : confirm-ModulePsm1Version w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Path                           C:\sc\verb-aad\verb-aad\verb-aad.psm1                                                                       
+RequiredVersion                4.0.0                                                                                                       
+whatif                         False                                                                                                       
+verbose                        False
+2023-06-26 14:26:14 INFO:  : (Version already updated to match)
+2023-06-26 14:26:14 INFO:  : $objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Version                        4.0.0                                                                                                       
+Valid                          False
+2023-06-26 14:26:14 INFO:  : (SET:$objReport.Valid = $true ;)
+2023-06-26 14:26:14 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Version                        4.0.0                                                                                                       
+Valid                          True
+2023-06-26 14:26:14 INFO:  : #*======^ confirm-ModulePsm1Version: C:\sc\verb-aad\verb-aad\verb-aad.psm1 ^======
+2023-06-26 14:26:14 INFO:  : (confirm-ModulePsm1Version:Success)
+2023-06-26 14:26:14 INFO:  : Checking sync of Psd1 module guid to the Pester Test Script: c:\sc\verb-aad\Tests\verb-aad.tests.ps1
+2023-06-26 14:26:14 INFO:  : confirm-ModuleTestPs1Guid w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Path                           c:\sc\verb-aad\Tests\verb-aad.tests.ps1                                                                     
+RequiredGuid                   647915ee-f880-4c69-b2b5-881abda1aa86                                                                        
+whatif                         False                                                                                                       
+verbose                        False
+2023-06-26 14:26:14 INFO:  : (Guid  already updated to match)
+2023-06-26 14:26:14 INFO:  : $objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Guid                           647915ee-f880-4c69-b2b5-881abda1aa86                                                                        
+Valid                          False
+2023-06-26 14:26:14 INFO:  : (SET:$objReport.Valid = $true ;)
+2023-06-26 14:26:14 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Guid                           647915ee-f880-4c69-b2b5-881abda1aa86                                                                        
+Valid                          True
+2023-06-26 14:26:14 INFO:  : (confirm-ModuleTestPs1Guid:Success)
+2023-06-26 14:26:15 INFO:  : $objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Manifest                       C:\sc\verb-aad\verb-aad\verb-aad.psd1                                                                       
+Module                         C:\sc\verb-aad\verb-aad\verb-aad.psm1                                                                       
+Pester                         c:\sc\verb-aad\Tests\verb-aad.tests.ps1                                                                     
+Guid                           647915ee-f880-4c69-b2b5-881abda1aa86                                                                        
+Version                        4.0.0                                                                                                       
+Valid                          False
+2023-06-26 14:26:15 INFO:  : (SET:$objReport.Valid = $true ;)
+2023-06-26 14:26:15 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Manifest                       C:\sc\verb-aad\verb-aad\verb-aad.psd1                                                                       
+Module                         C:\sc\verb-aad\verb-aad\verb-aad.psm1                                                                       
+Pester                         c:\sc\verb-aad\Tests\verb-aad.tests.ps1                                                                     
+Guid                           647915ee-f880-4c69-b2b5-881abda1aa86                                                                        
+Version                        4.0.0                                                                                                       
+Valid                          True
+2023-06-26 14:26:15 INFO:  : #*======^ confirm-ModuleBuildSync:  ^======
+2023-06-26 14:26:15 INFO:  : (confirm-ModuleBuildSync:Success)
+2023-06-26 14:26:15 INFO:  : Signing appropriate files...
+2023-06-26 14:26:15 INFO:  : Sign-file w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+file                           {C:\sc\verb-aad\rebuild-module.ps1, C:\sc\verb-aad\requirements.psd1, C:\sc\verb-aad\Tests\PPoShScripting...
+ErrorAction                    Stop                                                                                                        
+showdebug                      False                                                                                                       
+whatif                         False
+2023-06-26 14:26:16 INFO:  : Removing existing profile verb-aad content...
+2023-06-26 14:26:16 INFO:  : Uninstall-ModuleForce w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+ModuleName                     verb-aad                                                                                                    
+Verbose                        False                                                                                                       
+whatif                         False
+2023-06-26 14:26:37 INFO:  : 
+#*------v Uninstall PSGet Mod:verb-AAD:v3.0.0 v------
+2023-06-26 14:27:37 INFO:  : 
+#*------^ Uninstall PSGet Mod:verb-AAD:v3.0.0 ^------
+2023-06-26 14:27:37 INFO:  : (Processing $env:PSModulePath paths, for surviving locked copies of verb-aad to *manually* purge...)
+2023-06-26 14:27:37 INFO:  : Checking: verb-aad below: C:\Users\kadritss\Documents\WindowsPowerShell\Modules...
+2023-06-26 14:27:37 INFO:  : Checking: verb-aad below: C:\ProgramData\Boxstarter...
+2023-06-26 14:27:37 INFO:  : Checking: verb-aad below: C:\Program Files\WindowsPowerShell\Modules...
+2023-06-26 14:27:37 INFO:  : Checking: verb-aad below: C:\Windows\system32\WindowsPowerShell\v1.0\Modules...
+2023-06-26 14:27:37 INFO:  : Checking: verb-aad below: C:\Program Files\Microsoft Message Analyzer\PowerShell\...
+2023-06-26 14:27:37 INFO:  : Copying module to profile (net of .git & .vscode dirs, and backed up content)...
+2023-06-26 14:27:39 INFO:  : (Profiling Repo: get-PSRepository -name lyncRepo...)
+2023-06-26 14:27:39 INFO:  : 
+Publish-Module w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Name                           verb-aad                                                                                                    
+Repository                     lyncRepo                                                                                                    
+RequiredVersion                4.0.0                                                                                                       
+Verbose                        True                                                                                                        
+ErrorAction                    Stop                                                                                                        
+whatif                         False
+2023-06-26 14:28:17 INFO:  : Waiting for:find-module -name verb-aad -Repository lyncRepo ...
+2023-06-26 14:28:29 INFO:  : Install-Module w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Name                           verb-aad                                                                                                    
+Repository                     lyncRepo                                                                                                    
+RequiredVersion                4.0.0                                                                                                       
+scope                          CurrentUser                                                                                                 
+force                          True                                                                                                        
+AllowClobber                   True                                                                                                        
+ErrorAction                    Stop                                                                                                        
+whatif                         False
+2023-06-26 14:28:57 INFO:  : Testing Module:Import-Module w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Name                           verb-aad                                                                                                    
+ErrorAction                    Stop                                                                                                        
+force                          True                                                                                                        
+verbose                        True
+2023-06-26 14:28:59 INFO:  : Retrieving matching Repo .nupkg file:
+gci \\lynmsv10\lync_fs\scripts\sc\verb-aad.4.0.0.nupkgl..
+2023-06-26 14:28:59 INFO:  : Proper updated .nupkg file found:verb-aad.4.0.0.nupkg, copying to local Pkg directory.
+2023-06-26 14:29:00 INFO:  : remove-UnneededFileVariants w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Path                           c:\sc\verb-aad\Package                                                                                      
+Include                        verb-aad*.nupkg                                                                                             
+Pattern                                                                                                                                    
+FilterOn                       CreationTime                                                                                                
+Keep                           2                                                                                                           
+KeepToday                      True                                                                                                        
+verbose                        True                                                                                                        
+whatif                         False
+2023-06-26 14:29:01 INFO:  : remove-UnneededFileVariants w
+Name                           Value                                                                                                       
+----                           -----                                                                                                       
+Path                           c:\sc\verb-aad\Tests                                                                                        
+Include                        ScriptAnalyzer-Results-*.xml                                                                                
+Pattern                                                                                                                                    
+FilterOn                       CreationTime                                                                                                
+Keep                           4                                                                                                           
+KeepToday                      True                                                                                                        
+verbose                        True                                                                                                        
+whatif                         False
+2023-06-26 14:29:02 INFO:  : -RunTest specified: Running Pester Test script:
+c:\sc\verb-aad\Tests\verb-aad.tests.ps1
+
+2023-06-26 14:33:22 INFO:  : 
+---------------------------------------------------------------------------------
+Processing completed: verb-aad :: c:\sc\verb-aad
+- Script is currently installed (from PsRep: with scope:CurrentUser, under TORO\kadriTSS profile
+
+- To update other scopes/accounts on same machine, or install on other machines:
+    1. Uninstall current module copies:
+
+        Uninstall-Module -Name verb-aad) -AllVersion -whatif ;
+
+    2. Install the current version (or higher) from the Repo:lyncRepo:
+
+        install-Module -name verb-aad -Repository lyncRepo -MinimumVersion 4.0.0 -scope currentuser -whatif ;
+
+    3. Reimport the module with -force, to ensure the current installed verison is loaded:
+
+        import-Module -name verb-aad -force -verbose ;
+
+#-=-Stacked list: Unwrap to create a 1-liner for the above: CURRENTUSER =-=-=-=-=-=-=
+$whatif=$false ; $tMod = 'verb-aad' ; $tVer = '4.0.0' ;  $tScop = 'CurrentUser' ;
+TRY {
+Remove-Module -Name $tmod -ea 0 ;
+Uninstall-Module -Name $tmod -AllVersion -whatif:$($whatif) ;
+install-Module -name $tmod -Repository 'lyncRepo' -MinimumVersion $tVer -scope $tScop -AllowClobber -whatif:$($whatif) ;
+import-Module -name $tmod -force -verbose ;
+} CATCH {
+Write-Warning "Failed processing $($_.Exception.ItemName). 
+Error Message: $($_.Exception.Message)
+Error Details: $($_)" ; Break ;
+} ;
+#-=-=-=-=-=-=-=-=
+#-=-Stacked list: Unwrap to create a 1-liner for the above: ALLUSERS =-=-=-=-=-=-=
+$whatif=$false ; $tMod = 'verb-aad' ; $tVer = '4.0.0' ;  $tScop = 'AllUsers' ;
+TRY {
+Remove-Module -Name $tmod -ea 0 ;
+Uninstall-Module -Name $tmod -AllVersion -whatif:$($whatif) ;
+install-Module -name $tmod -Repository 'lyncRepo' -MinimumVersion $tVer -scope $tScop -AllowClobber -whatif:$($whatif) ;
+import-Module -name $tmod -force -verbose ;
+} CATCH {
+Write-Warning "Failed processing $($_.Exception.ItemName). 
+Error Message: $($_.Exception.Message)
+Error Details: $($_)" ; Break ;
+} ;
+#-=-=-=-=-=-=-=-=
+
+- You may also want to run the configured Pester Tests of the new script:
+
+        . c:\sc\verb-aad\Tests\verb-aad.tests.ps1
+
+Full Processing Details can be found in:
+
+c:\scripts\logs\update-NewModule-verb-aad-LOG-BATCH-EXEC-20230626-1425PM-log.txt
+
+---------------------------------------------------------------------------------
+
+2023-06-26 14:33:22 INFO:  : 
+(Processing log can be found at:c:\sc\verb-aad\c:\scripts\logs\update-NewModule-verb-aad-LOG-BATCH-EXEC-20230626-1425PM-log.txt)

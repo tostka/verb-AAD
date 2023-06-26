@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 3.0.0
+Version     : 4.0.0
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -3356,6 +3356,7 @@ Function get-AADUserLicenseDetails {
     AddedWebsite:	https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     AddedTwitter:	URL
     REVISIONS   :
+    * 1:54 PM 6/26/2023 needs TenOrg resolved from cred...
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
     * 8:30 AM 5/22/2023 add: 7pswl support; fixed to IndexOnName =$false ; ; removed ValueFromPipelineByPropertyName ; 
     * 10:13 AM 5/19/2023 err suppress: test for lic assignment before trying to indexed-hash lookup; add echo on no-license status ; 
@@ -3402,9 +3403,11 @@ Function get-AADUserLicenseDetails {
     ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
     $Verbose = ($VerbosePreference -eq 'Continue') ;
     
-
     if(-not $DoRetries){$DoRetries = 4 } ;    # # times to repeat retry attempts
     if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
+
+    # now requires populated $TenOrg, which resolves from $Credential
+    $TenOrg = get-TenantTag -Credential $Credential ;
 
     # reconstruct RXO for pass-on
     # downstream commands
@@ -9953,8 +9956,8 @@ Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,ca
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvh/k7wV3GtbpKv9igUj1pJcH
-# 2r+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUlPpzr5rfKTEKoeAPNlk0SsGf
+# kuagggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -9969,9 +9972,9 @@ Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,ca
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRKEK2z
-# Nr9KJ6FbZX3iTqNdsUFafjANBgkqhkiG9w0BAQEFAASBgGQmundiMmGMdI4y5Sc0
-# Ky6igQvlk5UaLsJb3BrJN61eJRf+mi7tTfRzAZQQ2xv7kSd49CAjibE1huLo/bjv
-# WHqqwKESp8qMU9kUV476ge49utiB+3+1vzdCy6yJkq60oX66CxMRc3isdg+KayrH
-# GXZG2jZBmFg6RjlKzEieKYk7
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTK+4pp
+# soYfTZ11sQ0lwISNwXhDvDANBgkqhkiG9w0BAQEFAASBgGnHa+j511gxqhWG8GLw
+# +bA4EDRUTCccVIrCxxvAJnRqMP2618K+nchNzWlBJe6PC79Zma4MbRvPZzYQu12l
+# WMr1KTb0Q7Dry5jwVk74afO18YBXXOJu0+7yBPeFas/ZlWrVX6ISeqPV6JIJk1lq
+# YZZqr0+9P0Neqa4CW9iw1HoS
 # SIG # End signature block
