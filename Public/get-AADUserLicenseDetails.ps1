@@ -1,6 +1,6 @@
-﻿# get-AADUserLicenseDetails
+﻿# get-AADUserLicenseDetails.ps1
 
-#*------v get-AADUserLicenseDetails.ps1 v------
+#*------v get-AADUserLicenseDetails v------
 Function get-AADUserLicenseDetails {
     <#
     .SYNOPSIS
@@ -20,6 +20,7 @@ Function get-AADUserLicenseDetails {
     AddedWebsite:	https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     AddedTwitter:	URL
     REVISIONS   :
+    * 1:54 PM 6/26/2023 needs TenOrg resolved from cred...
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
     * 8:30 AM 5/22/2023 add: 7pswl support; fixed to IndexOnName =$false ; ; removed ValueFromPipelineByPropertyName ; 
     * 10:13 AM 5/19/2023 err suppress: test for lic assignment before trying to indexed-hash lookup; add echo on no-license status ; 
@@ -66,9 +67,11 @@ Function get-AADUserLicenseDetails {
     ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
     $Verbose = ($VerbosePreference -eq 'Continue') ;
     
-
     if(-not $DoRetries){$DoRetries = 4 } ;    # # times to repeat retry attempts
     if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
+
+    # now requires populated $TenOrg, which resolves from $Credential
+    $TenOrg = get-TenantTag -Credential $Credential ;
 
     # reconstruct RXO for pass-on
     # downstream commands
@@ -346,4 +349,4 @@ Function get-AADUserLicenseDetails {
     $AggregLics | write-output ; # export the aggreg, NewObject02 was never more than a single lic
 }
 
-#*------^ get-AADUserLicenseDetails.ps1 ^------
+#*------^ get-AADUserLicenseDetails ^------
