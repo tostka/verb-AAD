@@ -4,7 +4,7 @@
 Function Connect-AAD {
     <#
     .SYNOPSIS
-    Connect-AAD - Establish authenticated session to AzureAD Graph Module (AzureAD), also works as reConnect-AAD, .
+    Connect-AAD - Establish authenticated session to AzureAD, also works as reConnect-AAD (No need for separate self tests for connection, and reconnects if it's missing).
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
@@ -20,6 +20,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 10:02 AM 7/7/2023 update to match cxo default acct connect: UserRole, add SIDCBA _1st_ ; updated CBH 
     *3:15 PM 5/30/2023 Updates to support either -Credential, or -UserRole + -TenOrg, to support fully portable downstream credentials: 
         - Add -UserRole & explicit -TenOrg params
         - Drive TenOrg defaulted $global:o365_TenOrgDefault, or on $env:userdomain
@@ -61,9 +62,8 @@ Function Connect-AAD {
     * 2:53 PM 5/2/2019 ren'd Connect-AAD2 -> Connect-AAD
     * 1:54 PM 10/8/2018 Connect-AAD:port from Connect-AAD
     .DESCRIPTION
-    Connect-AAD - Establish authenticated session to AzureAD/MSOL, also works as reConnect-AAD, there is no disConnect-AAD (have to close Powershell to clear it).
-    No need for separate reConnect-AAD - this self tests for connection, and reconnects if it's missing.
-    No support for disConnect-AAD, because MSOL has no command to do it, but closing powershell.
+    Connect-AAD - Establish authenticated session to AzureAD, also works as reConnect-AAD (No need for separate self tests for connection, and reconnects if it's missing).
+    There used to be no disConnect-AAD (added in recent builds).
     .PARAMETER  ProxyEnabled
     Proxyied connection support
     .PARAMETER Credential
@@ -106,7 +106,7 @@ Function Connect-AAD {
                 if(-not ($_ -match $rgxPermittedUserRoles)){throw "'$($_)' doesn't match `$rgxPermittedUserRoles:`n$($rgxPermittedUserRoles.tostring())" ; } ; 
                 return $true ; 
             })]
-            [string[]]$UserRole = @('SID','CSVC'),
+            [string[]]$UserRole = @('SIDCBA','SID','CSVC'),
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
             [ValidateNotNullOrEmpty()]
             #[ValidatePattern("^\w{3}$")]
