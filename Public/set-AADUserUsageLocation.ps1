@@ -1,6 +1,6 @@
-﻿# set-AADUserUsageLocation
+﻿# d:\scripts\set-AADUserUsageLocation.ps1
 
-#*----------v Function set-AADUserUsageLocation() v----------
+#*------v set-AADUserUsageLocation.ps1 v------
 function set-AADUserUsageLocation {
     <#
     .SYNOPSIS
@@ -20,6 +20,7 @@ function set-AADUserUsageLocation {
     AddedWebsite:	
     AddedTwitter:	URL
     REVISIONS
+    * 1:20 PM 6/18/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential; Alias Users as ObjectID & Userprincipalname; spliced in latest $Cred handling
     * 3:26 PM 5/30/2023 rouneded out pswlt
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
     * 12:01 PM 5/22/2023 add: missing w-o for sucess on report; also test $aad.usageloc actually updated; updated cbh ; 
@@ -84,8 +85,9 @@ function set-AADUserUsageLocation {
     PARAM (
         # ValueFromPipeline: will cause params to match on matching type, [array] input -> [array]$param
         [Parameter(Mandatory=$false,ValueFromPipeline=$true,HelpMessage="User Identifiers[-Users 'UPN']")]
-        [ValidateNotNullOrEmpty()]
-            [string[]]$Users, 
+            [Alias('ObjectID','UserPrincipalName')]
+            [ValidateNotNullOrEmpty()]
+                [string[]]$Users,  
         [Parameter(Mandatory=$false,HelpMessage="Microsoft UsageLocation code[-UsageLocation 'US']")]
             [string]$UsageLocation = 'US',
         [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
@@ -102,17 +104,96 @@ function set-AADUserUsageLocation {
         ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
        
+        <#
+        # recycling the inbound above into next call in the chain
         # downstream commands
         $pltRXO = [ordered]@{
             Credential = $Credential ;
             verbose = $($VerbosePreference -eq "Continue")  ;
         } ;
-        if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+        #>
+        # 9:26 AM 6/17/2024 this needs cred resolution splice over latest get-exomailboxlicenses
+        $o365Cred = $null ;
+        if($Credential){
+            $smsg = "`Credential:Explicit credentials specified, deferring to use..." ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                # get-TenantCredentials() return format: (emulating)
+                $o365Cred = [ordered]@{
+                Cred=$Credential ;
+                credType=$null ;
+            } ;
+            $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; # Username
+            #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ;   # full Credential support
+            if($uRoleReturn.UserRole){
+                $o365Cred.credType = $uRoleReturn.UserRole ;
+            } else {
+                $smsg = "Unable to resolve `$credential.username ($($credential.username))"
+                $smsg += "`nto a usable 'UserRole' spec!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                Break ;
+            } ;
+        } else {
+            $pltGTCred=@{TenOrg=$TenOrg ; UserRole=$null; verbose=$($verbose)} ;
+            if($UserRole){
+                $smsg = "(`$UserRole specified:$($UserRole -join ','))" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $pltGTCred.UserRole = $UserRole;
+            } else {
+                $smsg = "(No `$UserRole found, defaulting to:'CSVC','SID' " ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $pltGTCred.UserRole = 'CSVC','SID' ;
+            } ;
+            $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            $o365Cred = get-TenantCredentials @pltGTCred
+        } ;
+        if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+            $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            # 9:58 AM 6/13/2024 populate $credential with return, if not populated (may be required for follow-on calls that pass common $Credentials through)
+            if((gv Credential) -AND $Credential -eq $null){
+                $credential = $o365Cred.Cred ;
+            }elseif($credential.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                $smsg = "(`$Credential is properly populated; explicit -Credential was in initial call)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } else {
+                $smsg = "`$Credential is `$NULL, AND $o365Cred.Cred is unusable to populate!" ;
+                $smsg = "downstream commands will *not* properly pass through usable credentials!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                break ;
+            } ;
+        } else {
+            $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            break ;
+        } ; 
+
+        # downstream commands
+        $pltRXO = [ordered]@{
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((get-command Connect-AAD).Parameters.keys -contains 'silent'){
             $pltRxo.add('Silent',$silent) ;
         } ;
         # default connectivity cmds - force silent false
-        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
-        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ; 
+        if((get-command ReConnect-AAD).Parameters.keys -notcontains 'silent'){
+            $pltRxo.remove('Silent') ;
+        } ; 
         #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
         Connect-AAD @pltRXOC ;         
         
@@ -252,5 +333,6 @@ function set-AADUserUsageLocation {
         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;         
     } ;
-} ; 
-#*------^ END Function set-AADUserUsageLocation ^------
+}
+
+#*------^ set-AADUserUsageLocation.ps1 ^------
