@@ -20,6 +20,7 @@ function set-AADUserUsageLocation {
     AddedWebsite:	
     AddedTwitter:	URL
     REVISIONS
+    * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection 
     * 1:20 PM 6/18/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential; Alias Users as ObjectID & Userprincipalname; spliced in latest $Cred handling
     * 3:26 PM 5/30/2023 rouneded out pswlt
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
@@ -79,7 +80,7 @@ function set-AADUserUsageLocation {
     #>
     #Requires -Version 3
     #Requires -Modules AzureAD, verb-Text
-    #Requires -RunasAdministrator
+    ##Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM (

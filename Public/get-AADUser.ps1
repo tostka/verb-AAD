@@ -57,8 +57,9 @@ function get-aaduser {
     .LINK
     #>
     ###Requires -Version 5
-    #Requires -Modules MSOnline, AzureAD, verb-Text, verb-IO
-    #Requires -RunasAdministrator
+    ##Requires -Modules MSOnline, AzureAD, verb-Text, verb-IO
+    #Requires -Modules AzureAD, verb-Text, verb-IO
+    ##Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]

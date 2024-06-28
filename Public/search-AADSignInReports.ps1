@@ -19,6 +19,7 @@ Function search-AADSignInReports {
     AddedTwitter: @AlexAsplund
     GraphAPI -filter parameter reference on 875: ==== v GRAPH API FILTER PARAM USE:
     REVISIONS   :
+    * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection
     * 10:47 AM 6/16/2021 added record count echo (easier to verifiy return worked) ; purged more rem'd cd ; revised start-log code (accomd cmdlet in allusers module), swapped in all $ofile => sl $logfile w variant exts, moved logging down into the UPN loop ; trimmed rem'd code shifted to search-graphapiAAD() (confirmed functional) ; removed local buffered copies of  get-AADTokenHeaders, get-AADCertToken, search-GraphApiAAD (they're in same module now, no need to buffer)
     * 12:50 PM 6/15/2021 ren Pull-AADSignInReports.ps1 -> search-AADSignInReports.ps1 (compliant verb); porting into verb-aad; added start-log logging ; rearranged trailing graphapi filter param ref, into body, above code where qry is built; removed obsolete/broken *BearerToken() funcs. Made all funcs condityional, and deferential to modules. 
     * 3:16 PM 6/14/2021 made local aad funcs, conditional - defer to verb-aad versions ; fixed missing cert(s) on jbox, works now ; strongly typed $tickets array (was pulling 1st char instead of elem) ; subd out redund -verbose params ;provide dyn param lookup on $TenOrg, via meta infra file, cleaned up the CBH auth & tenant config code (pki certs creation, CER & PFX export/import)
@@ -91,7 +92,7 @@ Function search-AADSignInReports {
     https://github.com/TspringMSFT/PullAzureADSignInReports-
     #>
     #Requires -Modules verb-Auth, verb-IO, verb-logging, verb-Text
-    #Requires -RunasAdministrator
+    ##Requires -RunasAdministrator
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
