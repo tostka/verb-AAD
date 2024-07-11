@@ -14,13 +14,12 @@ function add-AADUserLicense {
     FileName    : add-AADUserLicense.ps1
     License     : MIT License
     Copyright   : (c) 2022 Todd Kadrie
-    Github      : https://github.com/tostka/verb-XXX
+    Github      : https://github.com/tostka/verb-AAD
     Tags        : Powershell
     AddedCredit : 
     AddedWebsite:	
     AddedTwitter:	
     REVISIONS
-    * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection 
     * 1:20 PM 6/18/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential
     * 3:12 PM 5/30/2023 get-AzureAdUser  immed after lic add isn't returning curr status: added 500ms delay before repoll ; rounded out pswlt support
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
@@ -55,7 +54,7 @@ function add-AADUserLicense {
     #>
     #Requires -Version 3
     #Requires -Modules AzureAD, verb-Text
-    ##Requires -RunasAdministrator
+    #Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM (
