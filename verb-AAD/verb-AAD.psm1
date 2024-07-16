@@ -1,11 +1,11 @@
-﻿# verb-aad.psm1
+﻿# verb-AAD.psm1
 
 
 <#
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 5.0.0
+Version     : 5.1.0
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -57,12 +57,13 @@ function add-AADUserLicense {
     FileName    : add-AADUserLicense.ps1
     License     : MIT License
     Copyright   : (c) 2022 Todd Kadrie
-    Github      : https://github.com/tostka/verb-XXX
+    Github      : https://github.com/tostka/verb-AAD
     Tags        : Powershell
     AddedCredit : 
     AddedWebsite:	
     AddedTwitter:	
     REVISIONS
+    * 1:20 PM 6/18/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential
     * 3:12 PM 5/30/2023 get-AzureAdUser  immed after lic add isn't returning curr status: added 500ms delay before repoll ; rounded out pswlt support
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
     * 4:31 PM 5/17/2023  rounded out params for $pltRXO passthru
@@ -120,17 +121,97 @@ function add-AADUserLicense {
         ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
         
+        <#
+        # recycling the inbound above into next call in the chain
         # downstream commands
         $pltRXO = [ordered]@{
             Credential = $Credential ;
             verbose = $($VerbosePreference -eq "Continue")  ;
         } ;
-        if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+        #>
+        # 9:26 AM 6/17/2024 this needs cred resolution splice over latest get-exomailboxlicenses
+        $o365Cred = $null ;
+        if($Credential){
+            $smsg = "`Credential:Explicit credentials specified, deferring to use..." ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                # get-TenantCredentials() return format: (emulating)
+                $o365Cred = [ordered]@{
+                Cred=$Credential ;
+                credType=$null ;
+            } ;
+            $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; # Username
+            #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ;   # full Credential support
+            if($uRoleReturn.UserRole){
+                $o365Cred.credType = $uRoleReturn.UserRole ;
+            } else {
+                $smsg = "Unable to resolve `$credential.username ($($credential.username))"
+                $smsg += "`nto a usable 'UserRole' spec!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                Break ;
+            } ;
+        } else {
+            $pltGTCred=@{TenOrg=$TenOrg ; UserRole=$null; verbose=$($verbose)} ;
+            if($UserRole){
+                $smsg = "(`$UserRole specified:$($UserRole -join ','))" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $pltGTCred.UserRole = $UserRole;
+            } else {
+                $smsg = "(No `$UserRole found, defaulting to:'CSVC','SID' " ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $pltGTCred.UserRole = 'CSVC','SID' ;
+            } ;
+            $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            $o365Cred = get-TenantCredentials @pltGTCred
+        } ;
+        if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+            $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            # 9:58 AM 6/13/2024 populate $credential with return, if not populated (may be required for follow-on calls that pass common $Credentials through)
+            if((gv Credential) -AND $Credential -eq $null){
+                $credential = $o365Cred.Cred ;
+            }elseif($credential.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                $smsg = "(`$Credential is properly populated; explicit -Credential was in initial call)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } else {
+                $smsg = "`$Credential is `$NULL, AND $o365Cred.Cred is unusable to populate!" ;
+                $smsg = "downstream commands will *not* properly pass through usable credentials!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                break ;
+            } ;
+        } else {
+            $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            break ;
+        } ; 
+
+        # downstream commands
+        $pltRXO = [ordered]@{
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((get-command Connect-AAD).Parameters.keys -contains 'silent'){
             $pltRxo.add('Silent',$silent) ;
         } ;
         # default connectivity cmds - force silent false
-        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
-        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ; 
+        if((get-command ReConnect-AAD).Parameters.keys -notcontains 'silent'){
+            $pltRxo.remove('Silent') ;
+        } ; 
+
         #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
         Connect-AAD @pltRXOC ;         
         
@@ -177,7 +258,8 @@ function add-AADUserLicense {
                         else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
                         $spltSAADUUL = [ordered]@{ 
-                            ObjectID = $AADUser.UserPrincipalName ;
+                            #ObjectID = $AADUser.UserPrincipalName ;
+                            Users = $AADUser.UserPrincipalName ;
                             UsageLocation = "US" ;
                             whatif = $($whatif) ;
                             verbose = ($VerbosePreference -eq "Continue") ;
@@ -2676,6 +2758,8 @@ function get-AADlicensePlanList {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/
     REVISIONS
+    * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection 
+    * 1:20 PM 6/18/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential
     * 2:33 PM 5/17/2023 added cred/silent/pltrxo support; 
     * 3:19 PM 5/15/2023 get-AADlicensePlanList() works w latest aad/exo-eom updates
     * 12:54 PM 3/24/2022 added addition of resolved 'friendlyname' (via verb-aad:get-AADLicenseFullName), to the datatable returned, when in NON-Raw mode
@@ -2770,7 +2854,7 @@ function get-AADlicensePlanList {
     #Requires -Version 3
     ##requires -PSEdition Desktop
     #Requires -Modules AzureAD, verb-Text
-    #Requires -RunasAdministrator
+    ##Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM(
@@ -2802,16 +2886,96 @@ function get-AADlicensePlanList {
             @{name='Consumed';Expression={$_.ConsumedUnits} }, @{name='Available';Expression={$_.PrepaidUnits.enabled - $_.ConsumedUnits} }, 
             @{name='Warning';Expression={$_.PrepaidUnits.warning} }, @{name='Suspended';Expression={$_.PrepaidUnits.suspended} } ;
 
+        <#
+        # recycling the inbound above into next call in the chain
         # downstream commands
         $pltRXO = [ordered]@{
             Credential = $Credential ;
             verbose = $($VerbosePreference -eq "Continue")  ;
-            silent = $silent ; 
         } ;
-        # default connectivity cmds
+        #>
+        # 9:26 AM 6/17/2024 this needs cred resolution splice over latest get-exomailboxlicenses
+        $o365Cred = $null ;
+        if($Credential){
+            $smsg = "`Credential:Explicit credentials specified, deferring to use..." ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                # get-TenantCredentials() return format: (emulating)
+                $o365Cred = [ordered]@{
+                Cred=$Credential ;
+                credType=$null ;
+            } ;
+            $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; # Username
+            #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ;   # full Credential support
+            if($uRoleReturn.UserRole){
+                $o365Cred.credType = $uRoleReturn.UserRole ;
+            } else {
+                $smsg = "Unable to resolve `$credential.username ($($credential.username))"
+                $smsg += "`nto a usable 'UserRole' spec!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                Break ;
+            } ;
+        } else {
+            $pltGTCred=@{TenOrg=$TenOrg ; UserRole=$null; verbose=$($verbose)} ;
+            if($UserRole){
+                $smsg = "(`$UserRole specified:$($UserRole -join ','))" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $pltGTCred.UserRole = $UserRole;
+            } else {
+                $smsg = "(No `$UserRole found, defaulting to:'CSVC','SID' " ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $pltGTCred.UserRole = 'CSVC','SID' ;
+            } ;
+            $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            $o365Cred = get-TenantCredentials @pltGTCred
+        } ;
+        if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+            $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            # 9:58 AM 6/13/2024 populate $credential with return, if not populated (may be required for follow-on calls that pass common $Credentials through)
+            if((gv Credential) -AND $Credential -eq $null){
+                $credential = $o365Cred.Cred ;
+            }elseif($credential.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                $smsg = "(`$Credential is properly populated; explicit -Credential was in initial call)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } else {
+                $smsg = "`$Credential is `$NULL, AND $o365Cred.Cred is unusable to populate!" ;
+                $smsg = "downstream commands will *not* properly pass through usable credentials!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                break ;
+            } ;
+        } else {
+            $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            break ;
+        } ; 
+
+        # downstream commands
+        $pltRXO = [ordered]@{
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((get-command Connect-AAD).Parameters.keys -contains 'silent'){
+            $pltRxo.add('Silent',$silent) ;
+        } ;
         # default connectivity cmds - force silent false
-        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
-        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ; 
+        if((get-command ReConnect-AAD).Parameters.keys -notcontains 'silent'){
+            $pltRxo.remove('Silent') ;
+        } ; 
     } ;
     PROCESS {
         $Error.Clear() ;
@@ -3145,8 +3309,9 @@ function get-aaduser {
     .LINK
     #>
     ###Requires -Version 5
-    #Requires -Modules MSOnline, AzureAD, verb-Text, verb-IO
-    #Requires -RunasAdministrator
+    ##Requires -Modules MSOnline, AzureAD, verb-Text, verb-IO
+    #Requires -Modules AzureAD, verb-Text, verb-IO
+    ##Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
@@ -4908,7 +5073,7 @@ function Initialize-AADSignErrorsHash {
     $AADSignOnError.add("40008", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
     $AADSignOnError.add("40009", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
     $AADSignOnError.add("40014", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
-    $AADSignOnError.add("50000", "There is an issue with our sign-in service. Open a support ticket to resolve this issue.") ;
+    $AADSignOnError.add("5.1.0", "There is an issue with our sign-in service. Open a support ticket to resolve this issue.") ;
     $AADSignOnError.add("50001", "The service principal name was not found in this tenant. This can happen if the application has not been installed by the administrator of the tenant, or if the resource principal was not found in the directory or is invalid.") ;
     $AADSignOnError.add("50002", "Sign-in failed due to restricted proxy access on tenant. If its your own tenant policy, you can change your restricted tenant settings to fix this issue.") ;
     $AADSignOnError.add("50003", "Sign-in failed due to missing signing key or certificate. This might be because there was no signing key configured in the application. Check out the resolutions outlined at https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery#certificate-or-key-not-configured. If the issue persists, contact the application owner or the application administrator.") ;
@@ -4916,18 +5081,18 @@ function Initialize-AADSignErrorsHash {
     $AADSignOnError.add("50006", "Signature verification failed due to invalid signature. Check out the resolution outlined at https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery. If the issue persists, contact the application owner or application administrator.") ;
     $AADSignOnError.add("50007", "Partner encryption certificate was not found for this application. Open a support ticket with Microsoft to get this fixed.") ;
     $AADSignOnError.add("50008", "SAML assertion is missing or misconfigured in the token. Contact your federation provider.") ;
-    $AADSignOnError.add("50010", "Audience URI validation for the application failed since no token audiences were configured. Contact the application owner for resolution.") ;
+    $AADSignOnError.add("5.1.0", "Audience URI validation for the application failed since no token audiences were configured. Contact the application owner for resolution.") ;
     $AADSignOnError.add("50011", "The reply address is missing, misconfigured, or does not match reply addresses configured for the application. Try the resolution listed at https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery#the-reply-address-does-not-match-the-reply-addresses-configured-for-the-application. If the issue persists, contact the application owner or application administrator.") ;
     $AADSignOnError.add("50012", "This is a generic error message that indicates that authentication failed. This can happen for reasons such as missing or invalid credentials or claims in the request. Ensure that the request is sent with the correct credentials and claims.") ;
     $AADSignOnError.add("50013", "Assertion is invalid because of various reasons. For instance, the token issuer doesnt match the api version within its valid time range, the token is expired or malformed, or the refresh token in the assertion is not a primary refresh token.") ;
     $AADSignOnError.add("50017", "Certification validation failed, reasons for the following reasons:, Cannot find issuing certificate in trusted certificates list , Unable to find expected CrlSegment , Cannot find issuing certificate in trusted certificates list , Delta CRL distribution point is configured without a corresponding CRL distribution point , Unable to retrieve valid CRL segments due to timeout issue , Unable to download CRL , Contact the tenant administrator.") ;
-    $AADSignOnError.add("50020", "The user is unauthorized for one of the following reasons. The user is attempting to login with an MSA account with the v1 endpoint , The user doesnt exist in the tenant. , Contact the application owner.") ;
+    $AADSignOnError.add("5.1.0", "The user is unauthorized for one of the following reasons. The user is attempting to login with an MSA account with the v1 endpoint , The user doesnt exist in the tenant. , Contact the application owner.") ;
     $AADSignOnError.add("50027", "Invalid JWT token due to the following reasons:, doesnt contain nonce claim, sub claim , subject identifier mismatch , duplicate claim in idToken claims , unexpected issuer , unexpected audience , not within its valid time range , token format is not proper , External ID token from issuer failed signature verification. , Contact the application owner , ") ;
     $AADSignOnError.add("50029", "Invalid URI - domain name contains invalid characters. Contact the tenant administrator.") ;
     $AADSignOnError.add("50034", "User does not exist in directory. Contact your tenant administrator.") ;
     $AADSignOnError.add("50042", "The salt required to generate a pairwise identifier is missing in principle. Contact the tenant administrator.") ;
     $AADSignOnError.add("50048", "Subject mismatches Issuer claim in the client assertion. Contact the tenant administrator.") ;
-    $AADSignOnError.add("50050", "Request is malformed. Contact the application owner.") ;
+    $AADSignOnError.add("5.1.0", "Request is malformed. Contact the application owner.") ;
     $AADSignOnError.add("50053", "Account is locked because the user tried to sign in too many times with an incorrect user ID or password.") ;
     $AADSignOnError.add("50055", "Invalid password, entered expired password.") ;
     $AADSignOnError.add("50056", "Invalid or null password - Password does not exist in store for this user.") ;
@@ -4977,7 +5142,7 @@ function Initialize-AADSignErrorsHash {
     $AADSignOnError.add("51004", "User account doesnt exist in the directory.") ;
     $AADSignOnError.add("51006", "Windows Integrated authentication is needed. User logged in using session token that is missing via claim. Request the user to re-login.") ;
     $AADSignOnError.add("52004", "User has not provided consent for access to LinkedIn resources.") ;
-    $AADSignOnError.add("53000", "Conditional Access policy requires a compliant device, and the device is not compliant. Have the user enroll their device with an approved MDM provider like Intune.") ;
+    $AADSignOnError.add("5.1.0", "Conditional Access policy requires a compliant device, and the device is not compliant. Have the user enroll their device with an approved MDM provider like Intune.") ;
     $AADSignOnError.add("53001", "Conditional Access policy requires a domain joined device, and the device is not domain joined. Have the user use a domain joined device.") ;
     $AADSignOnError.add("53002", "Application used is not an approved application for conditional access. User needs to use one of the apps from the list of approved applications to use in order to get access.") ;
     $AADSignOnError.add("53003", "Access has been blocked due to conditional access policies.") ;
@@ -6403,7 +6568,7 @@ if(-not(get-command write-log -ea 0)){
             $AADSignOnError.add("40008", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
             $AADSignOnError.add("40009", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
             $AADSignOnError.add("40014", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
-            $AADSignOnError.add("50000", "There is an issue with our sign-in service. Open a support ticket to resolve this issue.") ;
+            $AADSignOnError.add("5.1.0", "There is an issue with our sign-in service. Open a support ticket to resolve this issue.") ;
             $AADSignOnError.add("50001", "The service principal name was not found in this tenant. This can happen if the application has not been installed by the administrator of the tenant, or if the resource principal was not found in the directory or is invalid.") ;
             $AADSignOnError.add("50002", "Sign-in failed due to restricted proxy access on tenant. If its your own tenant policy, you can change your restricted tenant settings to fix this issue.") ;
             $AADSignOnError.add("50003", "Sign-in failed due to missing signing key or certificate. This might be because there was no signing key configured in the application. Check out the resolutions outlined at https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery#certificate-or-key-not-configured. If the issue persists, contact the application owner or the application administrator.") ;
@@ -6411,18 +6576,18 @@ if(-not(get-command write-log -ea 0)){
             $AADSignOnError.add("50006", "Signature verification failed due to invalid signature. Check out the resolution outlined at https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery. If the issue persists, contact the application owner or application administrator.") ;
             $AADSignOnError.add("50007", "Partner encryption certificate was not found for this application. Open a support ticket with Microsoft to get this fixed.") ;
             $AADSignOnError.add("50008", "SAML assertion is missing or misconfigured in the token. Contact your federation provider.") ;
-            $AADSignOnError.add("50010", "Audience URI validation for the application failed since no token audiences were configured. Contact the application owner for resolution.") ;
+            $AADSignOnError.add("5.1.0", "Audience URI validation for the application failed since no token audiences were configured. Contact the application owner for resolution.") ;
             $AADSignOnError.add("50011", "The reply address is missing, misconfigured, or does not match reply addresses configured for the application. Try the resolution listed at https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery#the-reply-address-does-not-match-the-reply-addresses-configured-for-the-application. If the issue persists, contact the application owner or application administrator.") ;
             $AADSignOnError.add("50012", "This is a generic error message that indicates that authentication failed. This can happen for reasons such as missing or invalid credentials or claims in the request. Ensure that the request is sent with the correct credentials and claims.") ;
             $AADSignOnError.add("50013", "Assertion is invalid because of various reasons. For instance, the token issuer doesnt match the api version within its valid time range, the token is expired or malformed, or the refresh token in the assertion is not a primary refresh token.") ;
             $AADSignOnError.add("50017", "Certification validation failed, reasons for the following reasons:, Cannot find issuing certificate in trusted certificates list , Unable to find expected CrlSegment , Cannot find issuing certificate in trusted certificates list , Delta CRL distribution point is configured without a corresponding CRL distribution point , Unable to retrieve valid CRL segments due to timeout issue , Unable to download CRL , Contact the tenant administrator.") ;
-            $AADSignOnError.add("50020", "The user is unauthorized for one of the following reasons. The user is attempting to login with an MSA account with the v1 endpoint , The user doesnt exist in the tenant. , Contact the application owner.") ;
+            $AADSignOnError.add("5.1.0", "The user is unauthorized for one of the following reasons. The user is attempting to login with an MSA account with the v1 endpoint , The user doesnt exist in the tenant. , Contact the application owner.") ;
             $AADSignOnError.add("50027", "Invalid JWT token due to the following reasons:, doesnt contain nonce claim, sub claim , subject identifier mismatch , duplicate claim in idToken claims , unexpected issuer , unexpected audience , not within its valid time range , token format is not proper , External ID token from issuer failed signature verification. , Contact the application owner , ") ;
             $AADSignOnError.add("50029", "Invalid URI - domain name contains invalid characters. Contact the tenant administrator.") ;
             $AADSignOnError.add("50034", "User does not exist in directory. Contact your tenant administrator.") ;
             $AADSignOnError.add("50042", "The salt required to generate a pairwise identifier is missing in principle. Contact the tenant administrator.") ;
             $AADSignOnError.add("50048", "Subject mismatches Issuer claim in the client assertion. Contact the tenant administrator.") ;
-            $AADSignOnError.add("50050", "Request is malformed. Contact the application owner.") ;
+            $AADSignOnError.add("5.1.0", "Request is malformed. Contact the application owner.") ;
             $AADSignOnError.add("50053", "Account is locked because the user tried to sign in too many times with an incorrect user ID or password.") ;
             $AADSignOnError.add("50055", "Invalid password, entered expired password.") ;
             $AADSignOnError.add("50056", "Invalid or null password - Password does not exist in store for this user.") ;
@@ -6472,7 +6637,7 @@ if(-not(get-command write-log -ea 0)){
             $AADSignOnError.add("51004", "User account doesnt exist in the directory.") ;
             $AADSignOnError.add("51006", "Windows Integrated authentication is needed. User logged in using session token that is missing via claim. Request the user to re-login.") ;
             $AADSignOnError.add("52004", "User has not provided consent for access to LinkedIn resources.") ;
-            $AADSignOnError.add("53000", "Conditional Access policy requires a compliant device, and the device is not compliant. Have the user enroll their device with an approved MDM provider like Intune.") ;
+            $AADSignOnError.add("5.1.0", "Conditional Access policy requires a compliant device, and the device is not compliant. Have the user enroll their device with an approved MDM provider like Intune.") ;
             $AADSignOnError.add("53001", "Conditional Access policy requires a domain joined device, and the device is not domain joined. Have the user use a domain joined device.") ;
             $AADSignOnError.add("53002", "Application used is not an approved application for conditional access. User needs to use one of the apps from the list of approved applications to use in order to get access.") ;
             $AADSignOnError.add("53003", "Access has been blocked due to conditional access policies.") ;
@@ -7749,7 +7914,7 @@ function remove-AADUserLicense {
     #>
     #Requires -Version 3
     #Requires -Modules AzureAD, verb-Text
-    #Requires -RunasAdministrator
+    ##Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM (
@@ -8200,6 +8365,7 @@ Function search-AADSignInReports {
     AddedTwitter: @AlexAsplund
     GraphAPI -filter parameter reference on 875: ==== v GRAPH API FILTER PARAM USE:
     REVISIONS   :
+    * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection
     * 10:47 AM 6/16/2021 added record count echo (easier to verifiy return worked) ; purged more rem'd cd ; revised start-log code (accomd cmdlet in allusers module), swapped in all $ofile => sl $logfile w variant exts, moved logging down into the UPN loop ; trimmed rem'd code shifted to search-graphapiAAD() (confirmed functional) ; removed local buffered copies of  get-AADTokenHeaders, get-AADCertToken, search-GraphApiAAD (they're in same module now, no need to buffer)
     * 12:50 PM 6/15/2021 ren Pull-AADSignInReports.ps1 -> search-AADSignInReports.ps1 (compliant verb); porting into verb-aad; added start-log logging ; rearranged trailing graphapi filter param ref, into body, above code where qry is built; removed obsolete/broken *BearerToken() funcs. Made all funcs condityional, and deferential to modules. 
     * 3:16 PM 6/14/2021 made local aad funcs, conditional - defer to verb-aad versions ; fixed missing cert(s) on jbox, works now ; strongly typed $tickets array (was pulling 1st char instead of elem) ; subd out redund -verbose params ;provide dyn param lookup on $TenOrg, via meta infra file, cleaned up the CBH auth & tenant config code (pki certs creation, CER & PFX export/import)
@@ -8272,7 +8438,7 @@ Function search-AADSignInReports {
     https://github.com/TspringMSFT/PullAzureADSignInReports-
     #>
     #Requires -Modules verb-Auth, verb-IO, verb-logging, verb-Text
-    #Requires -RunasAdministrator
+    ##Requires -RunasAdministrator
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
@@ -8984,12 +9150,13 @@ function set-AADUserUsageLocation {
     FileName    : 
     License     : MIT License
     Copyright   : (c) 2022 Todd Kadrie
-    Github      : https://github.com/tostka/verb-XXX
+    Github      : https://github.com/tostka/verb-AAD
     Tags        : Powershell
     AddedCredit : 
     AddedWebsite:	
     AddedTwitter:	URL
     REVISIONS
+    * 1:20 PM 6/18/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential; Alias Users as ObjectID & Userprincipalname; spliced in latest $Cred handling
     * 3:26 PM 5/30/2023 rouneded out pswlt
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
     * 12:01 PM 5/22/2023 add: missing w-o for sucess on report; also test $aad.usageloc actually updated; updated cbh ; 
@@ -9054,8 +9221,9 @@ function set-AADUserUsageLocation {
     PARAM (
         # ValueFromPipeline: will cause params to match on matching type, [array] input -> [array]$param
         [Parameter(Mandatory=$false,ValueFromPipeline=$true,HelpMessage="User Identifiers[-Users 'UPN']")]
-        [ValidateNotNullOrEmpty()]
-            [string[]]$Users, 
+            [Alias('ObjectID','UserPrincipalName')]
+            [ValidateNotNullOrEmpty()]
+                [string[]]$Users,  
         [Parameter(Mandatory=$false,HelpMessage="Microsoft UsageLocation code[-UsageLocation 'US']")]
             [string]$UsageLocation = 'US',
         [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
@@ -9072,17 +9240,96 @@ function set-AADUserUsageLocation {
         ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
        
+        <#
+        # recycling the inbound above into next call in the chain
         # downstream commands
         $pltRXO = [ordered]@{
             Credential = $Credential ;
             verbose = $($VerbosePreference -eq "Continue")  ;
         } ;
-        if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+        #>
+        # 9:26 AM 6/17/2024 this needs cred resolution splice over latest get-exomailboxlicenses
+        $o365Cred = $null ;
+        if($Credential){
+            $smsg = "`Credential:Explicit credentials specified, deferring to use..." ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                # get-TenantCredentials() return format: (emulating)
+                $o365Cred = [ordered]@{
+                Cred=$Credential ;
+                credType=$null ;
+            } ;
+            $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; # Username
+            #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ;   # full Credential support
+            if($uRoleReturn.UserRole){
+                $o365Cred.credType = $uRoleReturn.UserRole ;
+            } else {
+                $smsg = "Unable to resolve `$credential.username ($($credential.username))"
+                $smsg += "`nto a usable 'UserRole' spec!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                Break ;
+            } ;
+        } else {
+            $pltGTCred=@{TenOrg=$TenOrg ; UserRole=$null; verbose=$($verbose)} ;
+            if($UserRole){
+                $smsg = "(`$UserRole specified:$($UserRole -join ','))" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $pltGTCred.UserRole = $UserRole;
+            } else {
+                $smsg = "(No `$UserRole found, defaulting to:'CSVC','SID' " ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $pltGTCred.UserRole = 'CSVC','SID' ;
+            } ;
+            $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            $o365Cred = get-TenantCredentials @pltGTCred
+        } ;
+        if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+            $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            # 9:58 AM 6/13/2024 populate $credential with return, if not populated (may be required for follow-on calls that pass common $Credentials through)
+            if((gv Credential) -AND $Credential -eq $null){
+                $credential = $o365Cred.Cred ;
+            }elseif($credential.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                $smsg = "(`$Credential is properly populated; explicit -Credential was in initial call)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } else {
+                $smsg = "`$Credential is `$NULL, AND $o365Cred.Cred is unusable to populate!" ;
+                $smsg = "downstream commands will *not* properly pass through usable credentials!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                break ;
+            } ;
+        } else {
+            $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            break ;
+        } ; 
+
+        # downstream commands
+        $pltRXO = [ordered]@{
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((get-command Connect-AAD).Parameters.keys -contains 'silent'){
             $pltRxo.add('Silent',$silent) ;
         } ;
         # default connectivity cmds - force silent false
-        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
-        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ; 
+        if((get-command ReConnect-AAD).Parameters.keys -notcontains 'silent'){
+            $pltRxo.remove('Silent') ;
+        } ; 
         #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
         Connect-AAD @pltRXOC ;         
         
@@ -9259,7 +9506,7 @@ function test-AADUserIsLicensed {
     #>
     #Requires -Version 3
     #Requires -Modules AzureAD, verb-Text
-    #Requires -RunasAdministrator
+    ##Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
 
@@ -9289,6 +9536,132 @@ function test-AADUserIsLicensed {
 }
 
 #*------^ test-AADUserIsLicensed.ps1 ^------
+
+
+#*------v test-AzureADSessionIsGlobalAdmin.ps1 v------
+Function test-AzureADSessionIsGlobalAdmin{
+    <#
+    .SYNOPSIS
+    test-AzureADSessionIsGlobalAdmin - Test that current AzureAD session account is a Global Admin
+    .NOTES
+    Version     : 0.0.
+    Author      : Todd Kadrie
+    Website     : http://www.toddomation.com
+    Twitter     : @tostka / http://twitter.com/tostka
+    CreatedDate : 2024-06-07
+    FileName    : test-AzureADSessionIsGlobalAdmin
+    License     : MIT License
+    Copyright   : (c) 2024 Todd Kadrie
+    Github      : https://github.com/tostka/verb-AAD
+    Tags        : Powershell,AzureAD,Authentication,Test
+    AddedCredit : 
+    AddedWebsite: 
+    AddedTwitter: 
+    REVISIONS
+    * 9:56 AM 6/12/2024 add: Aliases: 'test-IsGlobalAdmin','test-isAADGlobalAdmin'; pasted in minimalist variant into Descr
+    * 12:38 PM 6/7/2024 init
+    .DESCRIPTION
+    test-AzureADSessionIsGlobalAdmin - Test that current AzureAD session account is a Global Admin
+
+    Minimalist includable version:
+
+    ```powershell
+    if(-not (gcm test-AzureADSessionIsGlobalAdmin -ea 0)){
+        Function test-AzureADSessionIsGlobalAdmin{
+            TRY{
+                $UserPrincipalName = (Get-AzureADUser -ObjectId (Get-AzureADCurrentSessionInfo -EA STOP).Account.Id -EA STOP).UserPrincipalName ; 
+                $GARole = Get-AzureADDirectoryRole -ea STOP| Where-Object {$_.displayName -eq  'Global Administrator'} ;
+                if($CurrUserRole = Get-AzureADDirectoryRoleMember -ObjectId $GARole.ObjectId -EA STOP| Where-Object {$_.UserPrincipalName -eq $UserPrincipalName }){
+                    $true | write-output ;
+                } else {
+                    $false | write-output ;
+                }; 
+            } CATCH {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ; 
+        } ;
+    } ; 
+    if(-not (test-AzureADSessionIsGlobalAdmin)){
+        throw "Current AzureADCurrentSessionInfo is *not* a Global Admin!`nAborting!" ; 
+        break ; 
+    } ; 
+    ```
+
+    .PARAMETER  UserPrincipalName
+    Optional UserPrincipalName to be validated (defaults to current user context)[-CoUserPrincipalNamemputerName SomeAcct@domain.tld]
+    .INPUTS
+    System.String Accepts piped input
+    .OUTPUTS
+    System.Boolean
+    .EXAMPLE
+    PS> if(test-AzureADSessionIsGlobalAdmin -UserPrincipalName SomeAcct@domain.tld){
+    PS>     write-host "Doing GA level things" ; 
+    PS> } else { write-warning "User is not currently GA!"};  ; 
+    Demo simple test with explicit UPN
+    .EXAMPLE
+    PS> if(test-AzureADSessionIsGlobalAdmin){
+    PS>     write-host "Doing GA level things" ; 
+    PS> } else { write-warning "User is not currently GA!"};  ; 
+    Demo simple test with implicit discovered UPN
+    .LINK
+    https://github.com/tostka/verb-AAD
+    .LINK
+    #>    
+    ##Requires -Modules AzureAD, verb-AAD
+    [CmdletBinding()]
+    ## PSV3+ whatif support:[CmdletBinding(SupportsShouldProcess)]
+    [Alias('test-IsGlobalAdmin','test-isAADGlobalAdmin')]
+    PARAM(
+        [Parameter(Position=0,Mandatory=$false,HelpMessage="Optional UserPrincipalName to be validated (defaults to current user context)[-UserPrincipalNamemputerName SomeAcct@domain.tld]")]
+            #[ValidateNotNullOrEmpty()]
+            [string]$UserPrincipalName,
+        [Parameter(Position=0,Mandatory=$false,HelpMessage="Optional AzureAD RoleName to be validated (defaults to 'Global Administrator')[-RoleName 'Exchange Administrator']")]
+            #[ValidateNotNullOrEmpty()]
+            #[ValidateSet('Exchange Administrator','Privileged Authentication Administrator','Azure Information Protection Administrator','Attribute Assignment Administrator','Desktop Analytics Administrator','Cloud Application Administrator','Exchange Recipient Administrator','Search Administrator','Edge Administrator','Fabric Administrator','Application Administrator','Dynamics 365 Administrator','User Administrator','Authentication Administrator','Security Administrator','Cloud Device Administrator','Teams Communications Administrator','Global Reader','Directory Synchronization Accounts','Azure DevOps Administrator','License Administrator','Guest Inviter','Groups Administrator','Directory Readers','Teams Communications Support Engineer','Azure AD Joined Device Local Administrator','Intune Administrator','Compliance Administrator','Skype for Business Administrator','Billing Administrator','Conditional Access Administrator','Service Support Administrator','SharePoint Administrator','Helpdesk Administrator','Global Administrator','Security Reader','Teams Communications Support Specialist','Teams Administrator','Teams Devices Administrator','Directory Writers','Reports Reader','Office Apps Administrator','Power Platform Administrator','Message Center Reader')]
+            [string]$RoleName= 'Global Administrator'
+    );
+    $RoleSet = 'Exchange Administrator','Privileged Authentication Administrator','Azure Information Protection Administrator','Attribute Assignment Administrator','Desktop Analytics Administrator','Cloud Application Administrator','Exchange Recipient Administrator','Search Administrator','Edge Administrator','Fabric Administrator','Application Administrator','Dynamics 365 Administrator','User Administrator','Authentication Administrator','Security Administrator','Cloud Device Administrator','Teams Communications Administrator','Global Reader','Directory Synchronization Accounts','Azure DevOps Administrator','License Administrator','Guest Inviter','Groups Administrator','Directory Readers','Teams Communications Support Engineer','Azure AD Joined Device Local Administrator','Intune Administrator','Compliance Administrator','Skype for Business Administrator','Billing Administrator','Conditional Access Administrator','Service Support Administrator','SharePoint Administrator','Helpdesk Administrator','Global Administrator','Security Reader','Teams Communications Support Specialist','Teams Administrator','Teams Devices Administrator','Directory Writers','Reports Reader','Office Apps Administrator','Power Platform Administrator','Message Center Reader' ; 
+    TRY{
+        if(-not ($RoleSet -contains $RoleName)){
+            $smsg = "Specified -RoleName: $($RoleName) is not a permitted AzureADDirectoryRole DisplayName:" ; 
+            $smsg += "`n$($RoleSet -join '|')" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+            break ; 
+        } ; 
+        if (!(Get-Module AzureAD -ListAvailable)) { Write-Host -BackgroundColor Red "This script requires a recent version of the AzureAD PowerShell module. Download it here: https://www.powershellgallery.com/packages/AzureAD/"; return } ; 
+        if(-not $UserPrincipalName){
+            $smsg = "No -UserPrincipalName specified, defaulting to AzureADCurrentSessionInfo UPN" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            if($sessInfo = Get-AzureADCurrentSessionInfo -EA STOP){
+                $currentUser = (Get-AzureADUser -ObjectId $sessInfo.Account.Id -EA STOP) ;
+                $UserPrincipalName = $currentUser.UserPrincipalName ; 
+            }else {
+                $smsg = "Unable to Get-AzureADCurrentSessionInfo! " ; 
+                $smsg += "`nuse Connect-AzureAD to connect first" ;  
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+            } ; 
+        } ; 
+        $GARole = Get-AzureADDirectoryRole -ea STOP| Where-Object {$_.displayName -eq $RoleName} ;
+        if($CurrUserRole = Get-AzureADDirectoryRoleMember -ObjectId $GARole.ObjectId -EA STOP| Where-Object {$_.UserPrincipalName -eq $UserPrincipalName }){
+            $true | write-output ;
+        } else {
+            $false | write-output ;
+        }; 
+    } CATCH {
+        $ErrTrapd=$Error[0] ;
+        $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    } ; 
+}
+
+#*------^ test-AzureADSessionIsGlobalAdmin.ps1 ^------
 
 
 #*------v test-MsolUserLicenseDirectAssigned.ps1 v------
@@ -9922,6 +10295,1029 @@ function toggle-AADLicense{
 #*------^ toggle-AADLicense.ps1 ^------
 
 
+#*------v Update-AADAppRegistrationKeyCertificate.ps1 v------
+function Update-AADAppRegistrationKeyCertificate{
+    <#
+    .SYNOPSIS
+    Update-AADAppRegistrationKeyCertificate.ps1 - Rollver expired/expiring Cert on AAD Registered App with CBA-auth. All necessary values are derived from the local cert and dynamic queries to the connected Tenant
+    .NOTES
+    Version     : 0.0.
+    Author      : Todd Kadrie
+    Website     : http://www.toddomation.com
+    Twitter     : @tostka / http://twitter.com/tostka
+    CreatedDate : 2024-06-25
+    FileName    : Update-AADAppRegistrationKeyCertificate.ps1
+    License     : MIT License
+    Copyright   : (c) 2024 Todd Kadrie
+    Github      : https://github.com/tostka/verb-AAD
+    Tags        : Powershell,AzureAD,CertificateBasedAuthentication
+    AddedCredit : myatix
+    AddedWebsite: https://stackoverflow.com/users/2439507/myatix
+    AddedTwitter: 
+    REVISIONS
+    * 4:48 PM 7/15/2024 pull recursive vaad require stmt
+    * 2:44 PM 6/27/2024, fixed error in old cert removal on remote (cited thumb for new cert, not input cert); added PriorCertThumbprint to output;  tested, confirmed functional for TOL ESvc rollover ;  add other machine cert removal; rarranged output  instructions to single block; add returned summary object fix spaces after $'s in demo output code ; 
+        functionalize and ren Rollover-AADAppRegistrationCBAAuth -> Update-AADAppRegistrationKeyCertificate
+    * 3:30 PM 6/26/2024 used it to roll over the , 6/2022 CBA sets ; added output code demoing code to to purge obsolete .psxml cred files on other machines ; 
+        added fall back on attempt to use $cert.friendlyname for ADApplicationlookup fail (prompts for App DNAME for re-search); 
+        tweaked, ported in psparamt disco & startlog, per-loop level, added pipeline support
+    * 3:39 PM 6/25/2024 convert New-AADAppRegistrationCBAAuth.ps1 -> Update-AADAppRegistrationKeyCertificate.ps1
+    .DESCRIPTION
+    Update-AADAppRegistrationKeyCertificate.ps1 - Rollver expired/expiring Cert on AAD Registered App with CBA-auth. All necessary values are derived from the local cert and dynamic queries to the connected Tenant
+
+    1. Uses the specified local CurrentUser\My\[thumbrpint] from the passed certificate, to obtain FriendlyName, that is then queried against the displayname of all get-AzureADApplication registrations, 
+        to locate the tied application. 
+    2. It then uses the Remove-AzureADApplicationKeyCredential cmdlet to remove the existing registered KeyCredential cert from the Application
+    3. It then removes the local \CurrentUser\My certificate hive copy of the retiring cert (passed as original input)
+    4. It then uses my verb-AAD\New-AADAppAuthCertificate() to create a new self-signed certificate, assign the Application Displayname as cert FriendlyName, and then export the cert to PFX (with prompted password), 
+    5. And then uses the New-AzureADApplicationKeyCredential cmdlet to add the new self-signed cert to the existing AzureADApplication
+    6. Finally it locates the local credential psxml file (used by get-admincred()) and purges the file so that a fresh pass can be run to restock with the updated values
+
+    Outputs CustomObject summary of related components, changes, and follow-on configuration actions. 
+
+    Notes: 
+    - A model certificate must be input, to drive updates. If no suitable current certificate is installed, simply reimport a prior version PFX into the store, and configure it's FriendlyName (see Example). 
+        Even a long-expired cert will be sufficient to drive use of this function to generate fresh KeyCredential updates.
+    
+    - if the associated Application has been purged as well, see New-AADAppRegistrationCBAAuth.ps1 to generate a new applicaiton plus KeyCredential set from scratch.
+    
+
+    .PARAMETER Certificate
+    Expiring/Expired certificate object (product of gci cert:\currentuser\my\THUMBPRINT) that is an existing AzureADApplication KeyCredential, to be rolled over (removed, regenerated, and re-added to the existing Application)[-certificate `$ocert]
+    .PARAMETER years
+    Years of lifespan on the authenticating cert [-years 3]
+    .PARAMETER certStore
+    Path to local certificate store in which authenticating cert will be stored(defaults to CU\My)[-certStore 'Cert:\LocalMachine\My']
+    .PARAMETER ShowDebug
+    Parameter to display Debugging messages [-ShowDebug switch]
+    .INPUTS
+    System.Security.Cryptography.X509Certificates.X509Certificate2[] Certificate array object
+
+    Accepts piped input
+    .OUTPUTS
+    System.Management.Automation.PSCustomObject
+
+    Returns Summary PSCustomObject, bundling following components:
+     - Application
+     - ServicePrincipal
+     - TenantDetail
+     - Owner
+     - KeyCred
+     - Certificate
+     - PfxPath
+     - PriorCertificateThumbprint
+     - Instructions
+    .EXAMPLE
+    PS> $ocert =  gci cert:\currentuser\my\CnEBDEEnnnnnnnBCDFADnnEnnnnEDnnECnnAnnnF ; 
+    PS> $results = Update-AADAppRegistrationKeyCertificate -certificate $ocert ;
+    PS> if($results.Certificate){ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Updated Certificate`n$(($results.Certificate| ft -a Subject,NotAfter,Thumbprint|out-string).trim())" ; } ; 
+    Demo rollover of specified cert (located as a suitable input object, via get-childitem on the thumbprint)
+    .EXAMPLE
+    PS> $expiredcerts = gci cert:\currentuser\my | ?{(get-date $_.notafter) -le (get-date ) -AND $_.subject -match 'CBACert'} ;
+    PS> $Aggreg = @() ; 
+    PS> foreach($ocert in $expiredcerts){
+    PS>     write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):`n`nRolling over cert: w`n$(($ocert| ft -a thumb*,subject,notafter|out-string).Trim())`n`n" ; 
+    PS>     $results = Update-AADAppRegistrationKeyCertificate -certificate $ocert ;
+    PS>     if($results.Certificate){
+    PS>         write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Updated Certificate`n$(($results.Certificate| ft -a Subject,NotAfter,Thumbprint|out-string).trim())" ; 
+    PS>         $Aggreg += $results ; 
+    PS>     } ;     
+    PS> } ; 
+    Demo filter for expired certs on subject substring, looped into the function, test results and append to an aggregator variable. 
+    .EXAMPLE
+    PS> $expiredcerts = gci cert:\currentuser\my |  ?{(get-date $_.notafter) -le (get-date ) -AND $_.subject -match 'CBACert'} ;
+    PS> $expiredcerts | Update-AADAppRegistrationKeyCertificate -verbose;
+    Demo pipeline use
+    .EXAMPLE
+    PS> $results = (gci Cert:\CurrentUser\my\CnEBDEEnnnnnnnBCDFADnnEnnnnEDnnECnnAnnnF | Update-AADAppRegistrationKeyCertificate -verbose ) ; 
+    Pipeline example pushing a specific cert by thumbprint, through.
+    .EXAMPLE
+    PS> $expiredcerts = gci cert:\currentuser\my |  ?{(get-date $_.notafter) -le (get-date ) -AND $_.subject -match 'CBACert'} ;
+    Simple demo to gather expired certs with a subject substring match
+    .EXAMPLE
+    PS> $whatif = $true ;
+    PS> 'C:\usr\work\o365\certs\o365XXX-NOTAFTER-20240622-0928AM.pfx','C:\usr\work\o365\certs\o365YYY-NOTAFTER-20240622-1547PM.pfx' |%{
+    PS> 	$certfile=$_ ; $pfxcred = $null ;
+    PS> 	write-host "==$($certfile):" ;
+    PS> 	$certfile  | clip.exe ;
+    PS> 	$certprops="thumbprint","not*","subject","FriendlyName","use","HasPrivateKey" ;
+    PS> 	if($certfile=gci $certfile){
+    PS> 		$pltImport=[ordered]@{
+    PS> 			FilePath=$certfile.fullname ;
+    PS> 			Exportable=$True ;
+    PS> 			CertStoreLocation = 'Cert:\CurrentUser\My' ;
+    PS> 			whatif=$($whatif) ;
+    PS> 			ErrorAction = 'Stop' ;
+    PS> 		} ;
+    PS> 		if($certfile.extension -eq '.pfx'){
+    PS> 			if(!$pfxcred){
+    PS> 				write-host -foregroundcolor yellow "ENTER PFX PW: (use 'dummy' for User Name)`n(friendlyname copied to CB)" ;
+    PS> 				$pfxcred=(Get-Credential -credential dummy) ;
+    PS> 				write-verbose -verbose:$true  "$((get-date).ToString('HH:mm:ss')):Importing pfx to $($env:computername)..." ;
+    PS> 			} else { write-verbose -verbose:$true  "$((get-date).ToString('HH:mm:ss')):(using existing `$pfxcred password)" };
+    PS> 			$pltImport.Add('Password',$pfxcred.Password) ;
+    PS> 		} ;
+    PS> 		write-host "Import-PfxCertificate  w`n$(($pltImport|out-string).trim())" ;
+    PS> 		$error.clear() ;
+    PS> 		TRY {
+    PS> 			$certobj = Import-PfxCertificate @pltImport ;
+    PS> 			$certobj ;
+    PS> 			if(-not $whatif){
+    PS> 				if($certlocal=get-childitem "$($pltImport.CertStoreLocation)\$($certobj.thumbprint)"){
+    PS> 					$appname = $certlocal.subject.split('.')[0].replace('CN=o365','o365_') ;
+    PS> 					$smsg = "Updating local FriendlyName:cert:PRE w`n$(($certlocal | fl $propsCert |out-string).trim())" ;
+    PS> 					write-host $smsg ;
+    PS> 					$certlocal.FriendlyName = $appName ;
+    PS> 					get-childitem "$($pltImport.CertStoreLocation)\$($certobj.thumbprint)" | fl $certprops ;
+    PS>         } else { write-host "missing installed cert:$($pltImport.CertStoreLocation)\$($certobj.thumbprint)" } ;
+    PS>       } else { write-host "(whatif)" } ;
+    PS> 		} CATCH {
+    PS> 			Write-Warning "$(get-date -format 'HH:mm:ss'): FAILED PROCESSING $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+    PS> 			Stop ;
+    PS> 		} ;
+    PS> 	} else { write-host "missing pfx file:$($certfile)" } ;
+    PS> } ;
+    Demo import an array of pathed .pfx files into local system's Cu\My store, and update FriendlyName to equiv of AppName (backed out of SubjectName of the cert)
+    .EXAMPLE
+    PS> $whatif = $true ;
+    PS> $certstore = 'Cert:\CurrentUser\My' ; 
+    PS> $certprops="thumbprint","notbefore","notafter","subject","FriendlyName","use","HasPrivateKey" ;
+    PS> gci $certstore | ?{$_.Subject -match 'CN=o365.*CBACert-\w{3}' -AND $_.FriendlyName.length -eq 0} |%{
+    PS>   $certlocal=$_ ; 
+    PS>   $sBnrS="`n#*------v PROCESSING FriendlyName update on: $($certlocal.Subject) v------" ; 
+    PS>   write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($sBnrS)" ;
+    PS>   $appname = $certlocal.subject.split('.')[0].replace('CN=o365','o365_') ;
+    PS>   $smsg = "Updating local FriendlyName ($($appname)): on cert: PRE:`n$(($certlocal | fl $certprops |out-string).trim())" ;
+    PS>   write-host $smsg ;
+    PS>   if(-not $whatif){
+    PS>       $certlocal.FriendlyName = $appName ;
+    PS>   } else{write-host "-whatif, skip update"} ; 
+    PS>   get-childitem "$(join-path $certstore $certlocal.thumbprint)" | fl $certprops ;
+    PS>   write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
+    PS> } ;
+    Demo (for other machine post-PFX imports found with blank FriendlyNames) that sets all CurrentUser\My\CN=o365.*CBACert-\w{3} certs with blank FriendlyNames, to use the AzureADApplication's Displayname (derived from the subject name on the imported cert)
+    .LINK
+    https://stackoverflow.com/questions/67565934/powershell-azuread-app-registration-permissions-new-azureadapplication-required
+    https://github.com/tostka/verb-AAD
+    #>
+    #Requires -Version 3
+    #requires -PSEdition Desktop
+    #Requires -Modules AzureAD, verb-logging
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("US","GB","AU")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)]#positiveInt:[ValidateRange(0,[int]::MaxValue)]#negativeInt:[ValidateRange([int]::MinValue,0)][ValidateCount(1,3)]
+    [OutputType('System.Management.Automation.PSCustomObject')] # optional specified output type
+    [CmdletBinding()]
+    [Alias('Rollover-AADAppRegistrationKeyCertificate')]
+    PARAM(
+        [Parameter(Mandatory=$True,ValueFromPipeline = $True,HelpMessage="Expiring/Expired certificate object that is an existing AzureADApplication Key Credential, to be rolled over (removed, regenerated, and added to the existing Application)[-certificate `$ocert]")]
+            [ValidateNotNullOrEmpty()]
+            [System.Security.Cryptography.X509Certificates.X509Certificate2[]]$Certificate,
+        [Parameter(HelpMessage="Path to local certificate store in which authenticating cert will be stored(defaults to CU\My)[-certStore 'Cert:\LocalMachine\My']")]
+            [string] $certStore="Cert:\CurrentUser\My",
+        [Parameter(HelpMessage="Integer years of authentication certificate lifespan, from the current date (defaults 2)[-Years 3]")]
+            [int]$Years=2,
+        [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
+            [switch] $showDebug
+    ) ;
+    BEGIN{
+        #region CONSTANTS_AND_ENVIRO #*======v CONSTANTS_AND_ENVIRO v======
+        # Debugger:proxy automatic variables that aren't directly accessible when debugging (must be assigned and read back from another vari) ; 
+        $rPSCmdlet = $PSCmdlet ; 
+        $rPSScriptRoot = $PSScriptRoot ; 
+        $rPSCommandPath = $PSCommandPath ; 
+        $rMyInvocation = $MyInvocation ; 
+        $rPSBoundParameters = $PSBoundParameters ; 
+        [array]$score = @() ; 
+        if($rPSCmdlet.MyInvocation.InvocationName){
+            if($rPSCmdlet.MyInvocation.InvocationName -match '\.ps1$'){
+                $score+= 'ExternalScript' 
+            }elseif($rPSCmdlet.MyInvocation.InvocationName  -match '^\.'){
+                write-warning "dot-sourced invocation detected!:$($rPSCmdlet.MyInvocation.InvocationName)`n(will be unable to leverage script path etc from MyInvocation objects)" ; 
+                # dot sourcing is implicit scripot exec
+                $score+= 'ExternalScript' ; 
+            } else {$score+= 'Function' };
+        } ; 
+        if($rPSCmdlet.CommandRuntime){
+            if($rPSCmdlet.CommandRuntime.tostring() -match '\.ps1$'){$score+= 'ExternalScript' } else {$score+= 'Function' }
+        } ; 
+        $score+= $rMyInvocation.MyCommand.commandtype.tostring() ; 
+        $grpSrc = $score | group-object -NoElement | sort count ;
+        if( ($grpSrc |  measure | select -expand count) -gt 1){
+            write-warning  "$score mixed results:$(($grpSrc| ft -a count,name | out-string).trim())" ;
+            if($grpSrc[-1].count -eq $grpSrc[-2].count){
+                write-warning "Deadlocked non-majority results!" ;
+            } else {
+                $runSource = $grpSrc | select -last 1 | select -expand name ;
+            } ;
+        } else {
+            write-verbose "consistent results" ;
+            $runSource = $grpSrc | select -last 1 | select -expand name ;
+        };
+        write-host "Calculated `$runSource:$($runSource)" ;
+        'score','grpSrc' | get-variable | remove-variable ; # cleanup temp varis
+
+        # function self-name (equiv to script's: $MyInvocation.MyCommand.Path) ;
+        ${CmdletName} = $rPSCmdlet.MyInvocation.MyCommand.Name ;
+        $PSParameters = New-Object -TypeName PSObject -Property $rPSBoundParameters ;
+        write-verbose "`$rPSBoundParameters:`n$(($rPSBoundParameters|out-string).trim())" ;
+        $Verbose = ($VerbosePreference -eq 'Continue') ; 
+        # pre psv2, no $rPSBoundParameters autovari to check, so back them out:
+        if($rPSCmdlet.MyInvocation.InvocationName){
+            if($rPSCmdlet.MyInvocation.InvocationName  -match '^\.'){
+                $smsg = "detected dot-sourced invocation: Skipping `$PSCmdlet.MyInvocation.InvocationName-tied cmds..." ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            } else { 
+                write-verbose 'Collect all non-default Params (works back to psv2 w CmdletBinding)'
+                $ParamsNonDefault = (Get-Command $rPSCmdlet.MyInvocation.InvocationName).parameters | Select-Object -expand keys | Where-Object{$_ -notmatch '(Verbose|Debug|ErrorAction|WarningAction|ErrorVariable|WarningVariable|OutVariable|OutBuffer)'} ;
+            } ; 
+        } else { 
+            $smsg = "(blank `$rPSCmdlet.MyInvocation.InvocationName, skipping Parameters collection)" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } ; 
+        #region ENVIRO_DISCOVER ; #*------v ENVIRO_DISCOVER v------
+        <#
+        # Debugger:proxy automatic variables that aren't directly accessible when debugging ; 
+        $rPSScriptRoot = $PSScriptRoot ; 
+        $rPSCommandPath = $PSCommandPath ; 
+        $rMyInvocation = $MyInvocation ; 
+        $rPSBoundParameters = $PSBoundParameters ; 
+        #>
+        $ScriptDir = $scriptName = '' ;     
+        if($ScriptDir -eq '' -AND ( (get-variable -name rPSScriptRoot -ea 0) -AND (get-variable -name rPSScriptRoot).value.length)){
+            $ScriptDir = $rPSScriptRoot
+        } ; # populated rPSScriptRoot
+        if( (get-variable -name rPSCommandPath -ea 0) -AND (get-variable -name rPSCommandPath).value.length){
+            $ScriptName = $rPSCommandPath
+        } ; # populated rPSCommandPath
+        if($ScriptDir -eq '' -AND $runSource -eq 'ExternalScript'){$ScriptDir = (Split-Path -Path $rMyInvocation.MyCommand.Source -Parent)} # Running from File
+        # when $runSource:'Function', $rMyInvocation.MyCommand.Source is empty,but on functions also tends to pre-hit from the rPSCommandPath entFile.FullPath ;
+        if( $scriptname -match '\.psm1$' -AND $runSource -eq 'Function'){
+            write-host "MODULE-HOMED FUNCTION:Use `$CmdletName to reference the running function name for transcripts etc (under a .psm1 `$ScriptName will reflect the .psm1 file  fullname)"
+            if(-not $CmdletName){write-warning "MODULE-HOMED FUNCTION with BLANK `$CmdletNam:$($CmdletNam)" } ;
+        } # Running from .psm1 module
+        if($ScriptDir -eq '' -AND (Test-Path variable:psEditor)) {
+            write-verbose "Running from VSCode|VS" ; 
+            $ScriptDir = (Split-Path -Path $psEditor.GetEditorContext().CurrentFile.Path -Parent) ; 
+                if($ScriptName -eq ''){$ScriptName = $psEditor.GetEditorContext().CurrentFile.Path }; 
+        } ;
+        if ($ScriptDir -eq '' -AND $host.version.major -lt 3 -AND $rMyInvocation.MyCommand.Path.length -gt 0){
+            $ScriptDir = $rMyInvocation.MyCommand.Path ; 
+            write-verbose "(backrev emulating `$rPSScriptRoot, `$rPSCommandPath)"
+            $ScriptName = split-path $rMyInvocation.MyCommand.Path -leaf ;
+            $rPSScriptRoot = Split-Path $ScriptName -Parent ;
+            $rPSCommandPath = $ScriptName ;
+        } ;
+        if ($ScriptDir -eq '' -AND $rMyInvocation.MyCommand.Path.length){
+            if($ScriptName -eq ''){$ScriptName = $rMyInvocation.MyCommand.Path} ;
+            $ScriptDir = $rPSScriptRoot = Split-Path $rMyInvocation.MyCommand.Path -Parent ;
+        }
+        if ($ScriptDir -eq ''){throw "UNABLE TO POPULATE SCRIPT PATH, EVEN `$rMyInvocation IS BLANK!" } ;
+        if($ScriptName){
+            if(-not $ScriptDir ){$ScriptDir = Split-Path -Parent $ScriptName} ; 
+            $ScriptBaseName = split-path -leaf $ScriptName ;
+            $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($ScriptName) ;
+        } ; 
+        # blank $cmdlet name comming through, patch it for Scripts:
+        if(-not $CmdletName -AND $ScriptBaseName){
+            $CmdletName = $ScriptBaseName
+        }
+        # last ditch patch the values in if you've got a $ScriptName
+        if($rPSScriptRoot.Length -ne 0){}else{ 
+            if($ScriptName){$rPSScriptRoot = Split-Path $ScriptName -Parent }
+            else{ throw "Unpopulated, `$rPSScriptRoot, and no populated `$ScriptName from which to emulate the value!" } ; 
+        } ; 
+        if($rPSCommandPath.Length -ne 0){}else{ 
+            if($ScriptName){$rPSCommandPath = $ScriptName }
+            else{ throw "Unpopulated, `$rPSCommandPath, and no populated `$ScriptName from which to emulate the value!" } ; 
+        } ; 
+        if(-not ($ScriptDir -AND $ScriptBaseName -AND $ScriptNameNoExt  -AND $rPSScriptRoot  -AND $rPSCommandPath )){ 
+            throw "Invalid Invocation. Blank `$ScriptDir/`$ScriptBaseName/`ScriptNameNoExt" ; 
+            BREAK ; 
+        } ; 
+        # echo results dyn aligned:
+        $tv = 'runSource','CmdletName','ScriptName','ScriptBaseName','ScriptNameNoExt','ScriptDir','PSScriptRoot','PSCommandPath','rPSScriptRoot','rPSCommandPath' ; 
+        $tvmx = ($tv| Measure-Object -Maximum -Property Length).Maximum * -1 ; 
+        $tv | get-variable | %{  write-verbose ("`${0,$tvmx} : {1}" -f $_.name,$_.value) } ; 
+        'tv','tvmx'|get-variable | remove-variable ; # cleanup temp varis
+        
+        #endregion ENVIRO_DISCOVER ; #*------^ END ENVIRO_DISCOVER ^------
+
+        if(-not $DoRetries){$DoRetries = 4 } ;    # # times to repeat retry attempts
+        if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
+        if(-not $RetrySleep){$DawdleWait = 30 } ; # wait time (secs) between dawdle checks
+        if(-not $DirSyncInterval){$DirSyncInterval = 30 } ; # AADConnect dirsync interval
+        if(-not $ThrottleMs){$ThrottleMs = 50 ;}
+        if(-not $rgxDriveBanChars){$rgxDriveBanChars = '[;~/\\\.:]' ; } ; # ;~/\.:,
+        if(-not $rgxCertThumbprint){$rgxCertThumbprint = '[0-9a-fA-F]{40}' } ; # if it's a 40char hex string -> cert thumbprint  
+        if(-not $rgxSmtpAddr){$rgxSmtpAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ; } ; # email addr/UPN
+        if(-not $rgxDomainLogon){$rgxDomainLogon = '^[a-zA-Z][a-zA-Z0-9\-\.]{0,61}[a-zA-Z]\\\w[\w\.\- ]+$' } ; # DOMAIN\samaccountname 
+        if(-not $exoMbxGraceDays){$exoMbxGraceDays = 30} ; 
+
+        #region WHPASSFAIL ; #*------v WHPASSFAIL v------
+        $whPASS = @{Object = "$([Char]8730) PASS" ;ForegroundColor = 'Green' ; NoNewLine = $true ; } ; 
+        $whFAIL = @{
+            # light diagonal cross: ╳ U+2573 DOESN'T RENDER IN PS
+            #Object = [Char]2573 ;
+            object = ' X FAIL'
+            ForegroundColor = 'RED' ;
+            NoNewLine = $true ;
+        } ;
+        <#$smsg = "Testing:Thing" ; 
+        $Passed = $true ; 
+        Write-Host "$($smsg)... " -NoNewline ; 
+        if($Passed){Write-Host @whPASS} else {write-host @whFAIL} ; 
+        Write-Host " (Done)" ;
+        #>
+        #endregion WHPASSFAIL ; #*------^ END  ^------
+
+        #endregion CONSTANTS_AND_ENVIRO ; #*------^ END CONSTANTS_AND_ENVIRO ^------
+    
+        # no EXO, but we need AAD creds - no, prompt, we want a global, no svcacct, and the existing cred is hosed on the cbacert; manual prompt
+
+
+        <#
+        $pltRXO = @{
+            Credential = (Get-Variable -name cred$($tenorg) ).value ;
+            verbose = $($verbose) ; silent = $false ;} ; 
+
+        Connect-AAD @pltRXO ; 
+        #>
+
+        #*======v SUB MAIN v======
+
+        # existing =========================
+        #$whatif=$true ; 
+        $error.clear() ;
+        #$transcript = "d:\scripts\logs\ResourceMbxs-ENT-Perm-Grants-$(get-date -format 'yyyyMMdd-HHmmtt')log.txt" ; 
+        #$stopResults = try {Stop-transcript -ErrorAction stop} catch {} ; 
+        #start-transcript $transcript ; 
+
+        #region BANNER ; #*------v BANNER v------
+        $sBnr="#*======v $(${CmdletName}): v======" ;
+        $smsg = $sBnr ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } #Error|Warn|Debug
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        #endregion BANNER ; #*------^ END BANNER ^------
+
+        # email trigger vari, it will be semi-delimd list of mail-triggering events
+        $script:PassStatus = $null ;
+        [array]$SmtpAttachment = $null ; 
+        $Alltranscripts = @() ;
+        # instant the PassStatus_$($tenorg) 
+        #New-Variable -Name PassStatus_$($tenorg) -scope Script -Value $null ;
+
+        $error.clear() ;
+
+        $dCmds = 'Connect-AzureAD','get-AADToken','convert-TenantIdToTag','New-SelfSignedCertificate','New-AzADAppCredential','New-AADAppAuthCertificate','convertFrom-MarkdownTable' ; 
+        foreach($dcmd in $dCmds){
+            $tMod = (gcm $dcmd).source
+            $pltIMod = @{Name = $tMod ; ErrorAction = 'Stop' ; verbose=$false} ;
+            if($xmod = Get-Module $tMod -ErrorAction Stop| sort version | select -last 1 ){ } else {
+                $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                Try {
+                    Import-Module @pltIMod | out-null ;
+                    $xmod = Get-Module $tMod -ErrorAction Stop | sort version | select -last 1 ;
+                } Catch {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $smsg = $ErrTrapd.Exception.Message ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    Break ;
+                } ;
+            } ; # IsImported
+        } ; 
+
+        # static constants
+        $propsAADAppT = 'DisplayName','ObjectId','AppId' ; 
+        $propsCert = 'FriendlyName', @{name="DnsNameList";expression={$_.DnsNameList.punycode -join ";"}}, 'Thumbprint', 
+            @{name="EnhancedKeyUsageList";expression={$_.EnhancedKeyUsageList.FriendlyName -join ";"}}, 
+            @{Name='Extensions';Expression={$_.Extensions.KeyUsages }}, 'NotAfter', 'NotBefore', 
+            @{Name='IssuerName';Expression={$_.IssuerName.name }}, 'HasPrivateKey', 'PrivateKey', 'PublicKey' ;
+        $propsAADU = 'UserPrincipalName','DisplayName','MailNickName','PhysicalDeliveryOfficeName' ; 
+        $propsAADU = 'ObjectId','DisplayName','UserPrincipalName','UserType' ; 
+        $propsKeyCred = 'KeyId','Type','StartDate','EndDate','Usage' ;
+        $propsAADApp = 'DisplayName','ObjectId','ObjectType','AppId','AvailableToOtherTenants','KeyCredentials',
+            'PasswordCredentials','PublisherDomain','RequiredResourceAccess','SignInAudience' ; 
+
+        # dyn values
+        $startDate = Get-Date ;
+        $endDate = $startDate.AddYears($years) ;
+
+        $token = get-AADToken ;     
+        if( ($null -eq $token) -OR ($token.count -eq 0)){
+            $smsg = "CONNECTING TO AZUREAD - USE YOUR SID! DO *NOT* USE THE SVC ACCT, OR THE EXPIRED/ING CBA CERT!" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            TRY{
+                $AADConnection = Connect-AzureAD -ea STOP ; 
+                $smsg = "AAD:`n$(($AADConnection|out-string).trim())" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } CATCH {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ; 
+            # conn to AAD
+            $token = get-AADToken ;
+            # $TenOrg = get-TenantTag -Credential $Credential ;
+            $TenOrg = $TokenTag = convert-TenantIdToTag -TenantId ($token.AccessToken).tenantid -verbose:$($verbose) ;
+            $rgxThisTenOrg = [regex]::Escape("CBACert-$($TenOrg).") ; 
+        }elseif($token.count -gt 1){
+        } else {write-verbose "AzureAD already Connected"} ; 
+        # constants/values
+        TRY{
+            $tenantDetail = Get-AzureADTenantDetail -ErrorAction STOP ;
+            $TenantDomain = ($tenantDetail | select -expand VerifiedDomains |?{$_._Default -eq $true}).Name ; 
+        } CATCH {
+            $ErrTrapd=$Error[0] ;
+            $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+            else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ; 
+        # check if using Pipeline input or explicit params:
+        if ($rPSCmdlet.MyInvocation.ExpectingInput) {
+            $smsg = "Data received from pipeline input: '$($InputObject)'" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } else {
+            # doesn't actually return an obj in the echo
+            #$smsg = "Data received from parameter input: '$($InputObject)'" ;
+            #if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            #else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } ;
+    } #  # BEG-E
+
+    PROCESS{
+        $ttl = $Certificate|  measure | select -expand count ; 
+        $Prcd = 0 ; 
+        foreach($thisCert in $Certificate) {
+            $Prcd++ ; 
+            $smsg = $sBnrS="`n#*------v PROCESSING ($($prcd)/$($ttl)): $($thiscert.Subject)::$($thiscert.thumbprint) v------" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            #region START-LOG #*======v START-LOG OPTIONS v======
+            #region START-LOG-HOLISTIC #*------v START-LOG-HOLISTIC v------
+            # Single log for script/function example that accomodates detect/redirect from AllUsers scope'd installed code, and hunts a series of drive letters to find an alternate logging dir (defers to profile variables)
+            #${CmdletName} = $rPSCmdlet.MyInvocation.MyCommand.Name ;
+            if(!(get-variable LogPathDrives -ea 0)){$LogPathDrives = 'd','c' };
+            foreach($budrv in $LogPathDrives){if(test-path -path "$($budrv):\scripts" -ea 0 ){break} } ;
+            if(!(get-variable rgxPSAllUsersScope -ea 0)){
+                $rgxPSAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps(((d|m))*)1|dll)$" ;
+            } ;
+            if(!(get-variable rgxPSCurrUserScope -ea 0)){
+                $rgxPSCurrUserScope="^$([regex]::escape([Environment]::GetFolderPath('MyDocuments')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps((d|m)*)1|dll)$" ;
+            } ;
+            $pltSL=[ordered]@{Path=$null ;NoTimeStamp=$false ;Tag=$null ;showdebug=$($showdebug) ; Verbose=$($VerbosePreference -eq 'Continue') ; whatif=$($whatif) ;} ;
+            if($thisCert.friendlyname){
+                $pltSL.Tag = $thisCert.friendlyname
+            } else { 
+                $smsg = "Target Cert: $($thisCert.Subject) has a *blank* FriendLyName`nUsing cleaned SubjectName CN name (wo domain)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $pltSL.Tag = $thiscert.Subject.replace('CN=','').split('.')[0] ; 
+            } ; 
+            # if using [CmdletBinding(SupportsShouldProcess)] + -WhatIf:$($WhatIfPreference):
+            #$pltSL=[ordered]@{Path=$null ;NoTimeStamp=$false ;Tag=$null ;showdebug=$($showdebug) ; Verbose=$($VerbosePreference -eq 'Continue') ; whatif=$($WhatIfPreference) ;} ;
+            #$pltSL=[ordered]@{Path=$null ;NoTimeStamp=$false ;Tag="$($ticket)-$($TenOrg)-LASTPASS-" ;showdebug=$($showdebug) ; Verbose=$($VerbosePreference -eq 'Continue') ; whatif=$($WhatIfPreference) ;} ;
+            #$pltSL.Tag = $ModuleName ; 
+            if($script:rPSCommandPath){ $prxPath = $script:rPSCommandPath }
+            elseif($script:PSCommandPath){$prxPath = $script:PSCommandPath}
+            if($rMyInvocation.MyCommand.Definition){$prxPath2 = $rMyInvocation.MyCommand.Definition }
+            elseif($MyInvocation.MyCommand.Definition){$prxPath2 = $MyInvocation.MyCommand.Definition } ; 
+            if($prxPath){
+                if(($prxPath -match $rgxPSAllUsersScope) -OR ($prxPath -match $rgxPSCurrUserScope)){
+                    $bDivertLog = $true ; 
+                    switch -regex ($prxPath){
+                        $rgxPSAllUsersScope{$smsg = "AllUsers"} 
+                        $rgxPSCurrUserScope{$smsg = "CurrentUser"}
+                    } ;
+                    $smsg += " context script/module, divert logging into [$budrv]:\scripts" 
+                    write-verbose $smsg  ;
+                    if($bDivertLog){
+                        if((split-path $prxPath -leaf) -ne $cmdletname){
+                            # function in a module/script installed to allusers|cu - defer name to Cmdlet/Function name
+                            $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($cmdletname).ps1") ;
+                        } else {
+                            # installed allusers|CU script, use the hosting script name
+                            $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $prxPath -leaf)) ;
+                        }
+                    } ;
+                } else {
+                    $pltSL.Path = $prxPath ;
+                } ;
+           }elseif($prxPath2){
+                if(($prxPath2 -match $rgxPSAllUsersScope) -OR ($prxPath2 -match $rgxPSCurrUserScope) ){
+                     $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $prxPath2 -leaf)) ;
+                } elseif(test-path $prxPath2) {
+                    $pltSL.Path = $prxPath2 ;
+                } elseif($cmdletname){
+                    $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($cmdletname).ps1") ;
+                } else {
+                    $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$CMDLETNAME, FROM WHICH TO BUILD A START-LOG.PATH!" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } #Error|Warn|Debug 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    BREAK ;
+                } ; 
+            } else{
+                $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$CMDLETNAME, FROM WHICH TO BUILD A START-LOG.PATH!" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } #Error|Warn|Debug 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                BREAK ;
+            }  ;
+            write-verbose "start-Log w`n$(($pltSL|out-string).trim())" ; 
+            $logspec = start-Log @pltSL ;
+            $error.clear() ;
+            TRY {
+                if($logspec){
+                    $logging=$logspec.logging ;
+                    $logfile=$logspec.logfile ;
+                    $transcript=$logspec.transcript ;
+                    $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+                    if($stopResults){
+                        $smsg = "Stop-transcript:$($stopResults)" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    } ; 
+                    $startResults = start-Transcript -path $transcript ;
+                    if($startResults){
+                        $smsg = "start-transcript:$($startResults)" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ; 
+                } else {throw "Unable to configure logging!" } ;
+            } CATCH [System.Management.Automation.PSNotSupportedException]{
+                if($host.name -eq 'Windows PowerShell ISE Host'){
+                    $smsg = "This version of $($host.name):$($host.version) does *not* support native (start-)transcription" ; 
+                } else { 
+                    $smsg = "This host does *not* support native (start-)transcription" ; 
+                } ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } CATCH {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ;
+            #endregion START-LOG-HOLISTIC #*------^ END START-LOG-HOLISTIC ^------
+       
+            if($thisCert.friendlyname){
+                $appName = $thisCert.friendlyname ; 
+            } else { 
+                $smsg = "Target Cert: $($thisCert.Subject) has a *blank* FriendLyName`nsetting `$appName to cleaned SubjectName CN name (wo domain)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $appName = $ocert.Subject.replace('CN=','').split('.')[0] ; 
+            } ; 
+        
+            if($thisCert.subject -match $rgxThisTenOrg){
+                $smsg = "$($thisCert.subject) confirmed matches `$TenOrg CBA pattern: $($rgxThisTenOrg)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } else { 
+                $smsg = "`n`n$($thisCert.subject) DOES NOT MATCH $TenOrg CBA pattern: $($rgxThisTenOrg)!" ; 
+                $SMSG += "SKIPPING!`n(may want to issue disconnect-AzureAD if on wrong tenant)`n`n" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
+                $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+                if($stopResults){
+                    $smsg = "Stop-transcript:$($stopResults)" ; 
+                    # Opt:verbose
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    # # Opt:pswlt
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                } ; 
+
+                $smsg = "$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                Continue
+            } ; 
+
+            #$Years=2 ; 
+            if($appName.length -gt 32){write-warning "`$appName exceeds 32char limit!:`n$($appName)" ; Break ; } ; 
+            #$certStore = "Cert:\CurrentUser\My" ;
+
+            $appFqDN = "$(($appName.ToCharArray() |?{$_ -match '[a-zA-Z0-9-]'}) -join '').$($TenantDomain)" ;
+            $appReplyUrl = $adalUrlIdentifier = "https://$($AppFqDN)/" ;
+
+            $pltGAADA=[ordered]@{
+                Filter = "DisplayName eq '$($appName)'" ;
+                erroraction = 'STOP' ;
+            } ;
+            $smsg = "Get-AzureADApplication w`n$(($pltGAADA|out-string).trim())" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            if($application = Get-AzureADApplication @pltGAADA){}else{
+                $smsg = "Unable to resolve certificate FriendlyName to an existing AzureADApplication Displayname!" ; 
+                $smsg += "`nInput target Application Display, and we'll attempt to re-resolve" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $aDName = read-host "Input target existing AzureADApplication DisplayName" ; 
+                $appName = $aDName ; 
+                $pltGAADA.Filter = "DisplayName eq '$($appName)'" ;
+                if($application = Get-AzureADApplication @pltGAADA){}else{
+                    $smsg = "Unable to resolve specified Displayname to an existing AzureADApplication Displayname!`nABORTING!" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+                    if($stopResults){
+                        $smsg = "Stop-transcript:$($stopResults)" ; 
+                        # Opt:verbose
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        # # Opt:pswlt
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    } ; 
+                    Continue ; 
+                } ; 
+            } ; 
+            if($application){
+                $nOwner = Get-AzureADApplicationOwner -ObjectId $application.ObjectId -ea STOP ; 
+                $servicePrincipal = Get-AzureADServicePrincipal -All $true -ea STOP | Where-Object {$_.AppId -eq $application.AppId } ;
+                if($KeyCred = $application | get-AzureADApplicationKeyCredential -erroraction Continue){
+                    $smsg = "Remove expired/expiring existing KeyCred..." ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $pltRAADKeyCred=[ordered]@{
+                        ObjectId = $application.ObjectId ;
+                        KeyId = $KeyCred.KeyId ; 
+                        erroraction = 'STOP' ;
+                    } ;
+                    $smsg = "Remove-AzureADApplicationKeyCredential w`n$(($pltRAADKeyCred|out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    TRY{
+                        Remove-AzureADApplicationKeyCredential @pltRAADKeyCred
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ; 
+                    $KeyCred = $null ; # removed, no longer valid, will reuse on new
+                } ; # $Keycred
+                if(gci (join-path -path $certStore -childpath $thisCert.thumbprint)){
+                    # clear old cert copy in store
+                    $smsg = "Removing Existing Old Cert: `$thisCert | remove-item -force" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    TRY{
+                        $thisCert | remove-item -force -verbose ; 
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ; 
+                } ; 
+                if(-not $Keycred_){
+                    # copy the appname to cb, for searching key archive for updates & pfx pw etc
+                    $smsg = "(copying the application.displayname to clipboard - for key vault lookup" ; 
+                    $smsg += "`n$($application.displayname)`n)" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $application.DisplayName | out-Clipboard ; 
+                    # call new: New-AADAppAuthCertificate() (creates selfsigned cert, exports to pfx, returns summary)
+                    $pltNAAC=[ordered]@{
+                        DnsName=$AppFqDN ;
+                        CertStoreLocation = $certStore ;
+                        EndDate=$endDate ;
+                        StartDate = $startDate ; 
+                        verbose = $($verbose) ; 
+                        whatif = $($whatif) ;
+                    } ;
+                    $smsg = "New-AADAppAuthCertificate w`n$(($pltNAAC|out-string).trim())" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $objAppAuthCert = New-AADAppAuthCertificate @pltNAAC ; 
+                    if($objAppAuthCert.Valid){
+                        $smsg = "New-AADAppAuthCertificate returned VALID outputs`n$(($objAppAuthCert|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $certlocal = $objAppAuthCert.Certificate ; 
+                        $certRaw = $objAppAuthCert.CertRaw ; 
+                        # need to update: $pltExPfx.FilePath to a variable
+                        $PfxPath = $objAppAuthCert.PFXPath ; 
+                        $smsg = "Updating local FriendlyName:cert:PRE w`n$(($certlocal | fl $propsCert |out-string).trim())" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        $certlocal.FriendlyName = $appName ; 
+                        $smsg = "certlocal:FINAL w`n$(($certlocal | fl $propsCert |out-string).trim())`n`n" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } elseif($whatif){
+                        $smsg = "-whatif: no return expected" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } else { 
+                        $smsg ="New-AADAppAuthCertificate returned INVALID outputs`n$(($objAppAuthCert|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        throw $smsg ; 
+                        break ; 
+                    } ; 
+
+                    $pltNAADAppKeyCred=[ordered]@{
+                        ObjectId = $application.ObjectId ;
+                        CustomKeyIdentifier = "$appName" ;
+                        Type = 'AsymmetricX509Cert' ;
+                        Usage = 'Verify' ;
+                        Value = $certRaw ;
+                        StartDate = $startDate ;
+                        EndDate = $endDate.AddDays(-1) ;
+                    } ;
+                    $smsg = "New-AzureADApplicationKeyCredential w`n$(($pltNAADAppKeyCred|out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    # 2:14 PM 6/9/2022 cap output, keep out of pipeline
+                    $KeyCred = New-AzureADApplicationKeyCredential @pltNAADAppKeyCred ; 
+
+    <#
+    | SourceValue | Value | StoredAs            |
+    | -------------------------------- | ------------------- |
+    | Application (client) ID: | $($application.AppId)         | AppClientID         |
+    | Directory (tenant) ID: | $($tenantDetail.ObjectId)           | Directory(tenant)ID |
+    | DisplayName:  |$($application.DisplayName)                     | Dname               |
+    | DnsNameList:  |$($certlocal) | DNSName             |
+    | StartDate, EndDate:  |$($KeyCred.StartDate) $($KeyCred.EndDate)               | KeyCredDates        |
+    | KeyId:  |$($KeyCred.KeyId)                            | KeyCredID           |
+    | ObjectID: |$($application.ObjectID)                        | ObjectID            |
+    | (demo EXO conn) |[`$pltCXOCThmb splat block below] | PSUse               |
+    | SvcPrincipal.ObjectID: |$($servicePrincipal.ObjectId)           | SvcPrinObjID        |
+    | Thumbprint: |$($certlocal.Thumbprint)                       | Thumbprint          |
+    #>
+                    $hInstructions =@"
+
+#*======v POST CERT ROLLOVER INSTRUCTIONS ($($prcd)/$($ttl)): $($thiscert.Subject)::$($thiscert.thumbprint) v======
+
+## AAD App Registration ApplicationKeyCredential Rollover Completed:
+DisplayName:             $($application.DisplayName)
+Application (client) ID: $($application.AppId) (AppID)
+ObjectID:                $($application.ObjectID)
+SvcPrincipal.ObjectID:   $($servicePrincipal.ObjectId)
+Directory (tenant) ID:   $($tenantDetail.ObjectId)
+Supported account types: $($tenantDetail.SignInAudience)
+Client credentials:      $($tenantDetail.KeyCredentials)
+Redirect URIs:           $($tenantDetail.ReplyUrls) 
+IdentifierUris:          $($tenantDetail.IdentifierUris)
+Owner:                   
+$(($nOwner| ft -a $propsAADU|out-string).trim()))
+
+... with ApplicationKeyCredential:
+$(($KeyCred | fl $propsKeyCred |out-string).trim())
+
+...with Certificate-Based-Authentication (CBA), using the cert:
+$(($certlocal | fl $propsCert |out-string).trim())
+
+... which is also exported to PFX at:
+$($PfxPath) 
+
+## To copy PFX back for storage:
+copy-item -path $($PfxPath) -dest \\tsclient\c\usr\work\o365\certs\ -verbose
+
+## Record the above for permanent reference (in password archive):
+
+$(
+$hsTable = @"
+| SourceValue | Value | StoredAs |
+| -------------------------------- | ------------------- |
+| Application (client) ID: | $($application.AppId)| AppClientID |
+| Directory (tenant) ID: | $($tenantDetail.ObjectId)| Directory(tenant)ID |
+| DisplayName:  |$($application.DisplayName)| Dname |
+| DnsNameList:  |$($certlocal.DnsNameList.unicode) | DNSName|
+| StartDate, EndDate:  |$($KeyCred.StartDate) $($KeyCred.EndDate) | KeyCredDates |
+| KeyId:  |$($KeyCred.KeyId)| KeyCredID |
+| ObjectID: |$($application.ObjectID)| ObjectID |
+| (demo EXO conn) |[`$pltCXOCThmb splat block below] | PSUse |
+| SvcPrincipal.ObjectID: |$($servicePrincipal.ObjectId)| SvcPrinObjID |
+| Thumbprint: |$($certlocal.Thumbprint)| Thumbprint |
+"@ ; 
+$hsTable| convertFrom-MarkdownTable | convertTo-MarkdownTable -border 
+
+)
+
+- also attach the PFX to key archive, 
+- and set the key archive entry to EXPIRE one month before $($KeyCred.EndDate))
+
+## The new Certificate+RegisteredApp combo should now be useable for authentication into configured o365 services.
+
+### Verification against CBA logon using the app & local cert, into EXO:
+
+`$pltCXOCThmb=[ordered]@{
+CertificateThumbPrint = '$($certlocal.thumbprint)' ;
+AppID = '$($application.AppId)' ;
+Organization = '$($TenantDomain)' ;
+Prefix = 'xo' ;
+ShowBanner = `$false ;
+};
+write-host "Connect-ExchangeOnline w
+`$((`$pltCXOCThmb|out-string).trim())" ;
+try{Disconnect-ExchangeOnline ; get-pssession | Remove-PSSession ; Connect-ExchangeOnline @pltCXOCThmb } catch {Connect-ExchangeOnline @pltCXOCThmb } ;
+get-xomailbox -resultsize 1 ;
+
+"@ ; 
+                    # credfile purge code, we know the details now, easiest to do it here, rather than manually post; and the file is worthless, the cert is gone/non-functional
+                    if($credfile = get-childitem "$(split-path $profile)\keys" | ? {$_.Extension -eq '.psxml'} |?{$_.name -match [regex]::Escape($certlocal.FriendlyName)}){
+                        $smsg = "Existing cred .psxml file:" ; 
+                        $smsg += "`n$($credfile.fullname)"
+                        $smsg += "`n...will need to be removed, and Get-AdminCred() run to reset the file to updated specs above" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        $pltRCF=[ordered]@{
+                            path = $credfile.fullname ; 
+                            force = $true ; 
+                            erroraction = 'STOP' ;
+                            verbose = $true ; 
+                        } ;
+                        $smsg = "Remove-item w`n$(($pltRCF|out-string).trim())" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $smsg = "Do you want to remove the file _NOW_?" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                        $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ; 
+                        if ($bRet.ToUpper() -eq "YYY") {
+                            $smsg = "(Moving on)" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            TRY{
+                                remove-item @pltRCF ; 
+                            } CATCH {
+                                $ErrTrapd=$Error[0] ;
+                                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            } ; 
+
+                            $hsCredFileRemove=@"
+
+===========
+
+## code to remove matching cred file from other machines:
+
+get-childitem "$(split-path $profile)\keys" | ? {$_.Extension -eq '.psxml' -AND $_.name -match `"$([regex]::Escape($certlocal.FriendlyName))"} | remove-item -verbose -whatif ; 
+
+"@ ; 
+
+                            $hInstructions += $hsCredFileRemove ; 
+
+                        } ;
+
+                    } ; 
+
+                    if($certlocal){
+                        $hsCertLocalRemove=@"
+
+===========
+
+## code to remove matching in-hive Certificate 
+$($thisCert.thumbprint) 
+from other machines (before PFX import):
+
+get-childitem $(join-path -path $certStore -childpath $thisCert.thumbprint) | remove-item -force -verbose ; ; 
+
+"@ ; 
+
+                            $hInstructions += $hsCertLocalRemove ; 
+
+                    } ; 
+
+                    if($pfxpath ){
+                        $hsPFXImport=@"
+
+===========
+
+## code to import pfx file on other machines and set FriendlyName to application's displayname (required, as the certs are discovered via the FriendlyName value)
+
+`$pltImport=[ordered]@{
+    FilePath=`"$(join-path -path C:\usr\work\o365\certs\ -child (split-path $pfxpath -leaf))`" ;
+    Exportable=`$True ;
+    CertStoreLocation = 'Cert:\CurrentUser\My' ;
+} ;
+`$propsCert="thumbprint","notbefore","notafter","subject","FriendlyName","use","HasPrivateKey" ;
+write-host -foregroundcolor yellow "ENTER PFX PW: (use 'dummy' for User Name)``n (friendlyname copied to CB)" ;
+`$pfxcred=(Get-Credential -credential dummy) ;
+write-verbose -verbose:`$true  "`$((get-date).ToString('HH:mm:ss')):Importing pfx to `$(`$env:computername)..." ;
+`$pltImport.Add('Password',`$pfxcred.Password) ;
+write-host "Import-PfxCertificate  w``n `$((`$pltImport|out-string).trim())" ;
+`$certobj = Import-PfxCertificate @pltImport ;
+`$certobj ;
+if(`$certlocal=get-childitem "`$(`$pltImport.CertStoreLocation)\`$(`$certobj.thumbprint)"){
+    `$appname = `$certlocal.subject.split('.')[0].replace('CN=o365','o365_') ;
+    `$smsg = "Updating local FriendlyName:cert:PRE w`n`$((`$certlocal | fl `$propsCert |out-string).trim())" ;
+    write-host `$smsg ;
+    `$certlocal.FriendlyName = `$appName ;
+    get-childitem "`$(`$pltImport.CertStoreLocation)\`$(`$certobj.thumbprint)" | fl `$propsCert ;
+} else { write-host "missing installed cert:`$(`$pltImport.CertStoreLocation)\`$(`$certobj.thumbprint)" } ;
+
+
+
+"@ ; 
+                        $hInstructions += $hsPFXImport ; 
+                    } ; 
+
+
+                    $hInstructions += @"
+
+#*======^ END POST CERT ROLLOVER INSTRUCTIONS  ^======
+
+"@ ; 
+                    
+                    $smsg = $hInstructions ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                    $smsg = "`n`n==>Be sure to run get-admincred() immediately after exiting this script!`n`n" ; 
+                    $smsg += "`nThen close & reopen this PS window, to refresh to latest creds" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
+                    $outReport = [ordered]@{
+                        Application = $application ; 
+                        ServicePrincipal = $servicePrincipal ; 
+                        TenantDetail = $tenantDetail ;
+                        Owner = $nOwner ; 
+                        KeyCred = $KeyCred ; 
+                        Certificate = $certlocal ; 
+                        PfxPath = $PfxPath ; 
+                        PriorCertificateThumbprint = $thisCert.thumbprint ; 
+                        Instructions = $hInstructions ; 
+                    } ; 
+
+                    $smsg = "Returning update summary to pipelinew`n$(($outReport.Certificate.Subject|out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #$certlocal
+                    New-Object PSObject -Property $outReport | write-output ; 
+                    
+                } ; # if -not $KeyCred
+                                
+            } ; # $application
+
+            $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+            if($stopResults){
+                $smsg = "Stop-transcript:$($stopResults)" ; 
+                # Opt:verbose
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                # # Opt:pswlt
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            } ; 
+
+            $smsg = "$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H2 } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+            #if($prcd -le $ttl){
+                #$smsg = "REMAINING PENDING CERTIFICATES TO PROCESS" ; 
+                #$smsg += "`nwaiting here to permit data-recording on the above, before moving on" ; 
+                $smsg = "`n(waiting here to permit data-recording on the above, before moving on)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $bRet=Read-Host "Enter YYY to continue."  ; 
+                if ($bRet.ToUpper() -eq "YYY") {
+                    $smsg = "(Moving on)" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ; 
+        
+            #} ; 
+        } ;  # loop-E
+
+    }  # PROC-E
+    END{
+        $smsg = "$($sBnr.replace('=v','=^').replace('v=','^='))" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } #Error|Warn|Debug
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+    } ;  # END-E
+}
+
+#*------^ Update-AADAppRegistrationKeyCertificate.ps1 ^------
+
+
 #*------v Wait-AADSync.ps1 v------
 Function Wait-AADSync {
     <#
@@ -10001,7 +11397,7 @@ Function Wait-AADSync {
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,convert-AADUImmuntableIDToADUObjectGUID,convert-ADUObjectGUIDToAADUImmuntableID,Disconnect-AAD,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADLicenseFullName,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,get-aaduser,get-AADUserLastSync,get-AADUserLicenseDetails,Get-DsRegStatus,Get-JWTDetails,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,import-AADAppRegistrationPFX,Initialize-AADSignErrorsHash,New-AADAppAuthCertificate,New-AADAppPermissionsObject,profile-AAD-Signons,write-log,reset-HostIndent,push-HostIndent,pop-HostIndent,set-HostIndent,write-HostIndent,clear-HostIndent,get-HostIndent,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,Remove-AADAppRegistrationCBAAuth,remove-AADUserLicense,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,set-AADUserUsageLocation,test-AADUserIsLicensed,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,toggle-AADLicense,Wait-AADSync -Alias *
+Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,caadTOR,caadVEN,cmsolcmw,cmsolTOL,cmsolTOR,cmsolVEN,Connect-AAD,connect-AzureRM,Connect-MSOL,convert-AADUImmuntableIDToADUObjectGUID,convert-ADUObjectGUIDToAADUImmuntableID,Disconnect-AAD,get-AADBearerToken,get-AADBearerTokenHeaders,get-AADCertToken,get-AADLastSync,get-AADLicenseFullName,get-AADlicensePlanList,get-AADToken,get-AADTokenHeaders,get-aaduser,get-AADUserLastSync,get-AADUserLicenseDetails,Get-DsRegStatus,Get-JWTDetails,Get-MsolDisabledPlansForSKU,Get-MsolUnexpectedEnabledPlansForUser,Get-MsolUserLicense,get-MsolUserLicenseDetails,Get-ServiceToken,Get-TokenCache,import-AADAppRegistrationPFX,Initialize-AADSignErrorsHash,New-AADAppAuthCertificate,New-AADAppPermissionsObject,profile-AAD-Signons,write-log,reset-HostIndent,push-HostIndent,pop-HostIndent,set-HostIndent,write-HostIndent,clear-HostIndent,get-HostIndent,get-colorcombo,Initialize-AADSignErrorsHash,Cleanup,Remove-AADAppRegistrationCBAAuth,remove-AADUserLicense,Remove-MsolUserDirectLicenses,resolve-GuestExternalAddr2UPN,search-AADSignInReports,search-GraphApiAAD,set-AADUserUsageLocation,test-AADUserIsLicensed,test-AzureADSessionIsGlobalAdmin,test-MsolUserLicenseDirectAssigned,test-MsolUserLicenseGroupAssigned,toggle-AADLicense,Update-AADAppRegistrationKeyCertificate,Wait-AADSync -Alias *
 
 
 
@@ -10009,8 +11405,8 @@ Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,ca
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUWeTVA4O6VxMo5IWMI5AU1G7T
-# VrygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUfN2NpusmoVUknG1vzeFn9/MK
+# tpOgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -10025,9 +11421,9 @@ Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,ca
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRZIaDj
-# kk8KGxhETzQo7Uyj5OFzVDANBgkqhkiG9w0BAQEFAASBgLqE+p2bE2t/jnB5Xoa/
-# Fdchp0y0eAXEKKo/1vLPWC6MYmZ+6H59SH88nmaP2v7MuSWXgxZ/76mepwtEpk0r
-# MXi08kCpBlgC66YtRu+OUe6FY+HjES+YKbrF2uGk3Eid6viScwYvNHqZ1DUy826s
-# H+GElKRx02OLZjAPps+l8GsI
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSvoOBq
+# dl+0cNOPdmZQ9sZgLlyu+zANBgkqhkiG9w0BAQEFAASBgHwhoErbBeVZgO7iP1Bb
+# 8yGl22eox5XKGpILVq04nfClLjVapGMNGF6VxjgJNMSvtIN+AOrTicv+bUnHcMfT
+# MkvLoCNYTiuMd7oPBqKH4xkZPTkVHmHrECi9m0Fj8cSkVX+ddbZ8k2mUzMd1muB+
+# 9ONHTndzWehpeTsdZqoIa7ZZ
 # SIG # End signature block

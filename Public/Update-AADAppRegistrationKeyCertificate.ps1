@@ -19,6 +19,7 @@ function Update-AADAppRegistrationKeyCertificate{
     AddedWebsite: https://stackoverflow.com/users/2439507/myatix
     AddedTwitter: 
     REVISIONS
+    * 4:48 PM 7/15/2024 pull recursive vaad require stmt
     * 2:44 PM 6/27/2024, fixed error in old cert removal on remote (cited thumb for new cert, not input cert); added PriorCertThumbprint to output;  tested, confirmed functional for TOL ESvc rollover ;  add other machine cert removal; rarranged output  instructions to single block; add returned summary object fix spaces after $'s in demo output code ; 
         functionalize and ren Rollover-AADAppRegistrationCBAAuth -> Update-AADAppRegistrationKeyCertificate
     * 3:30 PM 6/26/2024 used it to roll over the , 6/2022 CBA sets ; added output code demoing code to to purge obsolete .psxml cred files on other machines ; 
@@ -165,7 +166,7 @@ function Update-AADAppRegistrationKeyCertificate{
     #>
     #Requires -Version 3
     #requires -PSEdition Desktop
-    #Requires -Modules AzureAD, verb-AAD, verb-logging
+    #Requires -Modules AzureAD, verb-logging
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("US","GB","AU")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)]#positiveInt:[ValidateRange(0,[int]::MaxValue)]#negativeInt:[ValidateRange([int]::MinValue,0)][ValidateCount(1,3)]
     [OutputType('System.Management.Automation.PSCustomObject')] # optional specified output type
     [CmdletBinding()]

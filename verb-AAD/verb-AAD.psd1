@@ -12,7 +12,7 @@
 RootModule = 'verb-AAD.psm1'
 
 # Version number of this module.
-ModuleVersion = '5.0.0'
+ModuleVersion = '5.1.0'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -69,7 +69,7 @@ Description = 'Azure AD-related generic functions'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('add-AADUserLicense','Add-ADALType','caadCMW','caadtol','caadTOR','caadVEN','cmsolcmw','cmsolTOL','cmsolTOR','cmsolVEN','Connect-AAD','connect-AzureRM','Connect-MSOL','convert-AADUImmuntableIDToADUObjectGUID','convert-ADUObjectGUIDToAADUImmuntableID','Disconnect-AAD','get-AADBearerToken','get-AADBearerTokenHeaders','get-AADCertToken','get-AADLastSync','get-AADLicenseFullName','get-AADlicensePlanList','get-AADToken','get-AADTokenHeaders','get-aaduser','get-AADUserLastSync','get-AADUserLicenseDetails','Get-DsRegStatus','Get-JWTDetails','Get-MsolDisabledPlansForSKU','Get-MsolUnexpectedEnabledPlansForUser','Get-MsolUserLicense','get-MsolUserLicenseDetails','Get-ServiceToken','Get-TokenCache','import-AADAppRegistrationPFX','Initialize-AADSignErrorsHash','New-AADAppAuthCertificate','New-AADAppPermissionsObject','profile-AAD-Signons','write-log','reset-HostIndent','push-HostIndent','pop-HostIndent','set-HostIndent','write-HostIndent','clear-HostIndent','get-HostIndent','get-colorcombo','Initialize-AADSignErrorsHash','Cleanup','Remove-AADAppRegistrationCBAAuth','remove-AADUserLicense','Remove-MsolUserDirectLicenses','resolve-GuestExternalAddr2UPN','search-AADSignInReports','search-GraphApiAAD','set-AADUserUsageLocation','test-AADUserIsLicensed','test-MsolUserLicenseDirectAssigned','test-MsolUserLicenseGroupAssigned','toggle-AADLicense','Wait-AADSync')
+FunctionsToExport = @('add-AADUserLicense','Add-ADALType','caadCMW','caadtol','caadTOR','caadVEN','cmsolcmw','cmsolTOL','cmsolTOR','cmsolVEN','Connect-AAD','connect-AzureRM','Connect-MSOL','convert-AADUImmuntableIDToADUObjectGUID','convert-ADUObjectGUIDToAADUImmuntableID','Disconnect-AAD','get-AADBearerToken','get-AADBearerTokenHeaders','get-AADCertToken','get-AADLastSync','get-AADLicenseFullName','get-AADlicensePlanList','get-AADToken','get-AADTokenHeaders','get-aaduser','get-AADUserLastSync','get-AADUserLicenseDetails','Get-DsRegStatus','Get-JWTDetails','Get-MsolDisabledPlansForSKU','Get-MsolUnexpectedEnabledPlansForUser','Get-MsolUserLicense','get-MsolUserLicenseDetails','Get-ServiceToken','Get-TokenCache','import-AADAppRegistrationPFX','Initialize-AADSignErrorsHash','New-AADAppAuthCertificate','New-AADAppPermissionsObject','profile-AAD-Signons','write-log','reset-HostIndent','push-HostIndent','pop-HostIndent','set-HostIndent','write-HostIndent','clear-HostIndent','get-HostIndent','get-colorcombo','Initialize-AADSignErrorsHash','Cleanup','Remove-AADAppRegistrationCBAAuth','remove-AADUserLicense','Remove-MsolUserDirectLicenses','resolve-GuestExternalAddr2UPN','search-AADSignInReports','search-GraphApiAAD','set-AADUserUsageLocation','test-AADUserIsLicensed','test-AzureADSessionIsGlobalAdmin','test-MsolUserLicenseDirectAssigned','test-MsolUserLicenseGroupAssigned','toggle-AADLicense','Update-AADAppRegistrationKeyCertificate','Wait-AADSync')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = '*'
@@ -87,7 +87,7 @@ AliasesToExport = '*'
 # ModuleList = @()
 
 # List of all files packaged with this module
-# FileList = @()
+FileList = @('Quick-Start-Installation-and-Example.md','CHANGELOG.md','README.md','ABOUT_verb-AAD.help.txt','LICENSE.txt')
 
 # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
 PrivateData = @{
@@ -126,8 +126,8 @@ PrivateData = @{
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUd7nR2vittEkJofafdpNrCwKk
-# //agggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUlOGKmIbsP6R+yj2ooFfPBY65
+# JgegggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -142,9 +142,9 @@ PrivateData = @{
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSap3ws
-# lcMgQ2VjgC2fY7omo7WFBTANBgkqhkiG9w0BAQEFAASBgHK26bpFuef8iOei53YG
-# QoUFqQhWABmagi+cT9jglMn9dS/KzMVKPRYzEFoSwN1LloIpU8uRetbcrhMzEotJ
-# KtwFlGMopSFWMeu9UOkJA2NrRa70F4LLXvQ4CPVJ0uiwWAbKumF/K5gB6FJwvYng
-# 8RIJZTMogfJC4qPVTkq/Trzo
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRYskAH
+# S0LsDYQN2fZTzGj3s6k0ITANBgkqhkiG9w0BAQEFAASBgLLFFabCFXDsDflhMcr1
+# 3TdFjAFoldBuUM3hLH/Ly/N57teawkr5CzqD/DSxqaT3fjktZ6h8h/8DGfj3RZQv
+# da+TujHjUiuPgPAc64ysqGt+bJBYnzFsBF1tRccbswMnbiNGZOnUeKRadLjfnk2z
+# 69x5wXecP04SuOdIyFWj+Jjf
 # SIG # End signature block

@@ -1,0 +1,101 @@
+TOPIC
+about verb-AAD profile
+ 
+SHORT DESCRIPTION
+Script Profile report for: C:\sc\verb-AAD\verb-AAD\verb-AAD.psm1
+ 
+LONG DESCRIPTION
+This is an analysis of a PowerShell script or module. Analysis will most likely NOT be 100% thorough.
+  
+REQUIREMENTS
+-->None detected
+ 
+PARAMETERS
+-->None detected. Parameters for nested commands not tested.
+  
+ALL COMMANDS
+All possible PowerShell commands. This list may not be complete or even correct.
+ 
+CommandType Name                       Version    Source                         
+----------- ----                       -------    ------                         
+Function    Add-PSTitleBar                                                       
+Cmdlet      Connect-MsolService        1.1.183.17 MSOnline                       
+Cmdlet      ConvertTo-Json             3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      Format-List                3.1.0.0    Microsoft.PowerShell.Utility   
+Function    Get-AdminCred                                                        
+Cmdlet      Get-Alias                  3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      Get-ChildItem              3.1.0.0    Microsoft.PowerShell.Management
+Cmdlet      Get-Credential             3.0.0.0    Microsoft.PowerShell.Security  
+Cmdlet      Get-Date                   3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      Get-Item                   3.1.0.0    Microsoft.PowerShell.Management
+Cmdlet      Get-Module                 3.0.0.0    Microsoft.PowerShell.Core      
+Cmdlet      Get-MsolAccountSku         1.1.183.17 MSOnline                       
+Cmdlet      Get-MsolCompanyInformation 1.1.183.17 MSOnline                       
+Cmdlet      Get-MsolUser               1.1.183.17 MSOnline                       
+Cmdlet      Get-PSSession              3.0.0.0    Microsoft.PowerShell.Core      
+Function    get-TenantMFARequirement                                             
+Cmdlet      Import-Module              3.0.0.0    Microsoft.PowerShell.Core      
+Function    Install-Module             1.6.0      PowerShellGet                  
+Cmdlet      Invoke-RestMethod          3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      Join-Path                  3.1.0.0    Microsoft.PowerShell.Management
+Cmdlet      New-Object                 3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      New-TimeSpan               3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      Out-GridView               3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      Out-Null                   3.0.0.0    Microsoft.PowerShell.Core      
+Cmdlet      Out-String                 3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      Remove-Item                3.1.0.0    Microsoft.PowerShell.Management
+Cmdlet      Remove-PSSession           3.0.0.0    Microsoft.PowerShell.Core      
+Cmdlet      Select-Object              3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      Set-Alias                  3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      Split-Path                 3.1.0.0    Microsoft.PowerShell.Management
+Cmdlet      Start-Sleep                3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      Test-Path                  3.1.0.0    Microsoft.PowerShell.Management
+Cmdlet      Where-Object               3.0.0.0    Microsoft.PowerShell.Core      
+Cmdlet      Write-Host                 3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      Write-Output               3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      Write-Verbose              3.1.0.0    Microsoft.PowerShell.Utility   
+Cmdlet      Write-Warning              3.1.0.0    Microsoft.PowerShell.Utility
+  
+UNRESOLVED
+These commands may be called from nested commands or unknown modules.
+ 
+Connect-AAD
+Connect-AzureAD
+connect-AzureRM
+Connect-AzureRmAccount
+Connect-Msol
+Get-AzureADTenantDetail
+Get-AzureRmSubscription
+Get-AzureRmTenant
+global:o365cred
+Import-AzureRmContext
+Save-AzureRmContext
+Select-AzureRmSubscription
+Stop
+Write-Log
+ 
+TYPENAMES
+These are identified .NET type names that might be used as accelerators.
+ 
+[boolean]
+[Convert]
+[guid]
+[math]
+[Microsoft.Online.Administration.Automation.MicrosoftOnlineException]
+[Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException]
+[ordered]
+[Security.Cryptography.HashAlgorithmName]
+[Security.Cryptography.RSASignaturePadding]
+[string]
+[switch]
+[System.Convert]
+[System.Management.Automation.CommandNotFoundException]
+[System.Text.Encoding]
+ 
+WARNING
+These are potentially dangerous commands.
+ 
+CommandType Name             Version Source                         
+----------- ----             ------- ------                         
+Cmdlet      Remove-Item      3.1.0.0 Microsoft.PowerShell.Management
+Cmdlet      Remove-PSSession 3.0.0.0 Microsoft.PowerShell.Core
