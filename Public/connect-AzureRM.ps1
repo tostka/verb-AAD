@@ -17,6 +17,7 @@ function connect-AzureRM {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 1:30 PM 9/5/2024 added  update-SecurityProtocolTDO() SB to begin
     * 5:17 PM 8/5/2020 strong-typed Credential
     * 7:13 AM 7/22/2020 replaced codeblock w get-TenantTag()
     # 5:04 PM 7/21/2020 VEN support added
@@ -37,10 +38,26 @@ function connect-AzureRM {
     .\connect-AzureRM.ps1
     .LINK
     #>
-    Param(
+    PARAM(
         [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID
     ) ;
+	$CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
+	write-verbose "PRE: `$CurrentVersionTlsLabel : $($CurrentVersionTlsLabel )" ;
+	# psv6+ already covers, test via the SslProtocol parameter presense
+	if ('SslProtocol' -notin (Get-Command Invoke-RestMethod).Parameters.Keys) {
+		$currentMaxTlsValue = [Math]::Max([Net.ServicePointManager]::SecurityProtocol.value__,[Net.SecurityProtocolType]::Tls.value__) ;
+		write-verbose "`$currentMaxTlsValue : $($currentMaxTlsValue )" ;
+		$newerTlsTypeEnums = [enum]::GetValues('Net.SecurityProtocolType') | Where-Object { $_ -gt $currentMaxTlsValue }
+		if($newerTlsTypeEnums){
+			write-verbose "Appending upgraded/missing TLS `$enums:`n$(($newerTlsTypeEnums -join ','|out-string).trim())" ;
+		} else {
+			write-verbose "Current TLS `$enums are up to date with max rev available on this machine" ;
+		};
+		$newerTlsTypeEnums | ForEach-Object {
+			[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
+		} ;
+	} ;
     $verbose = ($VerbosePreference -eq "Continue") ; 
     $MFA = get-TenantMFARequirement -Credential $Credential ;
 

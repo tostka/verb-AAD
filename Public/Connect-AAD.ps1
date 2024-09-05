@@ -20,6 +20,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 1:30 PM 9/5/2024 added  update-SecurityProtocolTDO() SB to begin
     * 10:02 AM 7/7/2023 update to match cxo default acct connect: UserRole, add SIDCBA _1st_ ; updated CBH 
     *3:15 PM 5/30/2023 Updates to support either -Credential, or -UserRole + -TenOrg, to support fully portable downstream credentials: 
         - Add -UserRole & explicit -TenOrg params
@@ -92,7 +93,7 @@ Function Connect-AAD {
     #Requires -Modules AzureAD
     [CmdletBinding(DefaultParameterSetName='UPN')]
     [Alias('caad','raad','reconnect-AAD')]
-    Param(
+    PARAM(
         [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter(HelpMessage="Credential to use for this connection [-credential [credential obj variable]")]
             [System.Management.Automation.PSCredential]$Credential,
@@ -116,6 +117,22 @@ Function Connect-AAD {
     ) ;
     BEGIN {
         $verbose = ($VerbosePreference -eq "Continue") ;
+		$CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
+        write-verbose "PRE: `$CurrentVersionTlsLabel : $($CurrentVersionTlsLabel )" ;
+        # psv6+ already covers, test via the SslProtocol parameter presense
+        if ('SslProtocol' -notin (Get-Command Invoke-RestMethod).Parameters.Keys) {
+            $currentMaxTlsValue = [Math]::Max([Net.ServicePointManager]::SecurityProtocol.value__,[Net.SecurityProtocolType]::Tls.value__) ;
+            write-verbose "`$currentMaxTlsValue : $($currentMaxTlsValue )" ;
+            $newerTlsTypeEnums = [enum]::GetValues('Net.SecurityProtocolType') | Where-Object { $_ -gt $currentMaxTlsValue }
+            if($newerTlsTypeEnums){
+                write-verbose "Appending upgraded/missing TLS `$enums:`n$(($newerTlsTypeEnums -join ','|out-string).trim())" ;
+            } else {
+                write-verbose "Current TLS `$enums are up to date with max rev available on this machine" ;
+            };
+            $newerTlsTypeEnums | ForEach-Object {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
+            } ;
+        } ;
         #if(-not (get-variable rgxCertFNameSuffix -ea 0)){$rgxCertFNameSuffix = '-([A-Z]{3})$' ; } ; 
         if(-not $rgxCertThumbprint){$rgxCertThumbprint = '[0-9a-fA-F]{40}' } ; # if it's a 40char hex string -> cert thumbprint  
         if(-not $rgxSmtpAddr){$rgxSmtpAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ; } ; # email addr/UPN

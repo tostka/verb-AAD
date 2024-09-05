@@ -18,6 +18,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 1:30 PM 9/5/2024 added  update-SecurityProtocolTDO() SB to begin
     * 9:40 AM 9/17/2021 had missed an echo past -silent
     * 1:17 PM 8/24/2021 remove unused ProxyEnabled param (causing arg transf errs
     * 1:17 PM 8/17/2021 added -silent param
@@ -65,7 +66,7 @@ Function Connect-MSOL {
     #Requires -Modules MSOnline
     [CmdletBinding()]
     [Alias('cmsol','rmsol','Reconnect-MSOL')]
-    Param(
+    PARAM(
         [Parameter()][string]$CommandPrefix,
         [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
@@ -73,6 +74,22 @@ Function Connect-MSOL {
     ) ;
     BEGIN { 
         $verbose = ($VerbosePreference -eq "Continue") ;
+        $CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
+        write-verbose "PRE: `$CurrentVersionTlsLabel : $($CurrentVersionTlsLabel )" ;
+        # psv6+ already covers, test via the SslProtocol parameter presense
+        if ('SslProtocol' -notin (Get-Command Invoke-RestMethod).Parameters.Keys) {
+            $currentMaxTlsValue = [Math]::Max([Net.ServicePointManager]::SecurityProtocol.value__,[Net.SecurityProtocolType]::Tls.value__) ;
+            write-verbose "`$currentMaxTlsValue : $($currentMaxTlsValue )" ;
+            $newerTlsTypeEnums = [enum]::GetValues('Net.SecurityProtocolType') | Where-Object { $_ -gt $currentMaxTlsValue }
+            if($newerTlsTypeEnums){
+                write-verbose "Appending upgraded/missing TLS `$enums:`n$(($newerTlsTypeEnums -join ','|out-string).trim())" ;
+            } else {
+                write-verbose "Current TLS `$enums are up to date with max rev available on this machine" ;
+            };
+            $newerTlsTypeEnums | ForEach-Object {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
+            } ;
+        } ;
         $tmod = "MSOnline" ; 
         write-verbose "(Check for/install $($tmod) module)" ; 
         Try {Get-Module $tmod -listavailable -ErrorAction Stop | out-null } Catch {Install-Module $tmod -scope AllUsers ; } ;                 # installed
