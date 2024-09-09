@@ -12,7 +12,7 @@
 RootModule = 'verb-AAD.psm1'
 
 # Version number of this module.
-ModuleVersion = '5.1.0'
+ModuleVersion = '5.2.0'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -87,7 +87,7 @@ AliasesToExport = '*'
 # ModuleList = @()
 
 # List of all files packaged with this module
-FileList = @('Quick-Start-Installation-and-Example.md','CHANGELOG.md','README.md','ABOUT_verb-AAD.help.txt','LICENSE.txt')
+FileList = @('Quick-Start-Installation-and-Example.md','ABOUT_verb-AAD.help.txt','CHANGELOG.md','LICENSE.txt','README.md')
 
 # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
 PrivateData = @{
@@ -126,8 +126,8 @@ PrivateData = @{
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUlOGKmIbsP6R+yj2ooFfPBY65
-# JgegggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUD5D8iCZ6ikZvn2h0DZpuWy37
+# C++gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -142,9 +142,9 @@ PrivateData = @{
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRYskAH
-# S0LsDYQN2fZTzGj3s6k0ITANBgkqhkiG9w0BAQEFAASBgLLFFabCFXDsDflhMcr1
-# 3TdFjAFoldBuUM3hLH/Ly/N57teawkr5CzqD/DSxqaT3fjktZ6h8h/8DGfj3RZQv
-# da+TujHjUiuPgPAc64ysqGt+bJBYnzFsBF1tRccbswMnbiNGZOnUeKRadLjfnk2z
-# 69x5wXecP04SuOdIyFWj+Jjf
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRvm2A/
+# pgsvUSBGrdS6FsOXRfI7gjANBgkqhkiG9w0BAQEFAASBgGqokVIkAkNk9V1xyi41
+# d9fBgai6GwPXINrLJUC6KhhWdLtjJXxulGaQXrVFRwBiuQ7BoyNJsmdBTfVZP+r9
+# mh9cSIhZ9LRQ7L5DwgEqKkqcV99xAFlvhca0tlPOJ1xFd1OZNjE/Qg+ud/vFRu+6
+# XPsvIeV5EM2TjW56E+qsYsv3
 # SIG # End signature block

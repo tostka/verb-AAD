@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 5.1.0
+Version     : 5.2.0
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -530,6 +530,7 @@ Function Connect-AAD {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS   :
+    * 1:30 PM 9/5/2024 added  update-SecurityProtocolTDO() SB to begin
     * 10:02 AM 7/7/2023 update to match cxo default acct connect: UserRole, add SIDCBA _1st_ ; updated CBH 
     *3:15 PM 5/30/2023 Updates to support either -Credential, or -UserRole + -TenOrg, to support fully portable downstream credentials: 
         - Add -UserRole & explicit -TenOrg params
@@ -602,7 +603,7 @@ Function Connect-AAD {
     #Requires -Modules AzureAD
     [CmdletBinding(DefaultParameterSetName='UPN')]
     [Alias('caad','raad','reconnect-AAD')]
-    Param(
+    PARAM(
         [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter(HelpMessage="Credential to use for this connection [-credential [credential obj variable]")]
             [System.Management.Automation.PSCredential]$Credential,
@@ -626,6 +627,22 @@ Function Connect-AAD {
     ) ;
     BEGIN {
         $verbose = ($VerbosePreference -eq "Continue") ;
+		$CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
+        write-verbose "PRE: `$CurrentVersionTlsLabel : $($CurrentVersionTlsLabel )" ;
+        # psv6+ already covers, test via the SslProtocol parameter presense
+        if ('SslProtocol' -notin (Get-Command Invoke-RestMethod).Parameters.Keys) {
+            $currentMaxTlsValue = [Math]::Max([Net.ServicePointManager]::SecurityProtocol.value__,[Net.SecurityProtocolType]::Tls.value__) ;
+            write-verbose "`$currentMaxTlsValue : $($currentMaxTlsValue )" ;
+            $newerTlsTypeEnums = [enum]::GetValues('Net.SecurityProtocolType') | Where-Object { $_ -gt $currentMaxTlsValue }
+            if($newerTlsTypeEnums){
+                write-verbose "Appending upgraded/missing TLS `$enums:`n$(($newerTlsTypeEnums -join ','|out-string).trim())" ;
+            } else {
+                write-verbose "Current TLS `$enums are up to date with max rev available on this machine" ;
+            };
+            $newerTlsTypeEnums | ForEach-Object {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
+            } ;
+        } ;
         #if(-not (get-variable rgxCertFNameSuffix -ea 0)){$rgxCertFNameSuffix = '-([A-Z]{3})$' ; } ; 
         if(-not $rgxCertThumbprint){$rgxCertThumbprint = '[0-9a-fA-F]{40}' } ; # if it's a 40char hex string -> cert thumbprint  
         if(-not $rgxSmtpAddr){$rgxSmtpAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ; } ; # email addr/UPN
@@ -1195,6 +1212,7 @@ function connect-AzureRM {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 1:30 PM 9/5/2024 added  update-SecurityProtocolTDO() SB to begin
     * 5:17 PM 8/5/2020 strong-typed Credential
     * 7:13 AM 7/22/2020 replaced codeblock w get-TenantTag()
     # 5:04 PM 7/21/2020 VEN support added
@@ -1215,10 +1233,26 @@ function connect-AzureRM {
     .\connect-AzureRM.ps1
     .LINK
     #>
-    Param(
+    PARAM(
         [Parameter()][boolean]$ProxyEnabled = $False,
         [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID
     ) ;
+	$CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
+	write-verbose "PRE: `$CurrentVersionTlsLabel : $($CurrentVersionTlsLabel )" ;
+	# psv6+ already covers, test via the SslProtocol parameter presense
+	if ('SslProtocol' -notin (Get-Command Invoke-RestMethod).Parameters.Keys) {
+		$currentMaxTlsValue = [Math]::Max([Net.ServicePointManager]::SecurityProtocol.value__,[Net.SecurityProtocolType]::Tls.value__) ;
+		write-verbose "`$currentMaxTlsValue : $($currentMaxTlsValue )" ;
+		$newerTlsTypeEnums = [enum]::GetValues('Net.SecurityProtocolType') | Where-Object { $_ -gt $currentMaxTlsValue }
+		if($newerTlsTypeEnums){
+			write-verbose "Appending upgraded/missing TLS `$enums:`n$(($newerTlsTypeEnums -join ','|out-string).trim())" ;
+		} else {
+			write-verbose "Current TLS `$enums are up to date with max rev available on this machine" ;
+		};
+		$newerTlsTypeEnums | ForEach-Object {
+			[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
+		} ;
+	} ;
     $verbose = ($VerbosePreference -eq "Continue") ; 
     $MFA = get-TenantMFARequirement -Credential $Credential ;
 
@@ -1316,6 +1350,7 @@ Function Connect-MSOL {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 1:30 PM 9/5/2024 added  update-SecurityProtocolTDO() SB to begin
     * 9:40 AM 9/17/2021 had missed an echo past -silent
     * 1:17 PM 8/24/2021 remove unused ProxyEnabled param (causing arg transf errs
     * 1:17 PM 8/17/2021 added -silent param
@@ -1363,7 +1398,7 @@ Function Connect-MSOL {
     #Requires -Modules MSOnline
     [CmdletBinding()]
     [Alias('cmsol','rmsol','Reconnect-MSOL')]
-    Param(
+    PARAM(
         [Parameter()][string]$CommandPrefix,
         [Parameter()][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
@@ -1371,6 +1406,22 @@ Function Connect-MSOL {
     ) ;
     BEGIN { 
         $verbose = ($VerbosePreference -eq "Continue") ;
+        $CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
+        write-verbose "PRE: `$CurrentVersionTlsLabel : $($CurrentVersionTlsLabel )" ;
+        # psv6+ already covers, test via the SslProtocol parameter presense
+        if ('SslProtocol' -notin (Get-Command Invoke-RestMethod).Parameters.Keys) {
+            $currentMaxTlsValue = [Math]::Max([Net.ServicePointManager]::SecurityProtocol.value__,[Net.SecurityProtocolType]::Tls.value__) ;
+            write-verbose "`$currentMaxTlsValue : $($currentMaxTlsValue )" ;
+            $newerTlsTypeEnums = [enum]::GetValues('Net.SecurityProtocolType') | Where-Object { $_ -gt $currentMaxTlsValue }
+            if($newerTlsTypeEnums){
+                write-verbose "Appending upgraded/missing TLS `$enums:`n$(($newerTlsTypeEnums -join ','|out-string).trim())" ;
+            } else {
+                write-verbose "Current TLS `$enums are up to date with max rev available on this machine" ;
+            };
+            $newerTlsTypeEnums | ForEach-Object {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
+            } ;
+        } ;
         $tmod = "MSOnline" ; 
         write-verbose "(Check for/install $($tmod) module)" ; 
         Try {Get-Module $tmod -listavailable -ErrorAction Stop | out-null } Catch {Install-Module $tmod -scope AllUsers ; } ;                 # installed
@@ -5044,7 +5095,7 @@ function Initialize-AADSignErrorsHash {
     REVISIONS   :
     * 11:01 AM 6/15/2021 Ren'd Build-AADSignErrorsHash -> Initialize-AADSignErrorsHash (compliant verb) ; copied over vers from profile-AAD-Signons.ps1 ; kept updated CBH. 
     * 8:50 PM 1/12/2020 expanded aliases
-    * 9:53 AM 8/29/2019 amended 50135, 50125, with MS support comments, and reserached 50140 a bit
+    * 9:53 AM 8/29/2019 amended 50135, 50125, with MS support comments, and reserached 5.2.0 a bit
     * 2:49 PM 8/27/2019 updated errornumber 0 to be (undocumented - successful), as it is the code on a non-error logon
     * 10:41 AM 5/13/2019 init vers
     .DESCRIPTION
@@ -5073,7 +5124,7 @@ function Initialize-AADSignErrorsHash {
     $AADSignOnError.add("40008", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
     $AADSignOnError.add("40009", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
     $AADSignOnError.add("40014", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
-    $AADSignOnError.add("5.1.0", "There is an issue with our sign-in service. Open a support ticket to resolve this issue.") ;
+    $AADSignOnError.add("50000", "There is an issue with our sign-in service. Open a support ticket to resolve this issue.") ;
     $AADSignOnError.add("50001", "The service principal name was not found in this tenant. This can happen if the application has not been installed by the administrator of the tenant, or if the resource principal was not found in the directory or is invalid.") ;
     $AADSignOnError.add("50002", "Sign-in failed due to restricted proxy access on tenant. If its your own tenant policy, you can change your restricted tenant settings to fix this issue.") ;
     $AADSignOnError.add("50003", "Sign-in failed due to missing signing key or certificate. This might be because there was no signing key configured in the application. Check out the resolutions outlined at https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery#certificate-or-key-not-configured. If the issue persists, contact the application owner or the application administrator.") ;
@@ -5081,18 +5132,18 @@ function Initialize-AADSignErrorsHash {
     $AADSignOnError.add("50006", "Signature verification failed due to invalid signature. Check out the resolution outlined at https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery. If the issue persists, contact the application owner or application administrator.") ;
     $AADSignOnError.add("50007", "Partner encryption certificate was not found for this application. Open a support ticket with Microsoft to get this fixed.") ;
     $AADSignOnError.add("50008", "SAML assertion is missing or misconfigured in the token. Contact your federation provider.") ;
-    $AADSignOnError.add("5.1.0", "Audience URI validation for the application failed since no token audiences were configured. Contact the application owner for resolution.") ;
+    $AADSignOnError.add("50010", "Audience URI validation for the application failed since no token audiences were configured. Contact the application owner for resolution.") ;
     $AADSignOnError.add("50011", "The reply address is missing, misconfigured, or does not match reply addresses configured for the application. Try the resolution listed at https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery#the-reply-address-does-not-match-the-reply-addresses-configured-for-the-application. If the issue persists, contact the application owner or application administrator.") ;
     $AADSignOnError.add("50012", "This is a generic error message that indicates that authentication failed. This can happen for reasons such as missing or invalid credentials or claims in the request. Ensure that the request is sent with the correct credentials and claims.") ;
     $AADSignOnError.add("50013", "Assertion is invalid because of various reasons. For instance, the token issuer doesnt match the api version within its valid time range, the token is expired or malformed, or the refresh token in the assertion is not a primary refresh token.") ;
     $AADSignOnError.add("50017", "Certification validation failed, reasons for the following reasons:, Cannot find issuing certificate in trusted certificates list , Unable to find expected CrlSegment , Cannot find issuing certificate in trusted certificates list , Delta CRL distribution point is configured without a corresponding CRL distribution point , Unable to retrieve valid CRL segments due to timeout issue , Unable to download CRL , Contact the tenant administrator.") ;
-    $AADSignOnError.add("5.1.0", "The user is unauthorized for one of the following reasons. The user is attempting to login with an MSA account with the v1 endpoint , The user doesnt exist in the tenant. , Contact the application owner.") ;
+    $AADSignOnError.add("50020", "The user is unauthorized for one of the following reasons. The user is attempting to login with an MSA account with the v1 endpoint , The user doesnt exist in the tenant. , Contact the application owner.") ;
     $AADSignOnError.add("50027", "Invalid JWT token due to the following reasons:, doesnt contain nonce claim, sub claim , subject identifier mismatch , duplicate claim in idToken claims , unexpected issuer , unexpected audience , not within its valid time range , token format is not proper , External ID token from issuer failed signature verification. , Contact the application owner , ") ;
     $AADSignOnError.add("50029", "Invalid URI - domain name contains invalid characters. Contact the tenant administrator.") ;
     $AADSignOnError.add("50034", "User does not exist in directory. Contact your tenant administrator.") ;
     $AADSignOnError.add("50042", "The salt required to generate a pairwise identifier is missing in principle. Contact the tenant administrator.") ;
     $AADSignOnError.add("50048", "Subject mismatches Issuer claim in the client assertion. Contact the tenant administrator.") ;
-    $AADSignOnError.add("5.1.0", "Request is malformed. Contact the application owner.") ;
+    $AADSignOnError.add("50050", "Request is malformed. Contact the application owner.") ;
     $AADSignOnError.add("50053", "Account is locked because the user tried to sign in too many times with an incorrect user ID or password.") ;
     $AADSignOnError.add("50055", "Invalid password, entered expired password.") ;
     $AADSignOnError.add("50056", "Invalid or null password - Password does not exist in store for this user.") ;
@@ -5110,20 +5161,20 @@ function Initialize-AADSignErrorsHash {
     $AADSignOnError.add("50099", "JWT signature is invalid. Contact the application owner.") ;
     $AADSignOnError.add("50105", "The signed in user is not assigned to a role for the signed in application. Assign the user to the application. For more information: https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery#user-not-assigned-a-role") ;
     $AADSignOnError.add("50107", "Requested federation realm object does not exist. Contact the tenant administrator.") ;
-    $AADSignOnError.add("50120", "Issue with JWT header. Contact the tenant administrator.") ;
+    $AADSignOnError.add("5.2.0", "Issue with JWT header. Contact the tenant administrator.") ;
     $AADSignOnError.add("50124", "Claims Transformation contains invalid input parameter. Contact the tenant administrator to update the policy.") ;
     $AADSignOnError.add("50125", "Sign-in was interrupted due to a password reset or password registration entry.(This error may come up due to an interruption in the network while the password was being changed/reset)") ;
     $AADSignOnError.add("50126", "Invalid username or password, or invalid on-premises username or password.") ;
     $AADSignOnError.add("50127", "User needs to install a broker application to gain access to this content.") ;
     $AADSignOnError.add("50128", "Invalid domain name - No tenant-identifying information found in either the request or implied by any provided credentials.") ;
     $AADSignOnError.add("50129", "Device is not workplace joined - Workplace join is required to register the device.") ;
-    $AADSignOnError.add("50130", "Claim value cannot be interpreted as known auth method.") ;
+    $AADSignOnError.add("5.2.0", "Claim value cannot be interpreted as known auth method.") ;
     $AADSignOnError.add("50131", "Used in various conditional access errors. E.g. Bad Windows device state, request blocked due to suspicious activity, access policy, and security policy decisions.") ;
     $AADSignOnError.add("50132", "Credentials have been revoked due to the following reasons: , SSO Artifact is invalid or expired , Session not fresh enough for application , A silent sign-in request was sent but the users session with Azure AD is invalid or has expired. , ") ;
     $AADSignOnError.add("50133", "Session is invalid due to expiration or recent password change.`n(Once a Password is changed, it is advised to close all the open sessions and re-login with the new password, else this error might pop-up)") ;
     $AADSignOnError.add("50135", "Password change is required due to account risk.") ;
     $AADSignOnError.add("50136", "Redirect MSA session to application - Single MSA session detected.") ;
-    $AADSignOnError.add("50140", "This error occurred due to 'Keep me signed in' interrupt when the user was signing-in. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.`n(if user is functional, this error may be a log anomaly that can be safely ignored)") ;
+    $AADSignOnError.add("5.2.0", "This error occurred due to 'Keep me signed in' interrupt when the user was signing-in. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.`n(if user is functional, this error may be a log anomaly that can be safely ignored)") ;
     $AADSignOnError.add("50143", "Session mismatch - Session is invalid because user tenant does not match the domain hint due to different resource. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.") ;
     $AADSignOnError.add("50144", "Users Active Directory password has expired. Generate a new password for the user or have the end user using self-service reset tool.") ;
     $AADSignOnError.add("50146", "This application is required to be configured with an application-specific signing key. It is either not configured with one, or the key has expired or is not yet valid. Contact the application owner.") ;
@@ -5137,12 +5188,12 @@ function Initialize-AADSignErrorsHash {
     $AADSignOnError.add("50173", "Fresh auth token is needed. Have the user sign-in again using fresh credentials.") ;
     $AADSignOnError.add("50177", "External challenge is not supported for passthrough users.") ;
     $AADSignOnError.add("50178", "Session Control is not supported for passthrough users.") ;
-    $AADSignOnError.add("50180", "Windows Integrated authentication is needed. Enable the tenant for Seamless SSO.") ;
+    $AADSignOnError.add("5.2.0", "Windows Integrated authentication is needed. Enable the tenant for Seamless SSO.") ;
     $AADSignOnError.add("51001", "Domain Hint is not present with On-Premises Security Identifier - On-Premises UPN.") ;
     $AADSignOnError.add("51004", "User account doesnt exist in the directory.") ;
     $AADSignOnError.add("51006", "Windows Integrated authentication is needed. User logged in using session token that is missing via claim. Request the user to re-login.") ;
     $AADSignOnError.add("52004", "User has not provided consent for access to LinkedIn resources.") ;
-    $AADSignOnError.add("5.1.0", "Conditional Access policy requires a compliant device, and the device is not compliant. Have the user enroll their device with an approved MDM provider like Intune.") ;
+    $AADSignOnError.add("53000", "Conditional Access policy requires a compliant device, and the device is not compliant. Have the user enroll their device with an approved MDM provider like Intune.") ;
     $AADSignOnError.add("53001", "Conditional Access policy requires a domain joined device, and the device is not domain joined. Have the user use a domain joined device.") ;
     $AADSignOnError.add("53002", "Application used is not an approved application for conditional access. User needs to use one of the apps from the list of approved applications to use in order to get access.") ;
     $AADSignOnError.add("53003", "Access has been blocked due to conditional access policies.") ;
@@ -6539,7 +6590,7 @@ if(-not(get-command write-log -ea 0)){
             REVISIONS   :
             * 11:01 AM 6/15/2021 Ren'd Build-AADSignErrorsHash -> Initialize-AADSignErrorsHash (compliant verb) ; copied over vers from profile-AAD-Signons.ps1 ; kept updated CBH. 
             * 8:50 PM 1/12/2020 expanded aliases
-            * 9:53 AM 8/29/2019 amended 50135, 50125, with MS support comments, and reserached 50140 a bit
+            * 9:53 AM 8/29/2019 amended 50135, 50125, with MS support comments, and reserached 5.2.0 a bit
             * 2:49 PM 8/27/2019 updated errornumber 0 to be (undocumented - successful), as it is the code on a non-error logon
             * 10:41 AM 5/13/2019 init vers
             .DESCRIPTION
@@ -6568,7 +6619,7 @@ if(-not(get-command write-log -ea 0)){
             $AADSignOnError.add("40008", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
             $AADSignOnError.add("40009", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
             $AADSignOnError.add("40014", "There is an issue with your federated Identity Provider. Contact your IDP to resolve this issue.") ;
-            $AADSignOnError.add("5.1.0", "There is an issue with our sign-in service. Open a support ticket to resolve this issue.") ;
+            $AADSignOnError.add("50000", "There is an issue with our sign-in service. Open a support ticket to resolve this issue.") ;
             $AADSignOnError.add("50001", "The service principal name was not found in this tenant. This can happen if the application has not been installed by the administrator of the tenant, or if the resource principal was not found in the directory or is invalid.") ;
             $AADSignOnError.add("50002", "Sign-in failed due to restricted proxy access on tenant. If its your own tenant policy, you can change your restricted tenant settings to fix this issue.") ;
             $AADSignOnError.add("50003", "Sign-in failed due to missing signing key or certificate. This might be because there was no signing key configured in the application. Check out the resolutions outlined at https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery#certificate-or-key-not-configured. If the issue persists, contact the application owner or the application administrator.") ;
@@ -6576,18 +6627,18 @@ if(-not(get-command write-log -ea 0)){
             $AADSignOnError.add("50006", "Signature verification failed due to invalid signature. Check out the resolution outlined at https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery. If the issue persists, contact the application owner or application administrator.") ;
             $AADSignOnError.add("50007", "Partner encryption certificate was not found for this application. Open a support ticket with Microsoft to get this fixed.") ;
             $AADSignOnError.add("50008", "SAML assertion is missing or misconfigured in the token. Contact your federation provider.") ;
-            $AADSignOnError.add("5.1.0", "Audience URI validation for the application failed since no token audiences were configured. Contact the application owner for resolution.") ;
+            $AADSignOnError.add("50010", "Audience URI validation for the application failed since no token audiences were configured. Contact the application owner for resolution.") ;
             $AADSignOnError.add("50011", "The reply address is missing, misconfigured, or does not match reply addresses configured for the application. Try the resolution listed at https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery#the-reply-address-does-not-match-the-reply-addresses-configured-for-the-application. If the issue persists, contact the application owner or application administrator.") ;
             $AADSignOnError.add("50012", "This is a generic error message that indicates that authentication failed. This can happen for reasons such as missing or invalid credentials or claims in the request. Ensure that the request is sent with the correct credentials and claims.") ;
             $AADSignOnError.add("50013", "Assertion is invalid because of various reasons. For instance, the token issuer doesnt match the api version within its valid time range, the token is expired or malformed, or the refresh token in the assertion is not a primary refresh token.") ;
             $AADSignOnError.add("50017", "Certification validation failed, reasons for the following reasons:, Cannot find issuing certificate in trusted certificates list , Unable to find expected CrlSegment , Cannot find issuing certificate in trusted certificates list , Delta CRL distribution point is configured without a corresponding CRL distribution point , Unable to retrieve valid CRL segments due to timeout issue , Unable to download CRL , Contact the tenant administrator.") ;
-            $AADSignOnError.add("5.1.0", "The user is unauthorized for one of the following reasons. The user is attempting to login with an MSA account with the v1 endpoint , The user doesnt exist in the tenant. , Contact the application owner.") ;
+            $AADSignOnError.add("50020", "The user is unauthorized for one of the following reasons. The user is attempting to login with an MSA account with the v1 endpoint , The user doesnt exist in the tenant. , Contact the application owner.") ;
             $AADSignOnError.add("50027", "Invalid JWT token due to the following reasons:, doesnt contain nonce claim, sub claim , subject identifier mismatch , duplicate claim in idToken claims , unexpected issuer , unexpected audience , not within its valid time range , token format is not proper , External ID token from issuer failed signature verification. , Contact the application owner , ") ;
             $AADSignOnError.add("50029", "Invalid URI - domain name contains invalid characters. Contact the tenant administrator.") ;
             $AADSignOnError.add("50034", "User does not exist in directory. Contact your tenant administrator.") ;
             $AADSignOnError.add("50042", "The salt required to generate a pairwise identifier is missing in principle. Contact the tenant administrator.") ;
             $AADSignOnError.add("50048", "Subject mismatches Issuer claim in the client assertion. Contact the tenant administrator.") ;
-            $AADSignOnError.add("5.1.0", "Request is malformed. Contact the application owner.") ;
+            $AADSignOnError.add("50050", "Request is malformed. Contact the application owner.") ;
             $AADSignOnError.add("50053", "Account is locked because the user tried to sign in too many times with an incorrect user ID or password.") ;
             $AADSignOnError.add("50055", "Invalid password, entered expired password.") ;
             $AADSignOnError.add("50056", "Invalid or null password - Password does not exist in store for this user.") ;
@@ -6605,20 +6656,20 @@ if(-not(get-command write-log -ea 0)){
             $AADSignOnError.add("50099", "JWT signature is invalid. Contact the application owner.") ;
             $AADSignOnError.add("50105", "The signed in user is not assigned to a role for the signed in application. Assign the user to the application. For more information: https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery#user-not-assigned-a-role") ;
             $AADSignOnError.add("50107", "Requested federation realm object does not exist. Contact the tenant administrator.") ;
-            $AADSignOnError.add("50120", "Issue with JWT header. Contact the tenant administrator.") ;
+            $AADSignOnError.add("5.2.0", "Issue with JWT header. Contact the tenant administrator.") ;
             $AADSignOnError.add("50124", "Claims Transformation contains invalid input parameter. Contact the tenant administrator to update the policy.") ;
             $AADSignOnError.add("50125", "Sign-in was interrupted due to a password reset or password registration entry.(This error may come up due to an interruption in the network while the password was being changed/reset)") ;
             $AADSignOnError.add("50126", "Invalid username or password, or invalid on-premises username or password.") ;
             $AADSignOnError.add("50127", "User needs to install a broker application to gain access to this content.") ;
             $AADSignOnError.add("50128", "Invalid domain name - No tenant-identifying information found in either the request or implied by any provided credentials.") ;
             $AADSignOnError.add("50129", "Device is not workplace joined - Workplace join is required to register the device.") ;
-            $AADSignOnError.add("50130", "Claim value cannot be interpreted as known auth method.") ;
+            $AADSignOnError.add("5.2.0", "Claim value cannot be interpreted as known auth method.") ;
             $AADSignOnError.add("50131", "Used in various conditional access errors. E.g. Bad Windows device state, request blocked due to suspicious activity, access policy, and security policy decisions.") ;
             $AADSignOnError.add("50132", "Credentials have been revoked due to the following reasons: , SSO Artifact is invalid or expired , Session not fresh enough for application , A silent sign-in request was sent but the users session with Azure AD is invalid or has expired. , ") ;
             $AADSignOnError.add("50133", "Session is invalid due to expiration or recent password change.`n(Once a Password is changed, it is advised to close all the open sessions and re-login with the new password, else this error might pop-up)") ;
             $AADSignOnError.add("50135", "Password change is required due to account risk.") ;
             $AADSignOnError.add("50136", "Redirect MSA session to application - Single MSA session detected.") ;
-            $AADSignOnError.add("50140", "This error occurred due to 'Keep me signed in' interrupt when the user was signing-in. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.`n(if user is functional, this error may be a log anomaly that can be safely ignored)") ;
+            $AADSignOnError.add("5.2.0", "This error occurred due to 'Keep me signed in' interrupt when the user was signing-in. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.`n(if user is functional, this error may be a log anomaly that can be safely ignored)") ;
             $AADSignOnError.add("50143", "Session mismatch - Session is invalid because user tenant does not match the domain hint due to different resource. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.") ;
             $AADSignOnError.add("50144", "Users Active Directory password has expired. Generate a new password for the user or have the end user using self-service reset tool.") ;
             $AADSignOnError.add("50146", "This application is required to be configured with an application-specific signing key. It is either not configured with one, or the key has expired or is not yet valid. Contact the application owner.") ;
@@ -6632,12 +6683,12 @@ if(-not(get-command write-log -ea 0)){
             $AADSignOnError.add("50173", "Fresh auth token is needed. Have the user sign-in again using fresh credentials.") ;
             $AADSignOnError.add("50177", "External challenge is not supported for passthrough users.") ;
             $AADSignOnError.add("50178", "Session Control is not supported for passthrough users.") ;
-            $AADSignOnError.add("50180", "Windows Integrated authentication is needed. Enable the tenant for Seamless SSO.") ;
+            $AADSignOnError.add("5.2.0", "Windows Integrated authentication is needed. Enable the tenant for Seamless SSO.") ;
             $AADSignOnError.add("51001", "Domain Hint is not present with On-Premises Security Identifier - On-Premises UPN.") ;
             $AADSignOnError.add("51004", "User account doesnt exist in the directory.") ;
             $AADSignOnError.add("51006", "Windows Integrated authentication is needed. User logged in using session token that is missing via claim. Request the user to re-login.") ;
             $AADSignOnError.add("52004", "User has not provided consent for access to LinkedIn resources.") ;
-            $AADSignOnError.add("5.1.0", "Conditional Access policy requires a compliant device, and the device is not compliant. Have the user enroll their device with an approved MDM provider like Intune.") ;
+            $AADSignOnError.add("53000", "Conditional Access policy requires a compliant device, and the device is not compliant. Have the user enroll their device with an approved MDM provider like Intune.") ;
             $AADSignOnError.add("53001", "Conditional Access policy requires a domain joined device, and the device is not domain joined. Have the user use a domain joined device.") ;
             $AADSignOnError.add("53002", "Application used is not an approved application for conditional access. User needs to use one of the apps from the list of approved applications to use in order to get access.") ;
             $AADSignOnError.add("53003", "Access has been blocked due to conditional access policies.") ;
@@ -11405,8 +11456,8 @@ Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,ca
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUfN2NpusmoVUknG1vzeFn9/MK
-# tpOgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUSeDGuosHuSMqQ0Hefc9rle/j
+# XQ2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -11421,9 +11472,9 @@ Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,ca
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSvoOBq
-# dl+0cNOPdmZQ9sZgLlyu+zANBgkqhkiG9w0BAQEFAASBgHwhoErbBeVZgO7iP1Bb
-# 8yGl22eox5XKGpILVq04nfClLjVapGMNGF6VxjgJNMSvtIN+AOrTicv+bUnHcMfT
-# MkvLoCNYTiuMd7oPBqKH4xkZPTkVHmHrECi9m0Fj8cSkVX+ddbZ8k2mUzMd1muB+
-# 9ONHTndzWehpeTsdZqoIa7ZZ
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTQ8TDT
+# rIi3dXHyPOBWUeY7GFjlgDANBgkqhkiG9w0BAQEFAASBgJVgiGOdAkRf/LwamnPg
+# Br7mBbI3FVW9UX9Mp7HkcOWOG4cQOoyUoS0GS/scY8WafXAFWvUlUIlVz5GgSQSt
+# CMJYXDn7tF+feuB6RV0NNgeRhn+u/H+DuT2tBZZK4fFkXhkcYe02v8NsqK6y1BWm
+# jM15aLoZEICSqJQDiLeRHGCu
 # SIG # End signature block
