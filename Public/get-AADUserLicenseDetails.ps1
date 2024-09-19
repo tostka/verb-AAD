@@ -4,7 +4,7 @@
 Function get-AADUserLicenseDetails {
     <#
     .SYNOPSIS
-    get-AADUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD)
+    get-AADUserLicenseDetails - Summarize an AzureADuser's assigned o365 license (AzureAD), returns LicAccountSkuID,DisplayName,UserPrincipalName,LicenseFriendlyName
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
@@ -20,16 +20,21 @@ Function get-AADUserLicenseDetails {
     AddedWebsite:	https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     AddedTwitter:	URL
     REVISIONS   :
+    * 10:44 AM 9/19/2024 added: Microsoft_Teams_Audio_Conferencing_select_dial_out = Microsoft Teams Audio Conferencing with dial-out to USA/CAN 
+        added CBH example typical output
     * 1:54 PM 6/26/2023 needs TenOrg resolved from cred...
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
     * 8:30 AM 5/22/2023 add: 7pswl support; fixed to IndexOnName =$false ; ; removed ValueFromPipelineByPropertyName ; 
     * 10:13 AM 5/19/2023 err suppress: test for lic assignment before trying to indexed-hash lookup; add echo on no-license status ; 
-    * 4:43 PM 5/17/2023 rounded out params for $pltRXO passthru
+    * 4:43 PM 5/17/2023 rounded out params for $pltRXO passthru 
     * 8:15 AM 12/21/2022 updated CBH; sub'd out showdebug for w-v
     * 2:02 PM 3/23/2022 convert verb-aad:get-MsolUserLicensedetails -> get-AADUserLicenseDetails (Msonline -> AzureAD module rewrite)
     .DESCRIPTION
-    get-AADUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD)
+    get-AADUserLicenseDetails - Summarize an AzureADuser's assigned o365 license (AzureAD), returns LicAccountSkuID,DisplayName,UserPrincipalName,LicenseFriendlyName
+
+    Evolved from get-MsolUserLicenseDetails (w deprecation of MSOL mod by M$). Distinct from test-EXOIsLicensed (which specifically queries for Exchange service grants nested in lics assigned to an AADUser)
     Originally inspired by the MSOnline/MSOL-based core lic hash & lookup code in Brad's "Get Friendly License Name for all Users in Office 365 Using PowerShell" script. Since completely rewritten for AzureAD module, expanded output details. 
+
     .PARAMETER UPNs
     Array of Userprincipalnames to be looked up
     .PARAMETER Credential
@@ -45,16 +50,29 @@ Function get-AADUserLicenseDetails {
     Returns objects summarizing each of the AADUser's licenses (User DisplayName, UserPrincipalName, LicAccountSkuID, LicenseFriendlyName)
     .EXAMPLE
     PS> get-AADUserLicenseDetails -UPNs fname.lname@domain.com ;
-    Retrieve MSOL License details on specified UPN
+    Retrieve AzureADUser License details on specified UPN
     .EXAMPLE
-    PS> $EXOLicDetails = get-AADUserLicenseDetails -UPNs $exombx.userprincipalname
-    Retrieve MSOL License details on specified UPN
+    PS> $AADULicDetails = get-AADUserLicenseDetails -UPNs $exombx.userprincipalname
+
+    PS> $aaduserlicdetails 
+
+        LicAccountSkuID                                    DisplayName UserPrincipalName    LicenseFriendlyName                                        
+        ---------------                                    ----------- -----------------    -------------------                                        
+        SPE_E3                                             FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Microsoft 365 E3                                           
+        MCOEV                                              FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Microsoft Phone System                                     
+        POWER_BI_STANDARD                                  FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Power-BI Standard                                          
+        FLOW_FREE                                          FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Microsoft Flow Free                                        
+        MCOPSTNC                                           FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Communications Credits                                     
+        VISIOCLIENT                                        FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Visio Pro Online                                           
+        Microsoft_Teams_Audio_Conferencing_select_dial_out FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Microsoft Teams Audio Conferencing with dial-out to USA/CAN
+
+    Retrieve AzureADUser License details on specified UPN
     .LINK
     https://github.com/tostka/verb-AAD
     https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     #>
     Param(
-        [Parameter(Position = 0, Mandatory = $False, ValueFromPipeline = $true, HelpMessage = "An array of MSolUser objects")][ValidateNotNullOrEmpty()]
+        [Parameter(Position = 0, Mandatory = $False, ValueFromPipeline = $true, HelpMessage = "An array of AzureADUser objects")][ValidateNotNullOrEmpty()]
             [alias('Userprincipalname')]
             [string]$UPNs,
         [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
@@ -88,7 +106,7 @@ Function get-AADUserLicenseDetails {
     Connect-AAD @pltRXOC ;
 
     # [Product names and service plan identifiers for licensing in Azure Active Directory | Microsoft Docs](https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference)
-
+    # 9:47 AM 9/19/2024 added: Microsoft_Teams_Audio_Conferencing_select_dial_out = Microsoft Teams Audio Conferencing with dial-out to USA/CAN 
     <# whatis an F1 lic: Office 365 F1 is designed to enable Firstline Workers to do their best work.
     Office 365 F1 provides easy-to-use tools and services to help these workers
     easily create, update, and manage schedules and tasks, communicate and work
@@ -166,6 +184,7 @@ Function get-AADUserLicenseDetails {
         "MCOSTANDARD"                        = "Skype for Business Online Standalone Plan 2"
         "MCOSTANDARD_GOV"                    = "Lync Plan 2G"
         "MCOSTANDARD_MIDMARKET"              = "Lync Online (Plan 1)"
+        "Microsoft_Teams_Audio_Conferencing_select_dial_out" = "Microsoft Teams Audio Conferencing with dial-out to USA/CAN"
         "MFA_PREMIUM"                        = "Azure Multi-Factor Authentication"
         "MIDSIZEPACK"                        = "Office 365 Midsize Business"
         "MS_TEAMS_IW"                        = "Microsoft Teams Trial"
