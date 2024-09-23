@@ -5,7 +5,7 @@
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 5.2.0
+Version     : 5.2.1
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -3556,7 +3556,7 @@ Function get-AADUserLastSync {
 Function get-AADUserLicenseDetails {
     <#
     .SYNOPSIS
-    get-AADUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD)
+    get-AADUserLicenseDetails - Summarize an AzureADuser's assigned o365 license (AzureAD), returns LicAccountSkuID,DisplayName,UserPrincipalName,LicenseFriendlyName
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
@@ -3572,16 +3572,21 @@ Function get-AADUserLicenseDetails {
     AddedWebsite:	https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     AddedTwitter:	URL
     REVISIONS   :
+    * 10:44 AM 9/19/2024 added: Microsoft_Teams_Audio_Conferencing_select_dial_out = Microsoft Teams Audio Conferencing with dial-out to USA/CAN 
+        added CBH example typical output
     * 1:54 PM 6/26/2023 needs TenOrg resolved from cred...
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
     * 8:30 AM 5/22/2023 add: 7pswl support; fixed to IndexOnName =$false ; ; removed ValueFromPipelineByPropertyName ; 
     * 10:13 AM 5/19/2023 err suppress: test for lic assignment before trying to indexed-hash lookup; add echo on no-license status ; 
-    * 4:43 PM 5/17/2023 rounded out params for $pltRXO passthru
+    * 4:43 PM 5/17/2023 rounded out params for $pltRXO passthru 
     * 8:15 AM 12/21/2022 updated CBH; sub'd out showdebug for w-v
     * 2:02 PM 3/23/2022 convert verb-aad:get-MsolUserLicensedetails -> get-AADUserLicenseDetails (Msonline -> AzureAD module rewrite)
     .DESCRIPTION
-    get-AADUserLicenseDetails - Collec the equiv friendly name for a user's assigned o365 license (AzureAD)
+    get-AADUserLicenseDetails - Summarize an AzureADuser's assigned o365 license (AzureAD), returns LicAccountSkuID,DisplayName,UserPrincipalName,LicenseFriendlyName
+
+    Evolved from get-MsolUserLicenseDetails (w deprecation of MSOL mod by M$). Distinct from test-EXOIsLicensed (which specifically queries for Exchange service grants nested in lics assigned to an AADUser)
     Originally inspired by the MSOnline/MSOL-based core lic hash & lookup code in Brad's "Get Friendly License Name for all Users in Office 365 Using PowerShell" script. Since completely rewritten for AzureAD module, expanded output details. 
+
     .PARAMETER UPNs
     Array of Userprincipalnames to be looked up
     .PARAMETER Credential
@@ -3597,16 +3602,29 @@ Function get-AADUserLicenseDetails {
     Returns objects summarizing each of the AADUser's licenses (User DisplayName, UserPrincipalName, LicAccountSkuID, LicenseFriendlyName)
     .EXAMPLE
     PS> get-AADUserLicenseDetails -UPNs fname.lname@domain.com ;
-    Retrieve MSOL License details on specified UPN
+    Retrieve AzureADUser License details on specified UPN
     .EXAMPLE
-    PS> $EXOLicDetails = get-AADUserLicenseDetails -UPNs $exombx.userprincipalname
-    Retrieve MSOL License details on specified UPN
+    PS> $AADULicDetails = get-AADUserLicenseDetails -UPNs $exombx.userprincipalname
+
+    PS> $aaduserlicdetails 
+
+        LicAccountSkuID                                    DisplayName UserPrincipalName    LicenseFriendlyName                                        
+        ---------------                                    ----------- -----------------    -------------------                                        
+        SPE_E3                                             FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Microsoft 365 E3                                           
+        MCOEV                                              FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Microsoft Phone System                                     
+        POWER_BI_STANDARD                                  FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Power-BI Standard                                          
+        FLOW_FREE                                          FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Microsoft Flow Free                                        
+        MCOPSTNC                                           FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Communications Credits                                     
+        VISIOCLIENT                                        FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Visio Pro Online                                           
+        Microsoft_Teams_Audio_Conferencing_select_dial_out FNAM LNAMEX FNAM.LNAMEX @DOMA.TLD Microsoft Teams Audio Conferencing with dial-out to USA/CAN
+
+    Retrieve AzureADUser License details on specified UPN
     .LINK
     https://github.com/tostka/verb-AAD
     https://thelazyadministrator.com/2018/03/19/get-friendly-license-name-for-all-users-in-office-365-using-powershell/
     #>
     Param(
-        [Parameter(Position = 0, Mandatory = $False, ValueFromPipeline = $true, HelpMessage = "An array of MSolUser objects")][ValidateNotNullOrEmpty()]
+        [Parameter(Position = 0, Mandatory = $False, ValueFromPipeline = $true, HelpMessage = "An array of AzureADUser objects")][ValidateNotNullOrEmpty()]
             [alias('Userprincipalname')]
             [string]$UPNs,
         [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
@@ -3640,7 +3658,7 @@ Function get-AADUserLicenseDetails {
     Connect-AAD @pltRXOC ;
 
     # [Product names and service plan identifiers for licensing in Azure Active Directory | Microsoft Docs](https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference)
-
+    # 9:47 AM 9/19/2024 added: Microsoft_Teams_Audio_Conferencing_select_dial_out = Microsoft Teams Audio Conferencing with dial-out to USA/CAN 
     <# whatis an F1 lic: Office 365 F1 is designed to enable Firstline Workers to do their best work.
     Office 365 F1 provides easy-to-use tools and services to help these workers
     easily create, update, and manage schedules and tasks, communicate and work
@@ -3718,6 +3736,7 @@ Function get-AADUserLicenseDetails {
         "MCOSTANDARD"                        = "Skype for Business Online Standalone Plan 2"
         "MCOSTANDARD_GOV"                    = "Lync Plan 2G"
         "MCOSTANDARD_MIDMARKET"              = "Lync Online (Plan 1)"
+        "Microsoft_Teams_Audio_Conferencing_select_dial_out" = "Microsoft Teams Audio Conferencing with dial-out to USA/CAN"
         "MFA_PREMIUM"                        = "Azure Multi-Factor Authentication"
         "MIDSIZEPACK"                        = "Office 365 Midsize Business"
         "MS_TEAMS_IW"                        = "Microsoft Teams Trial"
@@ -5095,7 +5114,7 @@ function Initialize-AADSignErrorsHash {
     REVISIONS   :
     * 11:01 AM 6/15/2021 Ren'd Build-AADSignErrorsHash -> Initialize-AADSignErrorsHash (compliant verb) ; copied over vers from profile-AAD-Signons.ps1 ; kept updated CBH. 
     * 8:50 PM 1/12/2020 expanded aliases
-    * 9:53 AM 8/29/2019 amended 50135, 50125, with MS support comments, and reserached 5.2.0 a bit
+    * 9:53 AM 8/29/2019 amended 50135, 50125, with MS support comments, and reserached 50140 a bit
     * 2:49 PM 8/27/2019 updated errornumber 0 to be (undocumented - successful), as it is the code on a non-error logon
     * 10:41 AM 5/13/2019 init vers
     .DESCRIPTION
@@ -5161,20 +5180,20 @@ function Initialize-AADSignErrorsHash {
     $AADSignOnError.add("50099", "JWT signature is invalid. Contact the application owner.") ;
     $AADSignOnError.add("50105", "The signed in user is not assigned to a role for the signed in application. Assign the user to the application. For more information: https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery#user-not-assigned-a-role") ;
     $AADSignOnError.add("50107", "Requested federation realm object does not exist. Contact the tenant administrator.") ;
-    $AADSignOnError.add("5.2.0", "Issue with JWT header. Contact the tenant administrator.") ;
+    $AADSignOnError.add("50120", "Issue with JWT header. Contact the tenant administrator.") ;
     $AADSignOnError.add("50124", "Claims Transformation contains invalid input parameter. Contact the tenant administrator to update the policy.") ;
     $AADSignOnError.add("50125", "Sign-in was interrupted due to a password reset or password registration entry.(This error may come up due to an interruption in the network while the password was being changed/reset)") ;
     $AADSignOnError.add("50126", "Invalid username or password, or invalid on-premises username or password.") ;
     $AADSignOnError.add("50127", "User needs to install a broker application to gain access to this content.") ;
     $AADSignOnError.add("50128", "Invalid domain name - No tenant-identifying information found in either the request or implied by any provided credentials.") ;
     $AADSignOnError.add("50129", "Device is not workplace joined - Workplace join is required to register the device.") ;
-    $AADSignOnError.add("5.2.0", "Claim value cannot be interpreted as known auth method.") ;
+    $AADSignOnError.add("50130", "Claim value cannot be interpreted as known auth method.") ;
     $AADSignOnError.add("50131", "Used in various conditional access errors. E.g. Bad Windows device state, request blocked due to suspicious activity, access policy, and security policy decisions.") ;
     $AADSignOnError.add("50132", "Credentials have been revoked due to the following reasons: , SSO Artifact is invalid or expired , Session not fresh enough for application , A silent sign-in request was sent but the users session with Azure AD is invalid or has expired. , ") ;
     $AADSignOnError.add("50133", "Session is invalid due to expiration or recent password change.`n(Once a Password is changed, it is advised to close all the open sessions and re-login with the new password, else this error might pop-up)") ;
     $AADSignOnError.add("50135", "Password change is required due to account risk.") ;
     $AADSignOnError.add("50136", "Redirect MSA session to application - Single MSA session detected.") ;
-    $AADSignOnError.add("5.2.0", "This error occurred due to 'Keep me signed in' interrupt when the user was signing-in. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.`n(if user is functional, this error may be a log anomaly that can be safely ignored)") ;
+    $AADSignOnError.add("50140", "This error occurred due to 'Keep me signed in' interrupt when the user was signing-in. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.`n(if user is functional, this error may be a log anomaly that can be safely ignored)") ;
     $AADSignOnError.add("50143", "Session mismatch - Session is invalid because user tenant does not match the domain hint due to different resource. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.") ;
     $AADSignOnError.add("50144", "Users Active Directory password has expired. Generate a new password for the user or have the end user using self-service reset tool.") ;
     $AADSignOnError.add("50146", "This application is required to be configured with an application-specific signing key. It is either not configured with one, or the key has expired or is not yet valid. Contact the application owner.") ;
@@ -5188,7 +5207,7 @@ function Initialize-AADSignErrorsHash {
     $AADSignOnError.add("50173", "Fresh auth token is needed. Have the user sign-in again using fresh credentials.") ;
     $AADSignOnError.add("50177", "External challenge is not supported for passthrough users.") ;
     $AADSignOnError.add("50178", "Session Control is not supported for passthrough users.") ;
-    $AADSignOnError.add("5.2.0", "Windows Integrated authentication is needed. Enable the tenant for Seamless SSO.") ;
+    $AADSignOnError.add("50180", "Windows Integrated authentication is needed. Enable the tenant for Seamless SSO.") ;
     $AADSignOnError.add("51001", "Domain Hint is not present with On-Premises Security Identifier - On-Premises UPN.") ;
     $AADSignOnError.add("51004", "User account doesnt exist in the directory.") ;
     $AADSignOnError.add("51006", "Windows Integrated authentication is needed. User logged in using session token that is missing via claim. Request the user to re-login.") ;
@@ -6590,7 +6609,7 @@ if(-not(get-command write-log -ea 0)){
             REVISIONS   :
             * 11:01 AM 6/15/2021 Ren'd Build-AADSignErrorsHash -> Initialize-AADSignErrorsHash (compliant verb) ; copied over vers from profile-AAD-Signons.ps1 ; kept updated CBH. 
             * 8:50 PM 1/12/2020 expanded aliases
-            * 9:53 AM 8/29/2019 amended 50135, 50125, with MS support comments, and reserached 5.2.0 a bit
+            * 9:53 AM 8/29/2019 amended 50135, 50125, with MS support comments, and reserached 50140 a bit
             * 2:49 PM 8/27/2019 updated errornumber 0 to be (undocumented - successful), as it is the code on a non-error logon
             * 10:41 AM 5/13/2019 init vers
             .DESCRIPTION
@@ -6656,20 +6675,20 @@ if(-not(get-command write-log -ea 0)){
             $AADSignOnError.add("50099", "JWT signature is invalid. Contact the application owner.") ;
             $AADSignOnError.add("50105", "The signed in user is not assigned to a role for the signed in application. Assign the user to the application. For more information: https://docs.microsoft.com/azure/active-directory/application-sign-in-problem-federated-sso-gallery#user-not-assigned-a-role") ;
             $AADSignOnError.add("50107", "Requested federation realm object does not exist. Contact the tenant administrator.") ;
-            $AADSignOnError.add("5.2.0", "Issue with JWT header. Contact the tenant administrator.") ;
+            $AADSignOnError.add("50120", "Issue with JWT header. Contact the tenant administrator.") ;
             $AADSignOnError.add("50124", "Claims Transformation contains invalid input parameter. Contact the tenant administrator to update the policy.") ;
             $AADSignOnError.add("50125", "Sign-in was interrupted due to a password reset or password registration entry.(This error may come up due to an interruption in the network while the password was being changed/reset)") ;
             $AADSignOnError.add("50126", "Invalid username or password, or invalid on-premises username or password.") ;
             $AADSignOnError.add("50127", "User needs to install a broker application to gain access to this content.") ;
             $AADSignOnError.add("50128", "Invalid domain name - No tenant-identifying information found in either the request or implied by any provided credentials.") ;
             $AADSignOnError.add("50129", "Device is not workplace joined - Workplace join is required to register the device.") ;
-            $AADSignOnError.add("5.2.0", "Claim value cannot be interpreted as known auth method.") ;
+            $AADSignOnError.add("50130", "Claim value cannot be interpreted as known auth method.") ;
             $AADSignOnError.add("50131", "Used in various conditional access errors. E.g. Bad Windows device state, request blocked due to suspicious activity, access policy, and security policy decisions.") ;
             $AADSignOnError.add("50132", "Credentials have been revoked due to the following reasons: , SSO Artifact is invalid or expired , Session not fresh enough for application , A silent sign-in request was sent but the users session with Azure AD is invalid or has expired. , ") ;
             $AADSignOnError.add("50133", "Session is invalid due to expiration or recent password change.`n(Once a Password is changed, it is advised to close all the open sessions and re-login with the new password, else this error might pop-up)") ;
             $AADSignOnError.add("50135", "Password change is required due to account risk.") ;
             $AADSignOnError.add("50136", "Redirect MSA session to application - Single MSA session detected.") ;
-            $AADSignOnError.add("5.2.0", "This error occurred due to 'Keep me signed in' interrupt when the user was signing-in. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.`n(if user is functional, this error may be a log anomaly that can be safely ignored)") ;
+            $AADSignOnError.add("50140", "This error occurred due to 'Keep me signed in' interrupt when the user was signing-in. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.`n(if user is functional, this error may be a log anomaly that can be safely ignored)") ;
             $AADSignOnError.add("50143", "Session mismatch - Session is invalid because user tenant does not match the domain hint due to different resource. Open a support ticket with Correlation ID, Request ID, and Error code to get more details.") ;
             $AADSignOnError.add("50144", "Users Active Directory password has expired. Generate a new password for the user or have the end user using self-service reset tool.") ;
             $AADSignOnError.add("50146", "This application is required to be configured with an application-specific signing key. It is either not configured with one, or the key has expired or is not yet valid. Contact the application owner.") ;
@@ -6683,7 +6702,7 @@ if(-not(get-command write-log -ea 0)){
             $AADSignOnError.add("50173", "Fresh auth token is needed. Have the user sign-in again using fresh credentials.") ;
             $AADSignOnError.add("50177", "External challenge is not supported for passthrough users.") ;
             $AADSignOnError.add("50178", "Session Control is not supported for passthrough users.") ;
-            $AADSignOnError.add("5.2.0", "Windows Integrated authentication is needed. Enable the tenant for Seamless SSO.") ;
+            $AADSignOnError.add("50180", "Windows Integrated authentication is needed. Enable the tenant for Seamless SSO.") ;
             $AADSignOnError.add("51001", "Domain Hint is not present with On-Premises Security Identifier - On-Premises UPN.") ;
             $AADSignOnError.add("51004", "User account doesnt exist in the directory.") ;
             $AADSignOnError.add("51006", "Windows Integrated authentication is needed. User logged in using session token that is missing via claim. Request the user to re-login.") ;
