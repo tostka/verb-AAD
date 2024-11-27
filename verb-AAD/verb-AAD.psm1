@@ -1,11 +1,11 @@
-﻿# verb-AAD.psm1
+﻿# verb-aad.psm1
 
 
 <#
 .SYNOPSIS
 verb-AAD - Azure AD-related generic functions
 .NOTES
-Version     : 5.2.1
+Version     : 5.2.2
 Author      : Todd Kadrie
 Website     :	https://www.toddomation.com
 Twitter     :	@tostka
@@ -22,7 +22,7 @@ REVISIONS
 * 11:06 AM 2/25/2020 1.0.3 connect-azrm updated to reflect my credential prefs, broad updates and tightening across, also abstracted literals & constants out. Validated functions work post chgs
 * 12/17/2019 - 1.0.0
 * 10:55 AM 12/6/2019 Connect-MSOL & Connect-AAD:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
-* 1:07 PM 11/25/2019 added *tol/*tor/*cmw alias variants for connect & reconnect
+* 1:07 PM 11/25.2.29 added *tol/*tor/*cmw alias variants for connect & reconnect
 * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA, splits specified credential and picks up on global o365_TAG_MFA/o365_TAG_OPDomain varis matching the credential domain. also added Add-PSTitleBar 'XXX' for msol & aad ;
 * 2:18 PM 5/14/2019 added Build-AADSignErrorsHash 
 * 2:53 PM 5/2/2019 ren'd Connect-AAD2 -> Connect-AAD ; ren'd Connect-AAD -> Connect-MSOL ; repurp'ing connect-aad for AzureAD module
@@ -1367,12 +1367,12 @@ Function Connect-MSOL {
     * 2:08 PM 2/26/2020 converted to adv func
     * 8:50 PM 1/12/2020 expanded aliases
     * 10:55 AM 12/6/2019 Connect-MSOL:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
-    * 1:07 PM 11/25/2019 added *tol/*tor/*cmw alias variants for connect & reconnect
+    * 1:07 PM 11/25.2.29 added *tol/*tor/*cmw alias variants for connect & reconnect
     * 9:19 AM 11/19/2019 added MFA tenant detect (fr cred), and code to support MFA
     * 1:32 PM 5/8/2019 switched text into pipe with explicit Write-Verbose's
     * 2:51 PM 5/2/2019 ren'd Connect-AAD -> Connect-MSOL ; repurp'ing connect-aad for aad2 module
     * 12:06 PM 12/7/2018 added Alias 'connect-msol' -> 'Connect-AAD'
-    * 7:38 AM 10/5/2018 out-null the pretesting Get-MsolAccountSku into a vari (was dumping into console)
+    * 7:38 AM 10/5.2.28 out-null the pretesting Get-MsolAccountSku into a vari (was dumping into console)
     * 9:38 AM 9/10/2018 Connect-AAD: now it's working (?.?)7 weird. Also aliased reconnect-aad -> connect-AAD()- it's the same, but easier to just cover the gap.
     * 12:27 PM 11/3/2017 nope, not working, can't authenticate yet.
     * 12:19 PM 11/3/2017 this wasn't really written, sketched it in to see how it works
@@ -1432,7 +1432,7 @@ Function Connect-MSOL {
         $MFA = get-TenantMFARequirement -Credential $Credential ;
         # msol doesn't support the -TenantID, it's imputed from the credential
 
-        # 12:10 PM 3/15/2017 disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
+        # 12:10 PM 3/15.2.27 disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
         #if(!$CommandPrefix){ $CommandPrefix='aad' ; } ;
 
         $TenantTag=$TenOrg = get-TenantTag -Credential $Credential ; 
@@ -2809,6 +2809,14 @@ function get-AADlicensePlanList {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/
     REVISIONS
+    * 9:56 AM 11/27/2024 pulled Mandatory=$false, from $Raw; $IndexOnName ; $TenOrg; $Credential, targeting err:
+        get-help get-AADlicensePlanList.ps1 -det
+        get-help : Property 'Mandetory' cannot be found for type 'System.Management.Automation.CmdletBindingAttribute'.
+        At line:1 char:1
+        + get-help get-AADlicensePlanList.ps1 -det
+        + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            + CategoryInfo          : InvalidOperation: (Mandetory=$true:NamedAttributeArgumentAst) [Get-Help], RuntimeException
+            + FullyQualifiedErrorId : PropertyNotFoundForType,Microsoft.PowerShell.Commands.GetHelpCommand    
     * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection 
     * 1:20 PM 6/18/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential
     * 2:33 PM 5/17/2023 added cred/silent/pltrxo support; 
@@ -2909,14 +2917,14 @@ function get-AADlicensePlanList {
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM(
-        [Parameter(Mandatory=$false,HelpMessage="Switch specifies to return the raw get-AADlicensePlanList properties, indexed on SkuID")]
+        [Parameter(HelpMessage="Switch specifies to return the raw get-AADlicensePlanList properties, indexed on SkuID")]
             [switch]$Raw,
-        [Parameter(Mandatory=$false,HelpMessage="Switch specifies to return the raw get-AADlicensePlanList properties, indexed on Name (for name -> details/skuid lookups; default is indexed on SkuID for sku->details/name lookups)")]
+        [Parameter(HelpMessage="Switch specifies to return the raw get-AADlicensePlanList properties, indexed on Name (for name -> details/skuid lookups; default is indexed on SkuID for sku->details/name lookups)")]
             [switch]$IndexOnName,
-        [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
+        [Parameter(HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
             [ValidateNotNullOrEmpty()]
             [string]$TenOrg = $global:o365_TenOrgDefault,
-        [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
+        [Parameter( HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
             [System.Management.Automation.PSCredential]$Credential,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
             [switch] $silent,
@@ -4431,7 +4439,7 @@ Function get-MsolUserLicenseDetails {
     $Retries = 4 ;
     $RetrySleep = 5 ;
     #Connect-AAD ;
-    # 2:45 PM 11/15/2019
+    # 2:45 PM 11/15.2.29
     Connect-Msol ;
 
     # [Product names and service plan identifiers for licensing in Azure Active Directory | Microsoft Docs](https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference)
@@ -6914,7 +6922,7 @@ if(-not(get-command write-log -ea 0)){
         #Connect-AzureAD ; 
         connect-aad ; 
 
-        # 9:20 AM 2/25/2019 Tickets will be an array of nnn's to match the mbxs, so use $Procd-1 as the index for tick# in the array
+        # 9:20 AM 2/25.2.29 Tickets will be an array of nnn's to match the mbxs, so use $Procd-1 as the index for tick# in the array
 
         # build outfile on the $file fullname
         $ofileobj=gci $File ;
@@ -11475,8 +11483,8 @@ Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,ca
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUmL1wt//Bcb+nesZaE21x5pET
-# 7G6gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUMElSzQ5uf6gayzC07qa55ylH
+# MnqgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -11491,9 +11499,9 @@ Export-ModuleMember -Function add-AADUserLicense,Add-ADALType,caadCMW,caadtol,ca
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSIJisP
-# 7GCzx048FgmuaKOuU4QvJzANBgkqhkiG9w0BAQEFAASBgEYSW4H6sAkAw2zu5g+G
-# cs6R5SGt6D/LzlJKZgSQCXV0oKHR5Q8WCU235gLJMfQj9ajacYdVCV/KpHItCYQL
-# bY+BVhshh5umfSPqRXXkL7fKVMNf4ZkxnF700F4PAdlkPU8oQfqYpSmLGL5Pko55
-# Ar9cVCjTO9p+7TDgqBOq9L2C
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT8ukVb
+# EigDUeA3gSvPnQ8Jr/sjyTANBgkqhkiG9w0BAQEFAASBgEv6rnXD2LTkD3jEIPKy
+# AhB6HVbj4Bd3IrLqddbUEZ00F3K1s7uu5lfmpvGv9KSgT8CMZDGUJ8vh5V1gpbkJ
+# 1qgST/LAavAStvZjuBAeJy/ZyW2uIjcPqUajcnSYjcldlf/9fH+tMWPT+pAT6o0r
+# l9zbEOm+SdXMN5Q8yz3wfR8K
 # SIG # End signature block
