@@ -16,6 +16,14 @@ function get-AADlicensePlanList {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/
     REVISIONS
+    * 9:56 AM 11/27/2024 pulled Mandatory=$false, from $Raw; $IndexOnName ; $TenOrg; $Credential, targeting err:
+        get-help get-AADlicensePlanList.ps1 -det
+        get-help : Property 'Mandetory' cannot be found for type 'System.Management.Automation.CmdletBindingAttribute'.
+        At line:1 char:1
+        + get-help get-AADlicensePlanList.ps1 -det
+        + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            + CategoryInfo          : InvalidOperation: (Mandetory=$true:NamedAttributeArgumentAst) [Get-Help], RuntimeException
+            + FullyQualifiedErrorId : PropertyNotFoundForType,Microsoft.PowerShell.Commands.GetHelpCommand    
     * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection 
     * 1:20 PM 6/18/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential
     * 2:33 PM 5/17/2023 added cred/silent/pltrxo support; 
@@ -116,14 +124,14 @@ function get-AADlicensePlanList {
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM(
-        [Parameter(Mandatory=$false,HelpMessage="Switch specifies to return the raw get-AADlicensePlanList properties, indexed on SkuID")]
+        [Parameter(HelpMessage="Switch specifies to return the raw get-AADlicensePlanList properties, indexed on SkuID")]
             [switch]$Raw,
-        [Parameter(Mandatory=$false,HelpMessage="Switch specifies to return the raw get-AADlicensePlanList properties, indexed on Name (for name -> details/skuid lookups; default is indexed on SkuID for sku->details/name lookups)")]
+        [Parameter(HelpMessage="Switch specifies to return the raw get-AADlicensePlanList properties, indexed on Name (for name -> details/skuid lookups; default is indexed on SkuID for sku->details/name lookups)")]
             [switch]$IndexOnName,
-        [Parameter(Mandatory=$false,HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
+        [Parameter(HelpMessage="Tenant Tag to be processed[-PARAM 'TEN1']")]
             [ValidateNotNullOrEmpty()]
             [string]$TenOrg = $global:o365_TenOrgDefault,
-        [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
+        [Parameter( HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
             [System.Management.Automation.PSCredential]$Credential,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
             [switch] $silent,
