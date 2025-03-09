@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"powershell.codeFormatting.alignPropertyValuePairs": true,
+		"powershell.codeFormatting.newLineAfterCloseBrace": true,
+		"powershell.codeFormatting.openBraceOnSameLine": true,
+		"powershell.codeFormatting.whitespaceAroundOperator": true,
+		"powershell.codeFormatting.whitespaceBeforeOpenBrace": true
+	}
+}
