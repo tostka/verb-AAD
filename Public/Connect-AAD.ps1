@@ -117,7 +117,7 @@ Function Connect-AAD {
     ) ;
     BEGIN {
         $verbose = ($VerbosePreference -eq "Continue") ;
-		$CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
+        $CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
         write-verbose "PRE: `$CurrentVersionTlsLabel : $($CurrentVersionTlsLabel )" ;
         # psv6+ already covers, test via the SslProtocol parameter presense
         if ('SslProtocol' -notin (Get-Command Invoke-RestMethod).Parameters.Keys) {
