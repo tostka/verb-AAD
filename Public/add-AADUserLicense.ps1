@@ -1,34 +1,34 @@
-﻿# d:\scripts\add-AADUserLicense.ps1
+﻿# add-MGUserLicense.ps1
 
-#*------v add-AADUserLicense.ps1 v------
-function add-AADUserLicense {
+#*------v add-MGUserLicense.ps1 v------
+function add-MGUserLicense {
     <#
     .SYNOPSIS
-    add-AADUserLicense.ps1 - Add a single license to an array of AzureADUsers
+    add-MGUserLicense.ps1 - Add a single license to an array of MGUsers
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
     Website     :	http://www.toddomation.com
     Twitter     :	@tostka / http://twitter.com/tostka
     CreatedDate : 2022-03-22
-    FileName    : add-AADUserLicense.ps1
+    FileName    : add-MGUserLicense.ps1
     License     : MIT License
     Copyright   : (c) 2022 Todd Kadrie
-    Github      : https://github.com/tostka/verb-AAD
+    Github      : https://github.com/tostka/verb-MG
     Tags        : Powershell
     AddedCredit : 
     AddedWebsite:	
     AddedTwitter:	
     REVISIONS
     * 1:20 PM 6/18/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential
-    * 3:12 PM 5/30/2023 get-AzureAdUser  immed after lic add isn't returning curr status: added 500ms delay before repoll ; rounded out pswlt support
+    * 3:12 PM 5/30/2023 get-MGUser  immed after lic add isn't returning curr status: added 500ms delay before repoll ; rounded out pswlt support
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
     * 4:31 PM 5/17/2023  rounded out params for $pltRXO passthru
     * 2:35 PM 8/12/2022 expanded echo on lic attempt
     * 10:30 AM 3/24/2022 add pipeline support
     2:28 PM 3/22/2022 init; confirmed functional
     .DESCRIPTION
-    add-AADUserLicense.ps1 - Add a single license to an array of AzureADUsers
+    add-MGUserLicense.ps1 - Add a single license to an array of MGUsers
     .PARAMETER  Users
     Array of User Userprincipal/Guids to have the specified license applied
     .PARAMETER  skuid
@@ -42,18 +42,18 @@ function add-AADUserLicense {
     .PARAMETER Silent
     Suppress all but error, warn or verbose outputs
     .EXAMPLE
-    PS> $bRet = add-AADUserLicense -users 'upn@domain.com','upn2@domain.com' -skuid nnnnnnnn-nnnn-nnnn-nnnn-nnnnnnnnnnnn 
-    PS> $bRet | %{if($_.Success){write-host "$($_.AzureADUser.userprincipalname):Success"} else { write-warning "$($_.AzureADUser.userprincipalname):FAILURE" } ; 
+    PS> $bRet = add-MGUserLicense -users 'upn@domain.com','upn2@domain.com' -skuid nnnnnnnn-nnnn-nnnn-nnnn-nnnnnnnnnnnn 
+    PS> $bRet | %{if($_.Success){write-host "$($_.MGUser.userprincipalname):Success"} else { write-warning "$($_.MGUser.userprincipalname):FAILURE" } ; 
     Add license with skuid specified, to the array of user UPNs specified in -users
     .EXAMPLE
-    PS> $bRet = $AADUser.userprincipalname | add-AADUserLicense -skuid $skuid -verbose -whatif ; 
-    PS> $bRet | %{if($_.Success){write-host "$($_.AzureADUser.userprincipalname):Success"} else { write-warning "$($_.AzureADUser.userprincipalname):FAILURE" } ; 
+    PS> $bRet = $MGUser.userprincipalname | add-MGUserLicense -skuid $skuid -verbose -whatif ; 
+    PS> $bRet | %{if($_.Success){write-host "$($_.MGUser.userprincipalname):Success"} else { write-warning "$($_.MGUser.userprincipalname):FAILURE" } ; 
     Pipeline example
     .LINK
-    https://github.com/tostka/verb-AAD
+    https://github.com/tostka/verb-MG
     #>
     #Requires -Version 3
-    #Requires -Modules AzureAD, verb-Text
+    #Requires -Modules MG, verb-Text
     #Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
@@ -160,18 +160,131 @@ function add-AADUserLicense {
             Credential = $Credential ;
             verbose = $($VerbosePreference -eq "Continue")  ;
         } ;
-        if((get-command Connect-AAD).Parameters.keys -contains 'silent'){
+        if((get-command Connect-MG).Parameters.keys -contains 'silent'){
             $pltRxo.add('Silent',$silent) ;
         } ;
         # default connectivity cmds - force silent false
         $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ; 
-        if((get-command ReConnect-AAD).Parameters.keys -notcontains 'silent'){
+        if((get-command ReConnect-MG).Parameters.keys -notcontains 'silent'){
             $pltRxo.remove('Silent') ;
         } ; 
 
         #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
-        Connect-AAD @pltRXOC ;         
-        
+        #Connect-AAD @pltRXOC ;         
+
+        # 3:22 PM 1/7/2026 MG CODE
+        #region cMG_SCAFFOLD ; #*------v cMG_SCAFFOLD v------
+        if(-not (get-command  test-mgconnection)){
+            if(-not (get-module -list Microsoft.Graph -ea 0)){
+                $smsg = "MISSING Microsoft.Graph!" ;
+                $smsg += "`nUse: install-module Microsoft.Graph -scope CurrentUser" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ;
+        } ;
+        $MGCntxt = test-mgconnection -Verbose:($VerbosePreference -eq 'Continue') ;
+        $o365Cred = $null ;
+        if($Credential -AND $MGCntxt.isConnected){
+            $smsg = "Explicit -Credential:$($Credential.username) -AND `$MGCntxt.isConnected: running pre:Disconnect-MgGraph" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            # Dmg returns a get-mgcontext into pipe, if you don't cap it corrupts the pipe on your current flow
+            $dOut = Disconnect-MgGraph -Verbose:($VerbosePreference -eq 'Continue')
+            $MGCntxt = test-mgconnection -Verbose:($VerbosePreference -eq 'Continue') ;
+        };
+        if($Credential){
+            $smsg = "`Credential:Explicit credentials specified, deferring to use..." ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            write-verbose "get-TenantCredentials() return format: (emulating)" ;
+            $o365Cred = [ordered]@{
+                Cred=$Credential ;
+                credType=$null ;
+            } ;
+            $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; # Username
+            write-verbose "w full cred opt: $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq 'Continue')"  ;
+            if($uRoleReturn.UserRole){
+                $o365Cred.credType = $uRoleReturn.UserRole ;
+            } else {
+                $smsg = "Unable to resolve `$credential.username ($($credential.username))"
+                $smsg += "`nto a usable 'UserRole' spec!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                Break ;
+            } ;
+        } else {
+            if($MGCntxt.isConnected){
+                if($MgCntxt.isUser){
+                    $TenantTag = $TenOrg = get-TenantTag -Credential $MgCntxt.Account ;
+                    $uRoleReturn = resolve-UserNameToUserRole -UserName $MgCntxt.CertificateThumbprint -verbose:$($VerbosePreference -eq "Continue") ;
+                    $credential = get-TenantCredentials -TenOrg $TenOrg -UserRole $uRoleReturn.UserRole -verbose:$($VerbosePreference -eq "Continue") ;
+                } elseif($MgCntxt.isCBA -AND $MgCntxt.AppName -match 'CBACert-(\w{3})'){
+                        #$MgCntxt.AppName.split('-')[-1]
+                        $TenantTag = $TenOrg = $matches[1]
+                        # also need credential
+                        $uRoleReturn = resolve-UserNameToUserRole -UserName $MgCntxt.CertificateThumbprint -verbose:$($VerbosePreference -eq "Continue") ;
+                        write-verbose "ret'd obj:$uRoleReturn = [ordered]@{     UserRole = $null ;     Service = $null ;     TenOrg = $null ; } " ;
+                        $credRet = get-TenantCredentials -TenOrg $TenOrg -UserRole $uRoleReturn.UserRole -verbose:$($VerbosePreference -eq "Continue")
+                        $credential = $credRet.Cred ;
+                }else{
+                    $smsg = "UNABLE TO RESOLVE mgContext to a working TenOrg!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                }
+            } ;
+            $pltGTCred=@{TenOrg=$TenOrg ; UserRole=$null; verbose=$($verbose)} ;
+            if($UserRole){
+                $smsg = "(`$UserRole specified:$($UserRole -join ','))" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $pltGTCred.UserRole = $UserRole;
+            } else {
+                $smsg = "(No `$UserRole found, defaulting to:'CSVC','SID' " ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $pltGTCred.UserRole = 'CSVC','SID' ;
+            } ;
+            $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            $o365Cred = get-TenantCredentials @pltGTCred
+        } ;
+        if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+            $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            write-verbose "populate $credential with return, if not populated (may be required for follow-on calls that pass common $Credentials through)" ;
+            if((gv Credential) -AND $Credential -eq $null){
+                $credential = $o365Cred.Cred ;
+            }elseif($credential.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                $smsg = "(`$Credential is properly populated; explicit -Credential was in initial call)" ;
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            } else {
+                $smsg = "`$Credential is `$NULL, AND $o365Cred.Cred is unusable to populate!" ;
+                $smsg = "downstream commands will *not* properly pass through usable credentials!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                break ;
+            } ;
+        } else {
+            $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            break ;
+        } ;
+        $pltCMG = [ordered]@{
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((get-command Connect-MG).Parameters.keys -contains 'silent'){
+            $pltCMG.add('Silent',$silent) ;
+        } ;
+        #endregion cMG_SCAFFOLD ; #*------^ END cMG_SCAFFOLD ^------
+
+
         # check if using Pipeline input or explicit params:
         if ($PSCmdlet.MyInvocation.ExpectingInput) {
             write-verbose "Data received from pipeline input: '$($InputObject)'" ;
@@ -192,7 +305,7 @@ function add-AADUserLicense {
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
             $Report = @{
-                AzureADUser = $null ; 
+                MGUser = $null ; 
                 AddedLicenses = @(); 
                 RemovedLicenses = @(); 
                 FixedUsageLocation = $false ; 
@@ -201,39 +314,39 @@ function add-AADUserLicense {
             $error.clear() ;
             TRY {
                 
-                $pltGAADU=[ordered]@{ ObjectID = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
-                $smsg = "Get-AzureADUser w`n$(($pltGAADU|out-string).trim())" ; 
+                $pltGMGU=[ordered]@{ userid = $user ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
+                $smsg = "Get-MGUser w`n$(($pltGMGU|out-string).trim())" ; 
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;                      
-                $AADUser = Get-AzureADUser @pltGAADU ;   
+                $MGUser = Get-MGUser @pltGMGU ;   
             
-                if ($AADUser) {
-                    $report.AzureADUser = $AADUser ; 
-                    if (-not $AADUser.UsageLocation) {
-                        $smsg = "AADUser: MISSING USAGELOCATION, FORCING" ;
+                if ($MGUser) {
+                    $report.MGUser = $MGUser ; 
+                    if (-not $MGUser.UsageLocation) {
+                        $smsg = "MGUser: MISSING USAGELOCATION, FORCING" ;
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
                         else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-                        $spltSAADUUL = [ordered]@{ 
-                            #ObjectID = $AADUser.UserPrincipalName ;
-                            Users = $AADUser.UserPrincipalName ;
+                        $spltSMGUUL = [ordered]@{ 
+                            #userid = $MGUser.UserPrincipalName ;
+                            Users = $MGUser.UserPrincipalName ;
                             UsageLocation = "US" ;
                             whatif = $($whatif) ;
                             verbose = ($VerbosePreference -eq "Continue") ;
                         } ;
-                        $smsg = "set-AADUserUsageLocation w`n$(($spltSAADUUL|out-string).trim())" ; 
+                        $smsg = "set-MGUserUsageLocation w`n$(($spltSMGUUL|out-string).trim())" ; 
                         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                        $bRet = set-AADUserUsageLocation @spltSAADUUL ; 
+                        $bRet = set-MGUserUsageLocation @spltSMGUUL ; 
                         if($bRet.Success){
-                            $smsg = "set-AADUserUsageLocation updated UsageLocation:$($bRet.AzureADuser.UsageLocation)" ; 
+                            $smsg = "set-MGUserUsageLocation updated UsageLocation:$($bRet.MGuser.UsageLocation)" ; 
                             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                            # update the local AADUser to reflect the updated AADU returned
-                            $AADUser = $bRet.AzureADuser ; 
+                            # update the local MGUser to reflect the updated MGU returned
+                            $MGUser = $bRet.MGuser ; 
                             $Report.FixedUsageLocation = $true ; 
                         } else { 
-                            $smsg = "set-AADUserUsageLocation: FAILED TO UPDATE USAGELOCATION!" ;
+                            $smsg = "set-MGUserUsageLocation: FAILED TO UPDATE USAGELOCATION!" ;
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
                             else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                             $Report.FixedUsageLocation = $false ; 
@@ -251,10 +364,10 @@ function add-AADUserLicense {
                         #$pltRXO.credential ; 
                         erroraction = 'STOP' ;
                     } ;
-                    $smsg = "get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ; 
+                    $smsg = "get-MGlicensePlanList w`n$(($pltGLPList|out-string).trim())" ; 
                     if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                    $skus = get-AADlicensePlanList @pltGLPList ;
+                    $skus = get-MGlicensePlanList @pltGLPList ;
                     
                     if($tsku = $skus[$skuid]){
                         $smsg = "($($skuid):$($tsku.SkuPartNumber) is present in Tenant SKUs)" ;
@@ -265,29 +378,49 @@ function add-AADUserLicense {
                             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                             
-                            $license = New-Object -TypeName Microsoft.Open.AzureAD.Model.AssignedLicense
-                            $AssignedLicenses = New-Object -TypeName Microsoft.Open.AzureAD.Model.AssignedLicenses
-                            $license.SkuId = $skuid ;
-                            $AssignedLicenses.AddLicenses = $license ;
+                            
 
                             # confirm that the user doesn't have the lic in question:
-                            if($AADUser.Assignedlicenses.skuid -notcontains $license.SkuId){
+                            #if($MGUser.Assignedlicenses.skuid -notcontains $license.SkuId){
+                            #skuid
+                            if($MGUser.Assignedlicenses.skuid -notcontains $SkuId){
                                 
+                                <#
+                                To assign multiple licenses at once: Create an array of hash tables containing the SKU IDs:
+                                $addLicenses = @(
+                                    @{SkuId = 'sku-id-1'},
+                                    @{SkuId = 'sku-id-2'}
+                                )
+
+                                To assign a license with specific service plans disabled:
+                                $Subscription = Get-MgSubscribedSku -All | Where SkuPartNumber -eq 'ENTERPRISEPACK'
+                                # Define which plans to disable by ServicePlanName (e.g., 'TEAMS1' for Microsoft Teams)
+                                $DisabledPlans = $Subscription.ServicePlans | where ServicePlanName -in ("MCOSTANDARD", "SHAREPOINTSTANDARD") | Select -ExpandProperty ServicePlanId
+                                $AddLicenses = @(
+                                    @{
+                                        SkuId = $Subscription.SkuId;
+                                        DisabledPlans = $DisabledPlans
+                                    }
+                                )
+                                Set-MgUserLicense -UserId "john@contoso.com" -AddLicenses $AddLicenses -RemoveLicenses @()
+                                #>
                                 $smsg = "Adding license SKUID ($($skuid)) to user:$($user)" ; 
                                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                                $pltSAADUL=[ordered]@{
-                                    ObjectId = $AADUser.ObjectID ;
-                                    AssignedLicenses = $AssignedLicenses ;
+                                $pltSMGUL=[ordered]@{
+                                    userid = $MGUser.userid ;
+                                    #AssignedLicenses = $AssignedLicenses ;
+                                    AddLicenses = @{SkuId = $SkuId}  ; 
+                                    RemoveLicenses = @() ; 
                                     erroraction = 'STOP' ;
                                     verbose = $($VerbosePreference -eq "Continue") ;
                                 } ;
-                                $smsg = "Set-AzureADUserLicense w`n$(($pltSAADUL|out-string).trim())" ; 
+                                $smsg = "Set-MGUserLicense w`n$(($pltSMGUL|out-string).trim())" ; 
                                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
                                 if (-not $whatif) {
-                                    Set-AzureADUserLicense @pltSAADUL ;
+                                    Set-MGUserLicense @pltSMGUL ;
                                 
                                     $Report.AddedLicenses += "$($tsku.SkuPartNumber):$($license.SkuId)" ; 
                                     #$Report.RemovedLicenses += "$($tsku.SkuPartNumber):$($license.SkuId)" ; 
@@ -301,18 +434,18 @@ function add-AADUserLicense {
                                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                                 }  ;
 
-                                # for some reason below isn't really getting updated AADU (at least not whats coming through), add a delay 
+                                # for some reason below isn't really getting updated MGU (at least not whats coming through), add a delay 
                                 start-sleep -Milliseconds 500 ; 
-                                $AADUser = Get-AzureADUser @pltGAADU ; 
-                                $report.AzureADUser = $AADUser ; 
+                                $MGUser = Get-MGUser @pltGMGU ; 
+                                $report.MGUser = $MGUser ; 
                                 $usrPlans = $usrLics=@() ; 
-                                foreach($pLic in $AADUser.AssignedLicenses.skuid){
+                                foreach($pLic in $MGUser.AssignedLicenses.skuid){
                                     $usrLics += $skus[$plic].SkuPartNumber ; 
                                 } ; 
-                                foreach($pPlan in $AADUser.assignedplans){
+                                foreach($pPlan in $MGUser.assignedplans){
                                     $usrPlans += $_.service ; 
                                 } ; 
-                                $smsg = "POST:`n$(($AADUser|ft -a UserPrincipalName,DisplayName| out-string).trim())" ;
+                                $smsg = "POST:`n$(($MGUser|ft -a UserPrincipalName,DisplayName| out-string).trim())" ;
                                 $smsg += "`nLicenses: $(($usrLics -join ','|out-string).trim())" ;  
                                 $smsg += "`nPlans: $(( ($usrPlan | select -unique) -join ','|out-string).trim())" ; 
                                 if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
@@ -322,7 +455,7 @@ function add-AADUserLicense {
                                 New-Object PSObject -Property $Report | write-output ;
 
                             } else {
-                                $smsg = "$($AADUser.userprincipalname) already has AssignedLicense:$($tsku.SkuPartNumber)" ; 
+                                $smsg = "$($MGUser.userprincipalname) already has AssignedLicense:$($tsku.SkuPartNumber)" ; 
                                 if($silent){} elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                                 $report.Success = $true ; 
@@ -345,7 +478,7 @@ function add-AADUserLicense {
                         else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     } ;
                 } else {
-                    $smsg = "Unable to locate AzureADUser" ; 
+                    $smsg = "Unable to locate MGUser" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
                     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                     $report.Success = $false ; 
@@ -374,4 +507,4 @@ function add-AADUserLicense {
     } ;
 }
 
-#*------^ add-AADUserLicense.ps1 ^------
+#*------^ add-MGUserLicense.ps1 ^------
